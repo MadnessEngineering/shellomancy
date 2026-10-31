@@ -2,7 +2,7 @@
 
 [`script/shellomancy_mqtt/shellomancy_mqtt.py`](../script/shellomancy_mqtt/shellomancy_mqtt.py) connects a running Shellomancy to the workshop's MQTT broker. It publishes what Shellomancy has open and accepts a small, fixed set of commands. It is a separate process that talks to the app through the [control API](shellomancy-cli.md), so the app itself has no MQTT code.
 
-> **Tested against a real broker and a fake app, not the real app.** An end-to-end test runs mosquitto, the bridge process and a stand-in Shellomancy; Shellomancy itself hasn't been launched yet ([known-issues.md](known-issues.md)).
+> **Verified live on 2026-10-31** against a running Shellomancy and the workshop broker on eaws: the retained state listed the instance and its tabs, and a `focus` command over MQTT switched the active tab and replied `ok`. `attach` has been tested end to end only with a fake app (it would open a tab running `claude attach` on a real session).
 
 ## Running it
 

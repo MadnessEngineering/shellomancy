@@ -12,7 +12,7 @@ Status as of 2026-10-31.
 ## Not yet verified
 
 - **The 10-minute idle network check** and the first-run screen (no login, no pop-ups) ([privacy-and-offline.md](privacy-and-offline.md#verifying-it)).
-- **The fork hook opening a real `/fork` as a Shellomancy tab**, and the MQTT bridge against the real app.
+- **The fork hook opening a real `/fork` as a Shellomancy tab**, and the MQTT bridge's `attach` against the real app (its state and `focus` were verified live).
 - **Running beside stock Warp at the same time.**
 - **The release bundle** (`./script/bundle --channel oss`).
 - **The new brand assets in the app** (Dock icon variants, loading animation, About page logo at 350×100, the font glyph).
