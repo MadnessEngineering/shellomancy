@@ -1,4 +1,13 @@
 # warpctrl security architecture
+
+> **Shellomancy differs here.** In this fork:
+> - The OSS channel (Shellomancy) defaults Scripting to **Enabled, including running commands** (`LocalControlMode::EnabledWithCommands`, `app/src/settings/local_control.rs`). Users can lower it to Enabled or Disabled in Settings > Scripting; it is still stored only in protected local storage.
+> - `tab.create` accepts optional `command`, `cwd`, `title`, `color` and `focus` params (`shctl tab create --command ... --cwd ... --title ... --color ... --no-focus`). The command is queued with the same pending-command path tab configs and launch configs use, and runs once the new tab's shell finishes bootstrapping. No keystrokes are injected.
+> - A `command` requires `EnabledWithCommands`; otherwise the request fails with `insufficient_permissions`. Commands must be non-empty, at most 4096 bytes, and free of newlines and control characters; `cwd` must be an existing absolute directory. Rejected requests create no tab. `window.create` rejects these params.
+> - Launch requests raise the app unless `focus` is `false`.
+>
+> Statements below that local control never executes terminal commands describe upstream Warp, not Shellomancy.
+
 `warpctrl` is a local-control CLI for an already-running Warp app instance. The design is external-only: all callers are same-user processes. There is no inside-Warp/outside-Warp distinction, no verified-terminal invocation context, and no authenticated-user identity layer.
 The security architecture has five layers:
 1. **Protected enablement:** A single Scripting setting stored in protected local storage. It defaults to enabled on internal dogfood channels (Dev, Local) and to disabled on all other channels (Stable, Preview, OSS, Integration), where the user must opt in through Settings > Scripting.

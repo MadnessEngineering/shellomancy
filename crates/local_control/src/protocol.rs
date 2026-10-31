@@ -170,6 +170,34 @@ pub struct TabCloseParams {
 pub struct TabCreateParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tab_type: Option<TabType>,
+    /// Shellomancy: command to run once the new terminal tab's shell is ready.
+    /// `tab.create` only; requires a mode that allows command execution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// Shellomancy: absolute working directory for the new tab.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+    /// Shellomancy: custom tab title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Shellomancy: tab color (an ANSI color name such as `red` or `cyan`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// Shellomancy: whether to raise the app and keep the new tab active.
+    /// Defaults to `true` when any launch field is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus: Option<bool>,
+}
+
+impl TabCreateParams {
+    /// Whether any Shellomancy launch field (command/cwd/title/color/focus) is set.
+    pub fn has_launch_fields(&self) -> bool {
+        self.command.is_some()
+            || self.cwd.is_some()
+            || self.title.is_some()
+            || self.color.is_some()
+            || self.focus.is_some()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

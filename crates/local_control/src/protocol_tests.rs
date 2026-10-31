@@ -27,6 +27,7 @@ fn strict_params_serialize_without_synthetic_discriminators() {
         ActionKind::TabCreate,
         TabCreateParams {
             tab_type: Some(TabType::Agent),
+            ..Default::default()
         },
     )
     .expect("tab.create params serialize");
@@ -42,6 +43,37 @@ fn strict_params_serialize_without_synthetic_discriminators() {
         .params_as::<TabCreateParams>()
         .expect_err("shell is not an accepted tab.create parameter");
     assert_eq!(error.code, ErrorCode::InvalidParams);
+}
+
+#[test]
+fn tab_create_launch_fields_round_trip() {
+    let params = TabCreateParams {
+        tab_type: Some(TabType::Terminal),
+        command: Some("claude attach abc123".to_owned()),
+        cwd: Some("/tmp".to_owned()),
+        title: Some("agent".to_owned()),
+        color: Some("cyan".to_owned()),
+        focus: Some(false),
+    };
+    assert!(params.has_launch_fields());
+    let action = Action::with_params(ActionKind::TabCreate, params.clone())
+        .expect("tab.create launch params serialize");
+    assert_eq!(
+        action.params,
+        serde_json::json!({
+            "tab_type": "terminal",
+            "command": "claude attach abc123",
+            "cwd": "/tmp",
+            "title": "agent",
+            "color": "cyan",
+            "focus": false,
+        })
+    );
+    assert_eq!(
+        action.params_as::<TabCreateParams>().expect("decode"),
+        params
+    );
+    assert!(!TabCreateParams::default().has_launch_fields());
 }
 
 #[test]

@@ -37,6 +37,38 @@ fn parses_typed_create_and_setting_list_params() {
     assert_eq!(args.namespace.as_deref(), Some("editor"));
 }
 
+/// Shellomancy: `shctl tab create` launch flags.
+#[test]
+fn parses_tab_create_launch_flags() {
+    let args = ControlArgs::try_parse_from([
+        "shctl",
+        "tab",
+        "create",
+        "--command",
+        "claude attach abc123",
+        "--cwd",
+        "/tmp",
+        "--title",
+        "agent",
+        "--color",
+        "cyan",
+        "--no-focus",
+    ])
+    .expect("tab create with launch flags parses");
+    let ControlCommand::Tab(TabCommand::Create(args)) = args.command else {
+        panic!("expected tab create command");
+    };
+    assert_eq!(args.command.as_deref(), Some("claude attach abc123"));
+    assert_eq!(args.cwd.as_deref(), Some(std::path::Path::new("/tmp")));
+    assert_eq!(args.title.as_deref(), Some("agent"));
+    assert_eq!(args.color.as_deref(), Some("cyan"));
+    assert!(args.no_focus);
+
+    let err = ControlArgs::try_parse_from(["shctl", "window", "create", "--command", "true"])
+        .expect_err("window create does not take launch flags");
+    assert_eq!(err.kind(), clap::error::ErrorKind::UnknownArgument);
+}
+
 #[test]
 fn rejects_conflicting_instance_selectors() {
     let err = ControlArgs::try_parse_from([

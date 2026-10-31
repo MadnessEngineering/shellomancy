@@ -61,7 +61,7 @@ fn default_settings() -> LocalControlSettings {
 }
 
 #[test]
-fn default_mode_is_enabled_only_on_dogfood_channels() {
+fn default_mode_is_enabled_only_on_dogfood_channels_and_shellomancy() {
     assert_eq!(
         default_mode_for_channel(Channel::Dev),
         LocalControlMode::Enabled
@@ -70,12 +70,12 @@ fn default_mode_is_enabled_only_on_dogfood_channels() {
         default_mode_for_channel(Channel::Local),
         LocalControlMode::Enabled
     );
-    for channel in [
-        Channel::Stable,
-        Channel::Preview,
-        Channel::Oss,
-        Channel::Integration,
-    ] {
+    // Shellomancy: command execution on by default.
+    assert_eq!(
+        default_mode_for_channel(Channel::Oss),
+        LocalControlMode::EnabledWithCommands
+    );
+    for channel in [Channel::Stable, Channel::Preview, Channel::Integration] {
         assert_eq!(
             default_mode_for_channel(channel),
             LocalControlMode::Disabled,

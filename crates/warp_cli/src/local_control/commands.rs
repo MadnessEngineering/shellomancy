@@ -340,6 +340,7 @@ pub(super) fn run_window_command(
             ActionKind::WindowCreate,
             TabCreateParams {
                 tab_type: args.tab_type.map(Into::into),
+                ..Default::default()
             },
             output_format,
         ),
@@ -363,14 +364,35 @@ pub(super) fn run_tab_command(
         TabCommand::Inspect(args) => {
             run_action_with_params(args, ActionKind::TabInspect, EmptyParams {}, output_format)
         }
-        TabCommand::Create(args) => run_action_with_params(
-            args.target,
-            ActionKind::TabCreate,
-            TabCreateParams {
-                tab_type: args.tab_type.map(Into::into),
-            },
-            output_format,
-        ),
+        TabCommand::Create(args) => {
+            // The app's working directory differs from ours, so send an absolute cwd.
+            let cwd = match args.cwd {
+                Some(cwd) if cwd.is_relative() => Some(
+                    std::env::current_dir()
+                        .map_err(|err| {
+                            ControlError::new(
+                                ErrorCode::InvalidParams,
+                                format!("cannot resolve --cwd: {err}"),
+                            )
+                        })?
+                        .join(cwd),
+                ),
+                other => other,
+            };
+            run_action_with_params(
+                args.target,
+                ActionKind::TabCreate,
+                TabCreateParams {
+                    tab_type: args.tab_type.map(Into::into),
+                    command: args.command,
+                    cwd: cwd.map(|cwd| cwd.to_string_lossy().into_owned()),
+                    title: args.title,
+                    color: args.color,
+                    focus: args.no_focus.then_some(false),
+                },
+                output_format,
+            )
+        }
         TabCommand::Activate(args) => {
             let mode = tab_activation_mode(&args);
             run_action_with_params(

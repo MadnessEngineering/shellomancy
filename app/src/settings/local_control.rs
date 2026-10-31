@@ -34,12 +34,21 @@ pub enum LocalControlMode {
     #[default]
     Disabled,
     Enabled,
+    /// Shellomancy: local control plus actions that run commands
+    /// (`tab.create` with `command`).
+    EnabledWithCommands,
 }
 
 /// Channel-based default: local control is on for internal dogfood builds and
 /// off for public channels, where users must opt in through Settings > Scripting.
+///
+/// Shellomancy (the Oss channel) ships with command execution on so hooks can
+/// open tabs running commands with no setup (Dan, 2026-10-31). Any same-user
+/// process can already run commands; users can lower this in Settings.
 fn default_mode_for_channel(channel: Channel) -> LocalControlMode {
-    if channel.is_dogfood() {
+    if channel == Channel::Oss {
+        LocalControlMode::EnabledWithCommands
+    } else if channel.is_dogfood() {
         LocalControlMode::Enabled
     } else {
         LocalControlMode::Disabled
@@ -47,16 +56,23 @@ fn default_mode_for_channel(channel: Channel) -> LocalControlMode {
 }
 
 impl LocalControlMode {
-    pub const ALL: [Self; 2] = [Self::Disabled, Self::Enabled];
+    pub const ALL: [Self; 3] = [Self::Disabled, Self::Enabled, Self::EnabledWithCommands];
 
     pub fn is_enabled(self) -> bool {
-        matches!(self, Self::Enabled)
+        matches!(self, Self::Enabled | Self::EnabledWithCommands)
+    }
+
+    /// Whether actions that start commands (e.g. `tab.create` with `command`)
+    /// are allowed.
+    pub fn allows_command_execution(self) -> bool {
+        matches!(self, Self::EnabledWithCommands)
     }
 
     pub fn as_dropdown_label(self) -> &'static str {
         match self {
             Self::Disabled => "Disabled",
             Self::Enabled => "Enabled",
+            Self::EnabledWithCommands => "Enabled, including running commands",
         }
     }
 }
@@ -209,6 +225,10 @@ impl LocalControlSettings {
 
     pub fn is_enabled(&self) -> bool {
         self.mode().is_enabled()
+    }
+
+    pub fn allows_command_execution(&self) -> bool {
+        self.mode().allows_command_execution()
     }
 }
 

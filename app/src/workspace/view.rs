@@ -12774,6 +12774,69 @@ impl Workspace {
         ctx.notify();
     }
 
+    /// Shellomancy: opens a terminal tab that runs `command` once its shell
+    /// has bootstrapped, using the same pending-command path as tab configs
+    /// and launch configs (no keystroke injection).
+    ///
+    /// `cwd` must already be validated by the caller; `None` uses the normal
+    /// new-tab startup directory. With `focus == false` the previously active
+    /// tab is re-activated. Returns the new tab's pane-group id.
+    pub(crate) fn add_terminal_tab_with_startup_command(
+        &mut self,
+        command: Option<String>,
+        cwd: Option<PathBuf>,
+        title: Option<String>,
+        color: Option<AnsiColorIdentifier>,
+        focus: bool,
+        ctx: &mut ViewContext<Self>,
+    ) -> EntityId {
+        use crate::launch_configs::launch_config::{CommandTemplate, PaneMode, PaneTemplateType};
+
+        let previous_tab = self
+            .tabs
+            .get(self.active_tab_index)
+            .map(|tab| tab.pane_group.id());
+        let cwd = cwd
+            .or_else(|| {
+                self.get_new_tab_startup_directory(
+                    NewSessionSource::Tab,
+                    Some(ctx.window_id()),
+                    None,
+                    ctx,
+                )
+            })
+            .unwrap_or_default();
+        let template = PaneTemplateType::PaneTemplate {
+            cwd,
+            commands: command.into_iter().map(|exec| CommandTemplate { exec }).collect(),
+            is_focused: Some(true),
+            pane_mode: PaneMode::Terminal,
+            shell: None,
+        };
+        self.add_tab_with_pane_layout(
+            PanesLayout::Template(template),
+            Arc::new(HashMap::new()),
+            title,
+            ctx,
+        );
+        let new_index = self.active_tab_index;
+        let new_tab = self.tabs[new_index].pane_group.id();
+        if let Some(color) = color {
+            self.set_tab_color(new_index, SelectedTabColor::Color(color), ctx);
+        }
+        if !focus
+            && let Some(previous_tab) = previous_tab
+            && let Some(index) = self
+                .tabs
+                .iter()
+                .position(|tab| tab.pane_group.id() == previous_tab)
+        {
+            self.activate_tab_internal(index, ctx);
+        }
+        ctx.notify();
+        new_tab
+    }
+
     fn add_get_started_tab(&mut self, ctx: &mut ViewContext<Self>) {
         self.add_tab_with_pane_layout(
             PanesLayout::Snapshot(Box::new(PaneNodeSnapshot::Leaf(LeafSnapshot {

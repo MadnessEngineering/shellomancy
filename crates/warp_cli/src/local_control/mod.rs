@@ -263,7 +263,7 @@ pub enum WindowCommand {
     Inspect(TargetArgs),
 
     /// Create a new window.
-    Create(TabCreateArgs),
+    Create(WindowCreateArgs),
 
     /// Focus a window.
     Focus(TargetArgs),
@@ -607,9 +607,39 @@ pub struct TargetArgs {
 }
 
 #[derive(Debug, Clone, Args)]
+pub struct WindowCreateArgs {
+    #[arg(long = "type", value_enum)]
+    pub tab_type: Option<CliTabType>,
+
+    #[command(flatten)]
+    pub target: TargetArgs,
+}
+
+#[derive(Debug, Clone, Args)]
 pub struct TabCreateArgs {
     #[arg(long = "type", value_enum)]
     pub tab_type: Option<CliTabType>,
+
+    /// Run this command in the new tab once its shell is ready (Shellomancy).
+    #[arg(long = "command")]
+    pub command: Option<String>,
+
+    /// Working directory for the new tab; relative paths resolve against the
+    /// current directory (Shellomancy).
+    #[arg(long = "cwd")]
+    pub cwd: Option<std::path::PathBuf>,
+
+    /// Title for the new tab (Shellomancy).
+    #[arg(long = "title")]
+    pub title: Option<String>,
+
+    /// Tab color: an ANSI color name such as red, green, cyan (Shellomancy).
+    #[arg(long = "color")]
+    pub color: Option<String>,
+
+    /// Open the tab without raising the app or switching to it (Shellomancy).
+    #[arg(long = "no-focus")]
+    pub no_focus: bool,
 
     #[command(flatten)]
     pub target: TargetArgs,

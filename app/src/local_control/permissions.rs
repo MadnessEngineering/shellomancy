@@ -46,6 +46,19 @@ pub(super) fn ensure_action_allowed(
     ensure_settings_allow_action(settings, action)
 }
 
+/// Shellomancy: actions that start commands need a mode that allows it.
+pub(crate) fn ensure_settings_allow_command_execution(
+    settings: &LocalControlSettings,
+) -> Result<(), ControlError> {
+    if settings.allows_command_execution() {
+        return Ok(());
+    }
+    Err(ControlError::new(
+        ErrorCode::InsufficientPermissions,
+        "running commands is disabled for local control; enable it in Settings > Scripting",
+    ))
+}
+
 pub(crate) fn ensure_settings_allow_action(
     settings: &LocalControlSettings,
     action: ActionKind,
