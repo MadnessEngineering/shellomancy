@@ -105,6 +105,10 @@ pub const OFFLINE_DISABLED_FEATURES: &[crate::features::FeatureFlag] = &[
     crate::features::FeatureFlag::OrchestrationLaunchModal,
     crate::features::FeatureFlag::AgentCliLaunchModal,
     crate::features::FeatureFlag::SshRemoteServer,
+    // Release bundles (release_bundle) turn these on; no crash-report
+    // destination exists offline, and handoff checkpoints belong to Oz.
+    crate::features::FeatureFlag::CrashReporting,
+    crate::features::FeatureFlag::PeriodicHandoffCheckpoints,
     // Shellomancy is a terminal, not Warp's Oz agent platform (Dan, 2026-10-31).
     // Cloud agents, ambient/scheduled agents, Oz platform and handoff:
     crate::features::FeatureFlag::AgentManagementDetailsView,

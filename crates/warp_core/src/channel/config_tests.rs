@@ -35,6 +35,7 @@ fn offline_disabled_features_cover_every_logged_out_server_call() {
         FeatureFlag::Changelog,
         FeatureFlag::AgentOnboarding,
         FeatureFlag::SshRemoteServer,
+        FeatureFlag::CrashReporting,
     ] {
         assert!(
             OFFLINE_DISABLED_FEATURES.contains(&flag),
