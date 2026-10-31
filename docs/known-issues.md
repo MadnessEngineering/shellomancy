@@ -7,11 +7,11 @@ Status as of 2026-10-31.
 - `./script/run` builds `Shellomancy.app` (bundle id `cc.madnessinteractive.shellomancy`, URL scheme `shellomancy`, ad-hoc signed) and it launches.
 - First launch creates `~/.mad/shellomancy` and `~/.mad/local-control` (directory `0700`, record and broker socket `0600`); local control is on by default.
 - The Python client and the `shellomancy` CLI control the running app; `tab create --command` runs the command in the new tab.
-- About 3 minutes in: no outbound connections, only the loopback control listener ([privacy-and-offline.md](privacy-and-offline.md#results)).
+- At about 3 and again at 11 minutes running: no outbound connections, only the loopback control listener, no Warp-server log lines ([privacy-and-offline.md](privacy-and-offline.md#results)).
 
 ## Not yet verified
 
-- **The 10-minute idle network check** and the first-run screen (no login, no pop-ups) ([privacy-and-offline.md](privacy-and-offline.md#verifying-it)).
+- **The first-run screen** (no login, no pop-ups); the network checks, including the 10-minute idle one, passed ([privacy-and-offline.md](privacy-and-offline.md#results)).
 - **The fork hook opening a real `/fork` as a Shellomancy tab**, and the MQTT bridge's `attach` against the real app (its state and `focus` were verified live).
 - **Running beside stock Warp at the same time.**
 - **The release bundle** (`./script/bundle --channel oss`).
