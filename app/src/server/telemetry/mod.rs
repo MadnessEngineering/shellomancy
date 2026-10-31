@@ -306,6 +306,10 @@ impl TelemetryApi {
         messages: Vec<RudderBatchMessageWithMetadata>,
         settings_snapshot: PrivacySettingsSnapshot,
     ) -> Result<()> {
+        // Shellomancy: no telemetry config means no destination; never attempt a send.
+        if !ChannelState::is_telemetry_available() {
+            return Ok(());
+        }
         if messages.is_empty() {
             log::debug!("Dropping empty RudderStack telemetry batch");
             return Ok(());

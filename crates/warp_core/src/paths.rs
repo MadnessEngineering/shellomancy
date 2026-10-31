@@ -142,7 +142,7 @@ pub fn data_dir() -> PathBuf {
 /// Returns the GUI application ID for the current channel.
 ///
 /// Most TUI channel binaries use the same application ID as the GUI. The OSS
-/// TUI is the exception: it uses `WarpTui`, while the corresponding GUI uses
+/// TUI is the exception: it uses `shellomancy-tui`, while the corresponding GUI uses
 /// `cc.madnessinteractive.shellomancy`.
 #[cfg(any(not(target_os = "macos"), test))]
 fn gui_app_id_for_channel(channel: Channel, current_app_id: AppId) -> AppId {

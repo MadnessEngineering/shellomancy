@@ -9,6 +9,10 @@ pub fn init_feature_flags() {
     for flag in enabled_features() {
         flag.set_enabled(true);
     }
+    // Shellomancy: forced-off flags win over every enable source above.
+    for flag in ChannelState::disabled_features() {
+        flag.set_enabled(false);
+    }
     mark_initialized();
 }
 

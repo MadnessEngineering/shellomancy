@@ -14,10 +14,10 @@ fn main() -> Result<()> {
     let mut state = ChannelState::new(
         Channel::Oss,
         ChannelConfig {
-            app_id: AppId::new("dev", "warp", "WarpTui"),
-            logfile_name: "warp-tui.log".into(),
-            server_config: WarpServerConfig::production(),
-            oz_config: OzConfig::production(),
+            app_id: AppId::new("cc", "madnessinteractive", "shellomancy-tui"),
+            logfile_name: "shellomancy-tui.log".into(),
+            server_config: WarpServerConfig::offline(),
+            oz_config: OzConfig::offline(),
             telemetry_config: None,
             crash_reporting_config: None,
             autoupdate_config: None,
@@ -27,6 +27,7 @@ fn main() -> Result<()> {
     if cfg!(debug_assertions) {
         state = state.with_additional_features(warp_core::features::DEBUG_FLAGS);
     }
+    state = state.with_disabled_features(warp_core::channel::OFFLINE_DISABLED_FEATURES);
     ChannelState::set(state);
 
     warp_tui::run()

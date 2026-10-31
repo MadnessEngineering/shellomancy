@@ -67,7 +67,45 @@ impl WarpServerConfig {
             iap_config: None,
         }
     }
+
+    /// Shellomancy: a server config that never reaches Warp's servers.
+    ///
+    /// URLs point at the TCP discard port on loopback, which refuses
+    /// connections immediately (an unroutable address would hang: the HTTP
+    /// client sets no connect timeout). URLs must stay non-empty because
+    /// several call sites `.expect()` a parseable server root.
+    pub fn offline() -> Self {
+        Self {
+            server_root_url: OFFLINE_HTTP_ROOT.into(),
+            prewarmed_sandbox_control_url: None,
+            rtc_server_url: OFFLINE_WS_ROOT.into(),
+            session_sharing_server_url: None,
+            firebase_auth_api_key: "".into(),
+            iap_config: None,
+        }
+    }
 }
+
+/// Shellomancy: loopback discard port used by the offline configs.
+pub const OFFLINE_HTTP_ROOT: &str = "http://127.0.0.1:9";
+/// Shellomancy: websocket counterpart of [`OFFLINE_HTTP_ROOT`].
+pub const OFFLINE_WS_ROOT: &str = "ws://127.0.0.1:9/graphql/v2";
+
+/// Shellomancy: features forced off alongside the offline configs. They would
+/// reach Warp's servers (update and changelog polling, the public-models query
+/// during agent onboarding, the Warp-hosted SSH remote server) or market Warp
+/// products on first launch.
+pub const OFFLINE_DISABLED_FEATURES: &[crate::features::FeatureFlag] = &[
+    crate::features::FeatureFlag::Autoupdate,
+    crate::features::FeatureFlag::Changelog,
+    crate::features::FeatureFlag::AgentOnboarding,
+    crate::features::FeatureFlag::AccountFirstOnboarding,
+    crate::features::FeatureFlag::OpenWarpLaunchModal,
+    crate::features::FeatureFlag::OzLaunchModal,
+    crate::features::FeatureFlag::OrchestrationLaunchModal,
+    crate::features::FeatureFlag::AgentCliLaunchModal,
+    crate::features::FeatureFlag::SshRemoteServer,
+];
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct OzConfig {
@@ -84,6 +122,14 @@ impl OzConfig {
     pub fn production() -> Self {
         Self {
             oz_root_url: "https://oz.warp.dev".into(),
+            workload_audience_url: None,
+        }
+    }
+
+    /// Shellomancy: see [`WarpServerConfig::offline`].
+    pub fn offline() -> Self {
+        Self {
+            oz_root_url: OFFLINE_HTTP_ROOT.into(),
             workload_audience_url: None,
         }
     }
@@ -173,3 +219,7 @@ pub struct McpOAuthLoopbackClientConfig {
     #[serde(default)]
     pub client_secret: Option<Cow<'static, str>>,
 }
+
+#[cfg(test)]
+#[path = "config_tests.rs"]
+mod tests;
