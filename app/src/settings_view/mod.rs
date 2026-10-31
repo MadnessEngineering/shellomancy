@@ -214,6 +214,26 @@ pub fn nav_page_position_id(section: SettingsSection) -> String {
     format!("settings_nav_page:{section:?}")
 }
 
+/// Shellomancy: pages that only manage Warp cloud accounts, teams, billing, or
+/// Warp-hosted agents. The OSS build is offline (see `WarpServerConfig::offline`),
+/// so these can never work and are hidden from the sidebar and search.
+fn is_hidden_in_offline_build(section: SettingsSection) -> bool {
+    ChannelState::channel() == warp_core::channel::Channel::Oss
+        && matches!(
+            section,
+            SettingsSection::BillingAndUsage
+                | SettingsSection::Referrals
+                | SettingsSection::SharedBlocks
+                | SettingsSection::Teams
+                | SettingsSection::WarpDrive
+                | SettingsSection::WarpAgent
+                | SettingsSection::AgentProfiles
+                | SettingsSection::Knowledge
+                | SettingsSection::CloudEnvironments
+                | SettingsSection::WarpCloudAgentAPIKeys
+        )
+}
+
 /// Saved-position id for a collapsible umbrella header row.
 pub fn nav_umbrella_position_id(label: &str) -> String {
     format!("settings_nav_umbrella:{label}")
@@ -2112,6 +2132,9 @@ impl SettingsView {
     }
 
     fn should_render_page(&self, settings_page: &SettingsPage, app: &AppContext) -> bool {
+        if is_hidden_in_offline_build(settings_page.section) {
+            return false;
+        }
         match &settings_page.view_handle {
             SettingsPageViewHandle::Main(v) => v.as_ref(app).should_render(app),
             SettingsPageViewHandle::Teams(v) => v.as_ref(app).should_render(app),

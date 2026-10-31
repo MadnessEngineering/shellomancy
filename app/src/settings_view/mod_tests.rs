@@ -1160,3 +1160,27 @@ fn category_header_with_trailing_element_and_no_subtitle_does_not_panic_flex_lay
         });
     });
 }
+
+#[test]
+fn offline_build_hides_warp_cloud_pages_only() {
+    // ChannelState defaults to Channel::Oss (Shellomancy) in tests.
+    for hidden in [
+        SettingsSection::Teams,
+        SettingsSection::WarpDrive,
+        SettingsSection::BillingAndUsage,
+        SettingsSection::WarpAgent,
+        SettingsSection::CloudEnvironments,
+    ] {
+        assert!(is_hidden_in_offline_build(hidden), "{hidden:?} should be hidden");
+    }
+    for shown in [
+        SettingsSection::Appearance,
+        SettingsSection::Keybindings,
+        SettingsSection::Scripting,
+        SettingsSection::AgentMCPServers,
+        SettingsSection::ThirdPartyCLIAgents,
+        SettingsSection::About,
+    ] {
+        assert!(!is_hidden_in_offline_build(shown), "{shown:?} should stay visible");
+    }
+}
