@@ -57,6 +57,7 @@ Details: [privacy-and-offline.md](privacy-and-offline.md).
 | Local control is on by default, including a new mode that allows running commands; Settings → Scripting can lower it | `8127378c` | settings tests |
 | `tab create` takes `--command`, `--cwd`, `--title`, `--color`, `--no-focus`; the command runs once the tab's shell is ready, through the same path tab configs use | `8127378c` | handler tests |
 | A stdlib Python client for hooks | `7d73c120` | tests against a fake app |
+| An MQTT bridge: state and tab events out, `attach` / `focus` commands in ([mqtt-bridge.md](mqtt-bridge.md)) | `script/shellomancy_mqtt` | unit tests + end-to-end test with a real mosquitto broker and a fake app |
 | Release bundle script keeps your `--features` and ships the `shellomancy` wrapper | `152d83a9`, `ce9f2a54` | `bash -n` only |
 
 Details: [shellomancy-cli.md](shellomancy-cli.md).
