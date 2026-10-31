@@ -18,22 +18,19 @@ cd "${REPO_ROOT}"
 
 OS_TYPE="$(uname -s)"
 
-FEATURES="gui"
-INSTALL_COMMON_SKILLS=1
+# Shellomancy: warpctrl (shctl) is part of the default build.
+FEATURES="gui,warp_control_cli"
+# Shellomancy: upstream curls and executes an unpinned remote script to install
+# "common skills" on every run. Opt in with --install-common-skills instead.
+INSTALL_COMMON_SKILLS=0
 FORCE_COMMON_SKILLS=0
 COMMON_SKILLS_TARGET="${WARP_COMMON_SKILLS_INSTALL_TARGET:-}"
 
-./script/install_channel_config || echo "Skipping internal channel config installation (no repo access)."
-
-
-# If warp_channel_config is on PATH, build the Local channel binary; otherwise build the OSS channel.
-if command -v warp-channel-config &>/dev/null; then
-    WARP_BIN_NAME="warp"
-    WARP_CHANNEL="local"
-else
-    WARP_BIN_NAME="warp-oss"
-    WARP_CHANNEL="oss"
-fi
+# Shellomancy: always build the OSS channel (rebranded as Shellomancy). Upstream
+# probes a private repo over SSH here and silently switches to Warp's internal
+# Local channel if `warp-channel-config` is on PATH.
+WARP_BIN_NAME="warp-oss"
+WARP_CHANNEL="oss"
 
 # Shared argument parsing. macOS-specific flags (--dont-open,
 # --open_with_launchd, --generate-schema) are forwarded through MAC_ARGS and
@@ -68,6 +65,7 @@ while (( "$#" )); do
       fi
       ;;
     --install-common-skills)
+      INSTALL_COMMON_SKILLS=1
       FORCE_COMMON_SKILLS=1
       shift
       ;;

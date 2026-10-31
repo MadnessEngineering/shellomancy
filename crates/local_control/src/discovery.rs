@@ -281,11 +281,13 @@ pub fn discovery_dir() -> PathBuf {
     if let Some(path) = std::env::var_os(DISCOVERY_DIR_ENV) {
         return PathBuf::from(path);
     }
+    // Shellomancy: discovery lives in the shared `~/.mad` dot-dir so it never
+    // touches stock Warp's `~/.warp` and other lab tools can find instances.
     if let Some(path) = std::env::var_os("XDG_RUNTIME_DIR") {
-        return PathBuf::from(path).join("warp").join("local-control");
+        return PathBuf::from(path).join("mad").join("local-control");
     }
     let home = std::env::var_os("HOME").unwrap_or_else(|| ".".into());
-    PathBuf::from(home).join(".warp").join("local-control")
+    PathBuf::from(home).join(".mad").join("local-control")
 }
 
 /// Returns compatible live instances from `channel` that pass an authenticated app ping.

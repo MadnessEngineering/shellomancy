@@ -32,12 +32,23 @@ pub const WARP_CONFIG_DIR: &str = ".warp";
 /// This is currently only used on Windows to maintain backwards compatibility.
 pub const WARP_LOGS_DIR: &str = "logs";
 
+/// Shellomancy: home-relative config directory for the Oss channel.
+///
+/// Shellomancy lives under the shared Madness Interactive dot-dir (`~/.mad`)
+/// so sibling tools (local-control discovery, MQTT bridges) can find it
+/// without knowing Warp's `.warp*` naming. Like the `.warp*` names, this is
+/// persisted on disk and must not be changed once established.
+pub const SHELLOMANCY_CONFIG_DIR: &str = ".mad/shellomancy";
+
+/// Shellomancy: the TUI sibling of [`SHELLOMANCY_CONFIG_DIR`].
+pub const SHELLOMANCY_TUI_CONFIG_DIR: &str = ".mad/shellomancy-cli";
+
 fn base_warp_config_dir_name() -> String {
     match ChannelState::channel() {
         // Preview shares the same directory as Stable for backward
         // compatibility — existing users already have config in `.warp`.
         Channel::Stable | Channel::Preview => WARP_CONFIG_DIR.to_owned(),
-        Channel::Oss => format!("{WARP_CONFIG_DIR}-oss"),
+        Channel::Oss => SHELLOMANCY_CONFIG_DIR.to_owned(),
         Channel::Dev => format!("{WARP_CONFIG_DIR}-dev"),
         Channel::Integration => format!("{WARP_CONFIG_DIR}-integration"),
         Channel::Local => format!("{WARP_CONFIG_DIR}-local"),
@@ -101,7 +112,7 @@ fn macos_config_dir_name_for(channel: Channel, data_profile: Option<&str>) -> St
     let base_dir_name = match channel {
         Channel::Stable => WARP_CONFIG_DIR.to_owned(),
         Channel::Preview => format!("{WARP_CONFIG_DIR}-preview"),
-        Channel::Oss => format!("{WARP_CONFIG_DIR}-oss"),
+        Channel::Oss => SHELLOMANCY_CONFIG_DIR.to_owned(),
         Channel::Dev => format!("{WARP_CONFIG_DIR}-dev"),
         Channel::Integration => format!("{WARP_CONFIG_DIR}-integration"),
         Channel::Local => format!("{WARP_CONFIG_DIR}-local"),
@@ -132,11 +143,11 @@ pub fn data_dir() -> PathBuf {
 ///
 /// Most TUI channel binaries use the same application ID as the GUI. The OSS
 /// TUI is the exception: it uses `WarpTui`, while the corresponding GUI uses
-/// `WarpOss`.
+/// `cc.madnessinteractive.shellomancy`.
 #[cfg(any(not(target_os = "macos"), test))]
 fn gui_app_id_for_channel(channel: Channel, current_app_id: AppId) -> AppId {
     match channel {
-        Channel::Oss => AppId::new("dev", "warp", "WarpOss"),
+        Channel::Oss => AppId::new("cc", "madnessinteractive", "shellomancy"),
         Channel::Stable
         | Channel::Preview
         | Channel::Dev
@@ -212,7 +223,17 @@ pub fn gui_mcp_config_file_path() -> Option<PathBuf> {
 /// changed once established.
 #[cfg(target_os = "macos")]
 fn macos_tui_config_dir_name() -> String {
-    macos_config_dir_name().replacen(WARP_CONFIG_DIR, ".warp_cli", 1)
+    macos_tui_config_dir_name_for(macos_config_dir_name())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_tui_config_dir_name_for(gui_dir_name: String) -> String {
+    // Shellomancy: `.mad/shellomancy` contains no `.warp`, so the generic
+    // replace below would leave the TUI sharing the GUI's directory.
+    if gui_dir_name.starts_with(SHELLOMANCY_CONFIG_DIR) {
+        return gui_dir_name.replacen(SHELLOMANCY_CONFIG_DIR, SHELLOMANCY_TUI_CONFIG_DIR, 1);
+    }
+    gui_dir_name.replacen(WARP_CONFIG_DIR, ".warp_cli", 1)
 }
 
 /// Returns the path to the directory where non-portable configuration files for
@@ -277,6 +298,11 @@ pub fn state_dir() -> PathBuf {
 pub fn secure_state_dir() -> Option<PathBuf> {
     // Do not use the secure state directory in integration tests, which have a temporary home directory instead.
     if ChannelState::channel() == Channel::Integration {
+        return None;
+    }
+    // Shellomancy: the App Group below belongs to Warp's signing team. Probing
+    // it from the fork would put our database inside stock Warp's container.
+    if ChannelState::channel() == Channel::Oss {
         return None;
     }
 
