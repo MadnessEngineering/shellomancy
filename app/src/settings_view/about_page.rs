@@ -16,6 +16,9 @@ use crate::channel::ChannelState;
 use crate::themes::theme::ColorScheme;
 use crate::workspace::WorkspaceAction;
 
+/// Where Shellomancy's source is published (AGPL-3.0 section 13 offer).
+const SHELLOMANCY_SOURCE_URL: &str = "https://github.com/MadnessEngineering/shellomancy";
+
 pub struct AboutPageView {
     page: PageType<Self>,
 }
@@ -48,13 +51,14 @@ impl View for AboutPageView {
 #[derive(Default)]
 struct AboutPageWidget {
     copy_version_button_mouse_state: MouseStateHandle,
+    source_link_mouse_state: MouseStateHandle,
 }
 
 impl SettingsWidget for AboutPageWidget {
     type View = AboutPageView;
 
     fn search_terms(&self) -> &str {
-        "about warp version"
+        "about shellomancy warp version license source"
     }
 
     fn render(
@@ -116,12 +120,36 @@ impl SettingsWidget for AboutPageWidget {
                     .finish(),
                 )
                 .with_child(version_row.finish())
+                // Shellomancy: attribution, licence, and the AGPL source offer.
                 .with_child(
                     ui_builder
-                        .span("Copyright 2026 Warp")
+                        .span("A fork of Warp. Copyright 2026 Denver Technologies, Inc.")
                         .build()
                         .with_margin_top(16.)
                         .finish(),
+                )
+                .with_child(
+                    ui_builder
+                        .span("Licensed under AGPL-3.0 (UI framework: MIT).")
+                        .build()
+                        .with_margin_top(4.)
+                        .finish(),
+                )
+                .with_child(
+                    Container::new(
+                        ui_builder
+                            .link(
+                                SHELLOMANCY_SOURCE_URL.to_string(),
+                                Some(SHELLOMANCY_SOURCE_URL.to_string()),
+                                None,
+                                self.source_link_mouse_state.clone(),
+                            )
+                            .soft_wrap(false)
+                            .build()
+                            .finish(),
+                    )
+                    .with_margin_top(4.)
+                    .finish(),
                 )
                 .finish(),
         )
