@@ -1,21 +1,28 @@
 # Known issues
 
-Status as of 2026-10-31, at fork commit `e47e390b`.
+Status as of 2026-10-31.
+
+## Verified on the first launch (2026-10-31)
+
+- `./script/run` builds `Shellomancy.app` (bundle id `cc.madnessinteractive.shellomancy`, URL scheme `shellomancy`, ad-hoc signed) and it launches.
+- First launch creates `~/.mad/shellomancy` and `~/.mad/local-control` (directory `0700`, record and broker socket `0600`); local control is on by default.
+- The Python client and the `shellomancy` CLI control the running app; `tab create --command` runs the command in the new tab.
+- About 3 minutes in: no outbound connections, only the loopback control listener ([privacy-and-offline.md](privacy-and-offline.md#results)).
 
 ## Not yet verified
 
-- **Shellomancy has never been built into an app or launched.** Every change so far is checked by `cargo check`, unit and handler tests, and script syntax checks only. Next step: install Xcode and its Metal toolchain, then `./script/run` ([building.md](building.md)).
-- **Offline behavior** is configured and unit-tested, but the running app hasn't been checked for outbound connections ([privacy-and-offline.md](privacy-and-offline.md#verifying-it)).
-- **The `shellomancy` CLI and Python client** have only run against tests and a fake app, not against Shellomancy itself.
-- **Running beside stock Warp**: separate paths, bundle id and Keychain items are set in code; nobody has run both at once yet.
-- **The release bundle** (`./script/bundle --channel oss`) has not been run.
-- **The wider About-page logo** ("shellomancy" wordmark) has not been seen at its 350×100 size.
+- **The 10-minute idle network check** and the first-run screen (no login, no pop-ups) ([privacy-and-offline.md](privacy-and-offline.md#verifying-it)).
+- **The fork hook opening a real `/fork` as a Shellomancy tab**, and the MQTT bridge against the real app.
+- **Running beside stock Warp at the same time.**
+- **The release bundle** (`./script/bundle --channel oss`).
+- **The new brand assets in the app** (Dock icon variants, loading animation, About page logo at 350×100, the font glyph).
 
 ## Known gaps
 
-- **Warp's local Agent Mode is still compiled in.** The Oz cloud features are off, but Warp's in-terminal agent, agent view and AI context menus remain. They're hidden while logged out, and Shellomancy can't log in. Turning off `AgentMode` affects about 50 code paths, and no Warp build ships without it, so it waits until the app can be run and checked.
-- **"Warp" still appears in the interface.** About 800 user-visible strings, menus ("Quit Warp"), links to `docs.warp.dev`, and permission prompts outside the ones already changed.
-- **The Oz CLI wrapper** (`shellomancy-oz`) is still created in the app bundle, even though none of its commands work offline.
+- **Warp's local Agent Mode is still compiled in.** The Oz cloud features are off, but Warp's in-terminal agent, agent view and AI context menus remain. They're hidden while logged out, and Shellomancy can't log in. Turning off `AgentMode` affects about 50 code paths, and no Warp build ships without it, so it should be done with the app running to check each surface.
+- **"Warp" still appears in the interface.** About 800 user-visible strings, menus ("Quit Warp"), links to `docs.warp.dev`, permission prompts outside the ones already changed, and the control CLI's help ("Control a running local Warp app instance").
+- **No adaptive app icon.** The OSS channel has no `AppIcon.icon` bundle, so macOS icon tinting doesn't apply; the build prints a warning and uses the plain icon.
+- **The Oz CLI wrapper** (`shellomancy-oz`) is still created by the release bundle script (`script/macos/bundle`), even though none of its commands work offline. Debug builds from `./script/run` don't create it.
 - **SSH remote server** is off. Warp's version downloads Warp's CLI onto the remote host; Shellomancy has no replacement yet.
 - **Signing.** Ad-hoc signed builds change signature on every rebuild, so macOS may ask for Keychain access again.
 - **Only macOS on Apple Silicon** has been considered. Linux and Windows paths are updated in code and tests but never built.

@@ -4,7 +4,7 @@
 
 A fork of the open-source [Warp](https://github.com/warpdotdev/warp) terminal for the **madness_interactive** workshop. It keeps Warp's terminal (blocks, tabs, panes, themes, launch and tab configs, the command palette), runs offline, drops Warp's Oz agent platform, and adds a scriptable control CLI so hooks can open tabs that run commands.
 
-> **Early build — not yet run.** As of this writing Shellomancy has only been type-checked and unit-tested (`cargo check`, `cargo test`); it has not been bundled or launched, because the build machine was still waiting on Xcode. Anything below marked *not verified* has no runtime evidence yet. macOS on Apple Silicon is the only target.
+> **Early build.** Shellomancy was first built and launched on 2026-10-31 (macOS 27, Xcode 27.2, Apple Silicon), and its control CLI opened a tab and ran a command in it. Much is still untested; anything marked *not verified* has no runtime evidence yet. macOS on Apple Silicon is the only target.
 
 ## Getting it
 

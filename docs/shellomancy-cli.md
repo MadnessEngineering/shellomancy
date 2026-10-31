@@ -2,7 +2,7 @@
 
 `shellomancy` controls a running Shellomancy app from scripts: list and focus windows, open and rename tabs, split panes, switch themes, open surfaces, and (Shellomancy's addition) open a tab that runs a command. It is Warp's local-control CLI (`warpctrl`) under Shellomancy's name.
 
-> **Not yet run against the app.** The CLI, the app-side handlers and the Python client are covered by unit and handler tests; none has been exercised against a launched Shellomancy yet.
+> **Verified live on 2026-10-31:** against a running Shellomancy, the Python client found the instance and `tab-create --command` opened a titled, colored tab whose shell ran the command; the `shellomancy` wrapper's `--help` (shows `shellomancy`), `tab list` and `tab create --no-focus` (kept the active tab) worked. Local control was on by default on first launch. Other actions haven't been tried.
 
 The full upstream design is in [`specs/warp-control-cli/`](../specs/warp-control-cli/): `PRODUCT.md` (behavior and the action catalog), `SECURITY.md` (the threat model), `TECH.md` (implementation). Each starts with a note on where Shellomancy differs.
 

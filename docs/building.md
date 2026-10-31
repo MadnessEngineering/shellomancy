@@ -2,7 +2,7 @@
 
 macOS on Apple Silicon only. Shellomancy builds Warp's `oss` channel (binary `warp-oss`, bundled as `Shellomancy.app`).
 
-> **Not yet verified end to end.** The steps below come from reading the build scripts. `cargo check` and the unit tests have run; a full `./script/run` has not, because Xcode was not installed on the build machine yet. Times and sizes are estimates.
+> **Verified once.** `./script/run` built and launched Shellomancy on 2026-10-31 (macOS 27, Xcode 27.2, M-series, 10 cores). The release bundle path is still unverified.
 
 ## Prerequisites
 
@@ -43,7 +43,7 @@ This builds `target/debug/bundle/osx/Shellomancy.app` (ad-hoc signed unless you 
 
 Differences from upstream `script/run`: it always builds the `oss` channel (upstream switches to Warp's internal channel if a private config tool is on `PATH`), includes `warp_control_cli` by default, and skips the agent-skills installer.
 
-Estimates, not measurements: a clean debug build is 10–20 minutes on a 10-core M-series machine and 20–35 GB under `target/`.
+Measured on the first run (2026-10-31): `./script/run --dont-open` took 332 s, 4 m 52 s of it in cargo, but most dependencies were already built by earlier `cargo check` runs, so a truly clean build will take longer. `target/` reached 36 GB. `cargo bundle` also writes a DMG to `target/debug/bundle/dmg/`. The only warning was the missing adaptive `AppIcon.icon` (see known-issues).
 
 ## Faster loops
 
