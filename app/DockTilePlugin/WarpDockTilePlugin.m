@@ -99,30 +99,19 @@
     // First remove quotes and convert to lowercase
     NSString* cleanName = [[appIconName stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"\""]] lowercaseString];
     
+    // Shellomancy: Warp's alternate icons were replaced with nautilus palettes.
     NSDictionary* mapping = @{
-        @"aurora": @"aurora",
-        @"classic1": @"classic_1",
-        @"classic2": @"classic_2",
-        @"classic3": @"classic_3",
-        @"comets": @"comets",
-        @"glasssky": @"glass_sky",
-        @"glitch": @"glitch",
-        @"glow": @"glow",
-        @"holographic": @"holographic",
+        @"abyss": @"abyss",
+        @"bone": @"bone",
+        @"ember": @"ember",
         @"mono": @"mono",
-        @"neon": @"neon",
-        @"original": @"original",
-        @"starburst": @"starburst",
-        @"sticker": @"sticker",
-        @"warpone": @"blue",
-        @"cow": @"cow"
+        @"toxic": @"toxic"
     };
     
     NSString* fileName = mapping[cleanName];
 
-    // If the mapping doesn't exist, return the default icon 
-    // conditional on whether this is a local, dev, or preview build.
-    return fileName ?: isLocal ? @"local" : isDev ? @"dev" : isPreview ? @"preview" : @"warp_2";
+    // If the mapping doesn't exist, return the default Shellomancy icon.
+    return fileName ?: @"shellomancy";
 }
 
 // Helper function to load named image from the plugin's resource bundle
