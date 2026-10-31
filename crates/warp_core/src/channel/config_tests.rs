@@ -42,3 +42,24 @@ fn offline_disabled_features_cover_every_logged_out_server_call() {
         );
     }
 }
+
+#[test]
+fn offline_disabled_features_drop_oz_cloud_but_keep_third_party_cli_agents() {
+    for flag in [
+        FeatureFlag::CloudMode,
+        FeatureFlag::AmbientAgentsRTC,
+        FeatureFlag::ScheduledAmbientAgents,
+        FeatureFlag::OzPlatformSkills,
+        FeatureFlag::OzHandoff,
+        FeatureFlag::AgentManagementView,
+    ] {
+        assert!(OFFLINE_DISABLED_FEATURES.contains(&flag), "{flag:?} should be off");
+    }
+    // Claude Code / Codex running inside the terminal must keep working.
+    for flag in [
+        FeatureFlag::CLIAgentRichInput,
+        FeatureFlag::CtrlCCancelsThirdPartyHarness,
+    ] {
+        assert!(!OFFLINE_DISABLED_FEATURES.contains(&flag), "{flag:?} must stay on");
+    }
+}
