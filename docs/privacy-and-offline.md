@@ -1,6 +1,6 @@
 # Privacy and offline mode
 
-Shellomancy is built to never contact Warp's servers and never send telemetry or crash reports. Checks on the running app agree, including one after more than 10 minutes (see [Results](#results)); the first-run screen is still to be confirmed by eye.
+Shellomancy is built to never contact Warp's servers and never send telemetry or crash reports. Checks on the running app agree, including one after more than 10 minutes and the first-run screen (see [Results](#results)).
 
 ## What is off, and how
 
@@ -48,4 +48,4 @@ For an extra guarantee you can point `app.warp.dev`, `rtc.app.warp.dev`, `sessio
 
 - **2026-10-31, first launch, about 3 minutes running** (fresh `~/.mad`, a few tabs opened through the control API): the app and its terminal-server helper had one inet socket, the control API listening on `127.0.0.1` (no install-detection listener, no outbound connections). The log had none of the lines above, and no mention of `warp.dev`, RudderStack or Sentry. The log showed the logged-out path ("Unable to read user from secure storage: NotFound"), with no errors.
 - **2026-10-31, 11 minutes 23 seconds running** (past the upstream 10-minute update poll; three tabs, control-API and MQTT-bridge traffic during the first minutes): still one inet socket, the loopback control listener. No update, changelog, telemetry, model-list, `client_version`, `warp.dev`, RudderStack or Sentry lines in the log; no errors. Steps 1–3 pass.
-- **Still to do:** step 4, a look at the first-run screen.
+- **2026-10-31, first-run screen** (Dan's screenshot of the fresh launch): it opened straight to a terminal, with no login screen and no Warp launch pop-ups, and the tabs opened through the control API ("live check", "via cli") were present. Step 4 passes. Debug builds also show a "Lines: … Size: …" readout under blocks; that is upstream's debug mode, not part of release builds.
