@@ -55,7 +55,9 @@ impl Channel {
             Channel::Preview => "oz-preview",
             Channel::Local => "oz-local",
             Channel::Integration => "oz-integration",
-            Channel::Oss => "shellomancy",
+            // Shellomancy: the Oz agent CLI is Warp-cloud only and unused offline;
+            // `shellomancy` belongs to the control CLI.
+            Channel::Oss => "shellomancy-oz",
         }
     }
 
@@ -67,7 +69,7 @@ impl Channel {
             Channel::Preview => "warpctrl-preview",
             Channel::Local => "warpctrl-local",
             Channel::Integration => "warpctrl-integration",
-            Channel::Oss => "shctl",
+            Channel::Oss => "shellomancy",
         }
     }
 }

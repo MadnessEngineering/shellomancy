@@ -2,7 +2,7 @@
 
 > **Shellomancy differs here.** In this fork:
 > - The OSS channel (Shellomancy) defaults Scripting to **Enabled, including running commands** (`LocalControlMode::EnabledWithCommands`, `app/src/settings/local_control.rs`). Users can lower it to Enabled or Disabled in Settings > Scripting; it is still stored only in protected local storage.
-> - `tab.create` accepts optional `command`, `cwd`, `title`, `color` and `focus` params (`shctl tab create --command ... --cwd ... --title ... --color ... --no-focus`). The command is queued with the same pending-command path tab configs and launch configs use, and runs once the new tab's shell finishes bootstrapping. No keystrokes are injected.
+> - `tab.create` accepts optional `command`, `cwd`, `title`, `color` and `focus` params (`shellomancy tab create --command ... --cwd ... --title ... --color ... --no-focus`; the control CLI is named `shellomancy` in this fork). The command is queued with the same pending-command path tab configs and launch configs use, and runs once the new tab's shell finishes bootstrapping. No keystrokes are injected.
 > - A `command` requires `EnabledWithCommands`; otherwise the request fails with `insufficient_permissions`. Commands must be non-empty, at most 4096 bytes, and free of newlines and control characters; `cwd` must be an existing absolute directory. Rejected requests create no tab. `window.create` rejects these params.
 > - Launch requests raise the app unless `focus` is `false`.
 >

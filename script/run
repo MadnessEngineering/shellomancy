@@ -18,7 +18,7 @@ cd "${REPO_ROOT}"
 
 OS_TYPE="$(uname -s)"
 
-# Shellomancy: warpctrl (shctl) is part of the default build.
+# Shellomancy: warpctrl (the `shellomancy` control CLI) is part of the default build.
 FEATURES="gui,warp_control_cli"
 # Shellomancy: upstream curls and executes an unpinned remote script to install
 # "common skills" on every run. Opt in with --install-common-skills instead.

@@ -37,11 +37,11 @@ fn parses_typed_create_and_setting_list_params() {
     assert_eq!(args.namespace.as_deref(), Some("editor"));
 }
 
-/// Shellomancy: `shctl tab create` launch flags.
+/// Shellomancy: `shellomancy tab create` launch flags.
 #[test]
 fn parses_tab_create_launch_flags() {
     let args = ControlArgs::try_parse_from([
-        "shctl",
+        "shellomancy",
         "tab",
         "create",
         "--command",
@@ -64,7 +64,7 @@ fn parses_tab_create_launch_flags() {
     assert_eq!(args.color.as_deref(), Some("cyan"));
     assert!(args.no_focus);
 
-    let err = ControlArgs::try_parse_from(["shctl", "window", "create", "--command", "true"])
+    let err = ControlArgs::try_parse_from(["shellomancy", "window", "create", "--command", "true"])
         .expect_err("window create does not take launch flags");
     assert_eq!(err.kind(), clap::error::ErrorKind::UnknownArgument);
 }

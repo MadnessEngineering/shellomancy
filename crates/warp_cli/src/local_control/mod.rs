@@ -93,7 +93,14 @@ impl ControlArgs {
             stripped_args.push(arg);
         }
 
-        found_control_mode.then(|| Self::try_parse_from_args(stripped_args, "warpctrl"))
+        // Shellomancy: show the invoked name (the wrapper preserves argv[0]), so
+        // help reads `shellomancy ...`, or an alias such as `madsh ...`.
+        found_control_mode.then(|| {
+            Self::try_parse_from_args(
+                stripped_args,
+                crate::binary_name().unwrap_or_else(|| "warpctrl".to_owned()),
+            )
+        })
     }
 
     pub fn clap_command() -> clap::Command {

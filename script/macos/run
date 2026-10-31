@@ -139,7 +139,7 @@ fi
 if [[ ",$FEATURES," =~ ",warp_control_cli," ]]; then
   # Must match Channel::warpctrl_command_name (crates/warp_core/src/channel/mod.rs).
   if [ "$WARP_CHANNEL" = "oss" ]; then
-    WARPCTRL_NAME="shctl"
+    WARPCTRL_NAME="shellomancy"
   else
     WARPCTRL_NAME="warpctrl-$WARP_CHANNEL"
   fi
