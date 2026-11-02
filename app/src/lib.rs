@@ -2328,7 +2328,10 @@ pub(crate) fn initialize_app(
         ai::blocklist::orchestration_event_streamer::OrchestrationEventStreamer::new,
     );
 
-    if launch_mode.supports_indexing() {
+    // The repo symbol outline only feeds Agent Mode's @ context menu and AI context. With
+    // AgentMode off (Shellomancy), building it is pure cost: a full tree-sitter parse of
+    // every repo a pane enters.
+    if launch_mode.supports_indexing() && FeatureFlag::AgentMode.is_enabled() {
         ctx.add_singleton_model(RepoOutlines::new);
     } else {
         ctx.add_singleton_model(|ctx| RepoOutlines::new_with_indexing_enabled(false, ctx));
