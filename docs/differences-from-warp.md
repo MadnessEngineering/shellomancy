@@ -53,6 +53,7 @@ Details: [privacy-and-offline.md](privacy-and-offline.md).
 
 | Difference | Commit | Checked by |
 |---|---|---|
+| The input box's AI toggle (the `A` side of `>_ A`) and Warp's "agent mode" action open Claude Code in a pane to the right, in the current session's directory, instead of switching the input to Warp's agent. The input bar hides the `@` context, file attachment, voice and model-picker buttons, which only fed Warp's agent | `app/src/terminal/input.rs`, `app/src/terminal/view.rs`, `app/src/terminal/universal_developer_input.rs`, `app/src/workspace/view.rs` | unit test (input stays in shell mode); compiled into the running app |
 | The agent-panel toggle (tab-bar button, `ctrl-space`, `surface.ai_assistant.toggle`) opens [MadQTT](https://github.com/MadnessEngineering/MadQTT), the live Claude Code session dashboard, in a pane on the right. Toggling again focuses it, or closes it (for good, so MadQTT exits) when it already has focus. Runs the `madqtt` command (a shell alias or `PATH` entry) | `app/src/pane_group/mod.rs`, `app/src/workspace/view.rs` | unit test; verified live (pane opens, MadQTT runs and connects, closing ends it) |
 
 ## Scripting (local control)

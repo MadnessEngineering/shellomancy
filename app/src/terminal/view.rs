@@ -28355,6 +28355,10 @@ impl TypedActionView for TerminalView {
             DragAndDropFiles(paths) => {
                 self.drag_and_drop_files(paths, ctx);
             }
+            // Shellomancy: with Warp's agent off, "agent mode" means Claude Code.
+            SetInputModeAgent if !FeatureFlag::AgentMode.is_enabled() => {
+                ctx.dispatch_typed_action(&WorkspaceAction::OpenClaudePane { prompt_file: None });
+            }
             SetInputModeAgent => {
                 // Guard: when a CLI agent session is active, block mode
                 // toggling and LRC subagent invocation. Context predicates

@@ -336,6 +336,12 @@ pub enum WorkspaceAction {
     ToggleUserMenu,
     ToggleAIAssistant,
     ClickedAIAssistantIcon,
+    /// Shellomancy: opens a pane to the right running Claude Code in the active
+    /// session's directory. `prompt_file`, when set, is read (then deleted) by the
+    /// pane's shell as Claude's first prompt.
+    OpenClaudePane {
+        prompt_file: Option<PathBuf>,
+    },
     ToggleKeybindingsPage,
     ShowCommandSearch(CommandSearchOptions),
     TriggerExternalCtrlTFileSearch,
@@ -986,6 +992,7 @@ impl WorkspaceAction {
             | ToggleTabGroupColor { .. }
             | AddDefaultTab
             | AddTerminalTab { .. }
+            | OpenClaudePane { .. }
             | AddTabWithShell { .. }
             | AddGetStartedTab
             | AddAgentTab

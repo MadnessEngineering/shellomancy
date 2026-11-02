@@ -839,25 +839,33 @@ impl View for UniversalDeveloperInputButtonBar {
 
             buttons = buttons.with_child(ChildView::new(&self.slash_command_button).finish());
 
+            // Shellomancy: voice, @-context, file attachments and the model
+            // selector only feed Warp's agent, which is off in this build.
+            let agent_mode = FeatureFlag::AgentMode.is_enabled();
+
             #[cfg(feature = "voice_input")]
-            if is_voice_input_enabled {
+            if is_voice_input_enabled && agent_mode {
                 buttons = buttons.with_child(ChildView::new(&self.mic_button).finish());
             }
 
-            buttons = buttons.with_child(ChildView::new(&self.at_button).finish());
+            if agent_mode {
+                buttons = buttons.with_child(ChildView::new(&self.at_button).finish());
+            }
 
             // Viewers cannot attach files in shared sessions at this point.
-            if !self
-                .terminal_model
-                .lock()
-                .shared_session_status()
-                .is_viewer()
+            if agent_mode
+                && !self
+                    .terminal_model
+                    .lock()
+                    .shared_session_status()
+                    .is_viewer()
             {
                 buttons = buttons.with_child(ChildView::new(&self.file_button).finish());
             }
 
-            let show_model_selector = FeatureFlag::ProfilesDesignRevamp.is_enabled()
-                || *SessionSettings::as_ref(app).show_model_selectors_in_prompt;
+            let show_model_selector = agent_mode
+                && (FeatureFlag::ProfilesDesignRevamp.is_enabled()
+                    || *SessionSettings::as_ref(app).show_model_selectors_in_prompt);
             if show_model_selector {
                 buttons = buttons
                     .with_child(create_divider())

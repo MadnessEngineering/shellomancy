@@ -7190,6 +7190,14 @@ impl Input {
                 self.toggle_voice_input(from, ctx);
             }
             UniversalDeveloperInputButtonBarEvent::InputTypeSelected(input_type) => {
+                // Shellomancy: with Warp's agent off, picking the AI side of the
+                // toggle opens Claude Code in a pane instead of agent mode.
+                if matches!(input_type, InputType::AI) && !FeatureFlag::AgentMode.is_enabled() {
+                    ctx.dispatch_typed_action(&WorkspaceAction::OpenClaudePane {
+                        prompt_file: None,
+                    });
+                    return;
+                }
                 if self.is_input_mode_toggle_disabled(ctx) {
                     return;
                 }

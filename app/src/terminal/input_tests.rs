@@ -8830,8 +8830,41 @@ fn test_voice_input_toggle_preserves_lock_state() {
     });
 }
 
+/// Shellomancy: with Warp's agent off, the AI side of the input toggle opens
+/// Claude Code (a workspace action) and leaves the input in shell mode.
+#[test]
+fn test_ai_button_with_agent_mode_off_keeps_shell_input() {
+    let _agent_mode = FeatureFlag::AgentMode.override_enabled(false);
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+
+        let terminal = add_window_with_bootstrapped_terminal(
+            &mut app, None, /* history_file_commands */
+            None,
+        )
+        .await;
+        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
+
+        input.update(&mut app, |input, ctx| {
+            input.handle_universal_developer_input_button_bar_event(
+                &UniversalDeveloperInputButtonBarEvent::InputTypeSelected(InputType::AI),
+                ctx,
+            );
+        });
+
+        let config = input.read(&app, |input, _| {
+            app.read_model(input.ai_input_model(), |ai_input, _| ai_input.input_config())
+        });
+        assert_eq!(config.input_type, InputType::Shell);
+        assert!(!config.is_locked);
+    });
+}
+
 #[test]
 fn test_input_type_button_explicit_lock() {
+    // Shellomancy: this covers Warp's agent mode; with AgentMode off the AI
+    // button opens Claude Code instead (see the test below).
+    let _agent_mode = FeatureFlag::AgentMode.override_enabled(true);
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
@@ -8928,6 +8961,9 @@ fn test_input_type_button_explicit_lock() {
 
 #[test]
 fn test_auto_detection_toggle() {
+    // Shellomancy: this covers Warp's agent mode; with AgentMode off the AI
+    // button opens Claude Code instead (see the test below).
+    let _agent_mode = FeatureFlag::AgentMode.override_enabled(true);
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
