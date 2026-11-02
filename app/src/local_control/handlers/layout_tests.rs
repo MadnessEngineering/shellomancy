@@ -214,3 +214,28 @@ fn tab_create_command_requires_the_command_execution_mode() {
         });
     });
 }
+
+#[test]
+fn tab_create_rejects_agent_tabs_when_agent_mode_is_off() {
+    let _flag = FeatureFlag::AgentMode.override_enabled(false);
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        let workspace = mock_workspace(&mut app);
+        let previous_count = workspace.read(&app, |workspace, _| workspace.tab_count());
+        let bridge = app.add_singleton_model(LocalControlBridge::new);
+
+        let err = bridge.update(&mut app, |_, ctx| {
+            create_tab(
+                &None,
+                &serde_json::json!({ "tab_type": "agent" }),
+                &TargetSelector::default(),
+                ctx,
+            )
+            .expect_err("agent tabs need Agent Mode")
+        });
+        assert_eq!(err.code, ErrorCode::UnsupportedAction);
+        workspace.read(&app, |workspace, _| {
+            assert_eq!(workspace.tab_count(), previous_count);
+        });
+    });
+}

@@ -206,6 +206,13 @@ fn tab_create_action(params: &TabCreateParams) -> Result<WorkspaceAction, Contro
         None | Some(TabType::Terminal) => Ok(WorkspaceAction::AddTerminalTab {
             hide_homepage: false,
         }),
+        // Shellomancy: Agent Mode is off in the offline build; don't open agent tabs.
+        Some(TabType::Agent) if !crate::features::FeatureFlag::AgentMode.is_enabled() => {
+            Err(ControlError::new(
+                ErrorCode::UnsupportedAction,
+                "tab.create does not support agent tabs while Agent Mode is disabled",
+            ))
+        }
         Some(TabType::Agent) => Ok(WorkspaceAction::AddAgentTab),
         Some(TabType::Default) => Ok(WorkspaceAction::AddDefaultTab),
         Some(TabType::CloudAgent) => Err(ControlError::new(

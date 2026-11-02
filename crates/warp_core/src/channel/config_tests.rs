@@ -53,6 +53,9 @@ fn offline_disabled_features_drop_oz_cloud_but_keep_third_party_cli_agents() {
         FeatureFlag::OzPlatformSkills,
         FeatureFlag::OzHandoff,
         FeatureFlag::AgentManagementView,
+        FeatureFlag::AgentMode,
+        FeatureFlag::AgentView,
+        FeatureFlag::AIContextMenuEnabled,
     ] {
         assert!(OFFLINE_DISABLED_FEATURES.contains(&flag), "{flag:?} should be off");
     }

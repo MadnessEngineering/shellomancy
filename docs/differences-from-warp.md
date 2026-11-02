@@ -47,7 +47,7 @@ Details: [privacy-and-offline.md](privacy-and-offline.md).
 | Settings hides Billing, Referrals, Shared blocks, Teams, Warp Drive, Warp Agent, Agent profiles, Knowledge, Cloud environments, Cloud agent API keys | `064e2a09` | settings tests |
 | No "Install Oz CLI" palette entries; the Oz CLI is renamed `shellomancy-oz` | `881c2f4c`, `ce9f2a54` | `cargo check` |
 | Kept: support for Claude Code, Codex and other CLI agents running in the terminal | — | unit test |
-| Not yet changed: Warp's local Agent Mode and agent view are still compiled in (hidden while logged out, and Shellomancy can't log in) | — | see known-issues |
+| Warp's local agent forced off: Agent Mode, Agent View (and its block context and conversation list), agent workflows, tips and toolbar, AI context menus, AI rules and suggested rules, agent computer use, named agents, the AI resume button. The AI menu is dropped, menu items whose bindings depend on these flags are skipped, and `tab.create --type agent` is refused | `crates/warp_core/src/channel/config.rs`, `app/src/app_menus.rs` | unit + handler tests; launched and probed live |
 
 ## Scripting (local control)
 

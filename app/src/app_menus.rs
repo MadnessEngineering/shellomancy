@@ -63,18 +63,25 @@ const MAX_RECENT_REPOS_IN_MENU: usize = 10;
 
 /// Creates the root app menu bar
 pub fn menu_bar(ctx: &mut AppContext) -> MenuBar {
-    MenuBar::new(vec![
+    let mut menus = vec![
         make_new_app_menu(ctx),
         make_new_file_menu(ctx),
         make_new_edit_menu(ctx),
         make_new_view_menu(ctx),
         make_new_tab_menu(ctx),
         make_new_blocks_menu(ctx),
-        make_new_ai_menu(ctx),
+    ];
+    // Shellomancy: the AI menu only drives Warp's agent; with AgentMode off its
+    // bindings aren't registered (and the menu would assert in debug builds).
+    if FeatureFlag::AgentMode.is_enabled() {
+        menus.push(make_new_ai_menu(ctx));
+    }
+    menus.extend([
         make_new_drive_menu(ctx),
         make_new_window_menu(),
         make_new_help_menu(),
-    ])
+    ]);
+    MenuBar::new(menus)
 }
 
 // Creates the app dock menu
@@ -382,7 +389,15 @@ fn make_new_view_menu(ctx: &AppContext) -> Menu {
         updateable_custom_item_without_checkmark(CustomAction::LaunchConfigPalette, ctx),
         updateable_custom_item_without_checkmark(CustomAction::FilesPalette, ctx),
         updateable_custom_item_without_checkmark(CustomAction::ToggleProjectExplorer, ctx),
-        updateable_custom_item_without_checkmark(CustomAction::ToggleConversationListView, ctx),
+    ];
+    // Shellomancy: only offer the menu item when its binding is registered.
+    if FeatureFlag::AgentViewConversationListView.is_enabled() {
+        items.push(updateable_custom_item_without_checkmark(
+            CustomAction::ToggleConversationListView,
+            ctx,
+        ));
+    }
+    items.extend([
         updateable_custom_item_without_checkmark(CustomAction::ToggleGlobalSearch, ctx),
         MenuItem::Separator,
         updateable_custom_item_without_checkmark(CustomAction::History, ctx),
@@ -435,7 +450,7 @@ fn make_new_view_menu(ctx: &AppContext) -> Menu {
             },
             None,
         )),
-    ];
+    ]);
 
     let is_compact_mode = matches!(
         TerminalSettings::handle(ctx)
@@ -610,9 +625,20 @@ fn make_new_drive_menu(ctx: &AppContext) -> Menu {
         updateable_custom_item_without_checkmark(CustomAction::ToggleWarpDrive, ctx),
         updateable_custom_item_without_checkmark(CustomAction::SearchDrive, ctx),
         updateable_custom_item_without_checkmark(CustomAction::OpenTeamSettings, ctx),
-        updateable_custom_item_without_checkmark(CustomAction::OpenAIFactCollection, ctx),
-        updateable_custom_item_without_checkmark(CustomAction::OpenMCPServerCollection, ctx),
     ]);
+    // Shellomancy: these bindings are registered only with AgentMode (and AIRules).
+    if FeatureFlag::AgentMode.is_enabled() {
+        if FeatureFlag::AIRules.is_enabled() {
+            items.push(updateable_custom_item_without_checkmark(
+                CustomAction::OpenAIFactCollection,
+                ctx,
+            ));
+        }
+        items.push(updateable_custom_item_without_checkmark(
+            CustomAction::OpenMCPServerCollection,
+            ctx,
+        ));
+    }
 
     items.push(updateable_custom_item_without_checkmark(
         CustomAction::SharePaneContents,

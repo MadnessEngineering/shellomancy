@@ -139,6 +139,28 @@ pub const OFFLINE_DISABLED_FEATURES: &[crate::features::FeatureFlag] = &[
     crate::features::FeatureFlag::RemoteCodebaseIndexing,
     crate::features::FeatureFlag::ScheduledAmbientAgents,
     crate::features::FeatureFlag::SyncAmbientPlans,
+    // Warp's local agent (Agent Mode, Agent View, AI context menus and rules).
+    // It needs Warp's servers for its model, so it can't work offline.
+    // Kept: CLI-agent support (Claude Code, Codex), MCP, AgentHarness/AcpHarness
+    // until it's clear the CLI-agent integration doesn't depend on them.
+    crate::features::FeatureFlag::AIContextMenuCode,
+    crate::features::FeatureFlag::AIContextMenuEnabled,
+    crate::features::FeatureFlag::AIResumeButton,
+    crate::features::FeatureFlag::AIRules,
+    crate::features::FeatureFlag::AgentDecidesCommandExecution,
+    crate::features::FeatureFlag::AgentMode,
+    crate::features::FeatureFlag::AgentModeComputerUse,
+    crate::features::FeatureFlag::AgentModePrePlanXML,
+    crate::features::FeatureFlag::AgentModePrimaryXML,
+    crate::features::FeatureFlag::AgentModeWorkflows,
+    crate::features::FeatureFlag::AgentTips,
+    crate::features::FeatureFlag::AgentToolbarEditor,
+    crate::features::FeatureFlag::AgentView,
+    crate::features::FeatureFlag::AgentViewBlockContext,
+    crate::features::FeatureFlag::AgentViewConversationListView,
+    crate::features::FeatureFlag::BackgroundComputerUse,
+    crate::features::FeatureFlag::NamedAgents,
+    crate::features::FeatureFlag::SuggestedRules,
 ];
 
 #[derive(Debug, Deserialize, Serialize)]

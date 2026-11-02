@@ -19,7 +19,7 @@ Status as of 2026-10-31.
 
 ## Known gaps
 
-- **Warp's local Agent Mode is still compiled in.** The Oz cloud features are off, but Warp's in-terminal agent, agent view and AI context menus remain. They're hidden while logged out, and Shellomancy can't log in. Turning off `AgentMode` affects about 50 code paths, and no Warp build ships without it, so it should be done with the app running to check each surface.
+- **Agent Mode is off, but not every surface has been looked at.** With `AgentMode` and 17 related flags off, the app starts and the control API's agent surfaces decline cleanly. Upstream never ships this combination, so some UI may still offer agent features or render oddly; report anything you find. MCP settings and the harness flags are still on.
 - **"Warp" still appears in the interface.** About 800 user-visible strings, menus ("Quit Warp"), links to `docs.warp.dev`, permission prompts outside the ones already changed, and the control CLI's help ("Control a running local Warp app instance").
 - **No adaptive app icon.** The OSS channel has no `AppIcon.icon` bundle, so macOS icon tinting doesn't apply; the build prints a warning and uses the plain icon.
 - **The Oz CLI wrapper** (`shellomancy-oz`) is still created by the release bundle script (`script/macos/bundle`), even though none of its commands work offline. Debug builds from `./script/run` don't create it.
