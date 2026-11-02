@@ -49,6 +49,12 @@ Details: [privacy-and-offline.md](privacy-and-offline.md).
 | Kept: support for Claude Code, Codex and other CLI agents running in the terminal | — | unit test |
 | Warp's local agent forced off: Agent Mode, Agent View (and its block context and conversation list), agent workflows, tips and toolbar, AI context menus, AI rules and suggested rules, agent computer use, named agents, the AI resume button. The AI menu is dropped, menu items whose bindings depend on these flags are skipped, and `tab.create --type agent` is refused | `crates/warp_core/src/channel/config.rs`, `app/src/app_menus.rs` | unit + handler tests; launched and probed live |
 
+## Claude Code instead of Warp's agent
+
+| Difference | Commit | Checked by |
+|---|---|---|
+| The agent-panel toggle (tab-bar button, `ctrl-space`, `surface.ai_assistant.toggle`) opens [MadQTT](https://github.com/MadnessEngineering/MadQTT), the live Claude Code session dashboard, in a pane on the right. Toggling again focuses it, or closes it (for good, so MadQTT exits) when it already has focus. Runs the `madqtt` command (a shell alias or `PATH` entry) | `app/src/pane_group/mod.rs`, `app/src/workspace/view.rs` | unit test; verified live (pane opens, MadQTT runs and connects, closing ends it) |
+
 ## Scripting (local control)
 
 | Difference | Commit | Checked by |

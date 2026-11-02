@@ -22211,11 +22211,28 @@ impl Workspace {
         Align::new(hoverable.finish()).finish()
     }
 
+    /// Shellomancy: command run by the agent-panel replacement. `madqtt` is the
+    /// workshop's live Claude Code session dashboard (a shell alias or PATH entry).
+    const SHELLOMANCY_SIDE_PANEL_COMMAND: &'static str = "madqtt";
+
+    /// Shellomancy: toggles the MadQTT pane in the active tab.
+    fn toggle_shellomancy_side_panel(&mut self, ctx: &mut ViewContext<Self>) {
+        self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
+            pane_group.toggle_side_panel_pane(Self::SHELLOMANCY_SIDE_PANEL_COMMAND.to_owned(), ctx);
+        });
+        ctx.notify();
+    }
+
     fn render_legacy_warp_ai_entrypoint_button(&self, appearance: &Appearance) -> Box<dyn Element> {
         let (icon, action, label) = (
             icons::Icon::AiAssistant,
             WorkspaceAction::ClickedAIAssistantIcon,
-            AI_ASSISTANT_FEATURE_NAME.to_owned(),
+            // Shellomancy: this button opens the MadQTT panel when Warp's agent is off.
+            if FeatureFlag::AgentMode.is_enabled() {
+                AI_ASSISTANT_FEATURE_NAME.to_owned()
+            } else {
+                "MadQTT".to_owned()
+            },
         );
 
         Align::new(
@@ -25359,6 +25376,10 @@ impl TypedActionView for Workspace {
                     ctx.notify();
                 }
             }
+            // Shellomancy: with Warp's agent off, the agent-panel toggle opens MadQTT.
+            ToggleAIAssistant if !FeatureFlag::AgentMode.is_enabled() => {
+                self.toggle_shellomancy_side_panel(ctx);
+            }
             ToggleAIAssistant => {
                 self.toggle_ai_assistant_panel(ctx);
                 send_telemetry_from_ctx!(
@@ -25369,16 +25390,10 @@ impl TypedActionView for Workspace {
                 );
             }
             ClickedAIAssistantIcon => {
+                // Shellomancy: the button only shows with Warp's agent off, where it
+                // opens the MadQTT panel instead of the legacy Warp AI panel.
                 if !FeatureFlag::AgentMode.is_enabled() {
-                    self.toggle_ai_assistant_panel(ctx);
-                    if self.current_workspace_state.is_ai_assistant_panel_open {
-                        send_telemetry_from_ctx!(
-                            TelemetryEvent::OpenedWarpAI {
-                                source: OpenedWarpAISource::GlobalEntryButton
-                            },
-                            ctx
-                        );
-                    }
+                    self.toggle_shellomancy_side_panel(ctx);
                 }
             }
             ShowAIAssistantWarmWelcome => {

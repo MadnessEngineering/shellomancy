@@ -4153,3 +4153,38 @@ fn test_undo_close_keeps_a_file_pane_watching_its_file() {
         });
     });
 }
+
+/// Shellomancy: the agent-panel replacement opens one pane, focuses it, and
+/// closes it for good (not via the undo stack) when toggled while focused.
+#[test]
+fn test_side_panel_toggle_opens_focuses_and_hard_closes() {
+    let _undo_closed_panes = FeatureFlag::UndoClosedPanes.override_enabled(true);
+
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        let pane_group = mock_pane_group(&mut app, Default::default());
+
+        pane_group.update(&mut app, |panes, ctx| {
+            let original = panes.focused_pane_id(ctx);
+            let initial_count = panes.pane_count();
+
+            panes.toggle_side_panel_pane("madqtt".to_owned(), ctx);
+            assert_eq!(panes.pane_count(), initial_count + 1);
+            let side_panel: PaneId = panes.side_panel_pane.expect("side panel recorded").into();
+            assert!(panes.visible_pane_ids().contains(&side_panel));
+
+            // Not focused -> toggling focuses it rather than opening another.
+            panes.focus_pane_by_id(original, ctx);
+            panes.toggle_side_panel_pane("madqtt".to_owned(), ctx);
+            assert_eq!(panes.pane_count(), initial_count + 1);
+            assert_eq!(panes.focused_pane_id(ctx), side_panel);
+
+            // Focused -> toggling closes it outright (not hidden for undo).
+            panes.toggle_side_panel_pane("madqtt".to_owned(), ctx);
+            assert_eq!(panes.pane_count(), initial_count);
+            assert!(!panes.has_pane_id(side_panel));
+            assert!(!panes.is_pane_hidden_for_close(side_panel));
+            assert!(panes.side_panel_pane.is_none());
+        });
+    });
+}

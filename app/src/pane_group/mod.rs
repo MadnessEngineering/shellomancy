@@ -884,6 +884,9 @@ pub struct PaneGroup {
 
     /// The terminal session with an open share block modal. Only terminal panes use the share block modal.
     terminal_with_open_share_block_modal: Option<TerminalPaneId>,
+    /// Shellomancy: the pane opened by the agent-panel replacement (MadQTT), so
+    /// toggling it again focuses or closes that pane instead of opening another.
+    side_panel_pane: Option<TerminalPaneId>,
 
     // We are only holding one instance of share modal view in the pane group and
     // update it with the correct terminal model and size info when triggered by
@@ -3175,6 +3178,7 @@ impl PaneGroup {
             pane_contents,
             server_api,
             terminal_with_open_share_block_modal: None,
+            side_panel_pane: None,
             share_block_modal: share_modal,
             dragged_border: None,
             user_default_shell_changed_banner,
@@ -3936,6 +3940,75 @@ impl PaneGroup {
     }
 
     /// Adds a terminal split pane without applying the user's default session mode.
+    /// Shellomancy: splits a terminal pane off the focused pane whose shell runs
+    /// `command` once it has bootstrapped (the same pending-command path tab
+    /// configs use). Ignores the default session mode, so it never enters agent
+    /// view. `cwd` of `None` uses the normal new-pane directory.
+    pub fn add_terminal_pane_running(
+        &mut self,
+        direction: Direction,
+        cwd: Option<PathBuf>,
+        command: String,
+        ctx: &mut ViewContext<Self>,
+    ) -> TerminalPaneId {
+        let base_pane_id = Some(self.focused_pane_id(ctx));
+        let new_pane_id = self.add_session_in_directory(
+            direction,
+            base_pane_id,
+            None, /* chosen_shell */
+            cwd,
+            None, /* conversation_restoration */
+            DefaultSessionModeBehavior::Ignore,
+            ctx,
+        );
+        if let Some(view) = self.terminal_view_from_pane_id(new_pane_id, ctx) {
+            view.update(ctx, |terminal_view, ctx| {
+                terminal_view.set_pending_command_queue(vec![command], ctx);
+            });
+        }
+        ctx.emit(Event::AppStateChanged);
+        new_pane_id
+    }
+
+    /// Shellomancy: the agent-panel replacement. Opens `command` in a pane to
+    /// the right of the focused pane; when that pane is already visible, focuses
+    /// it, or closes it if it already has focus.
+    pub fn toggle_side_panel_pane(&mut self, command: String, ctx: &mut ViewContext<Self>) {
+        if let Some(existing) = self.side_panel_pane {
+            let existing: PaneId = existing.into();
+            if self.visible_pane_ids().contains(&existing) {
+                if self.focused_pane_id(ctx) == existing {
+                    self.side_panel_pane = None;
+                    self.close_side_panel_pane(existing, ctx);
+                } else {
+                    self.focus_pane_by_id(existing, ctx);
+                }
+                return;
+            }
+        }
+        let pane = self.add_terminal_pane_running(Direction::Right, None, command, ctx);
+        self.side_panel_pane = Some(pane);
+    }
+
+    /// Shellomancy: closes the side-panel pane for good, skipping the
+    /// undo-close stack, so its process (MadQTT) exits instead of running on in
+    /// a hidden pane. Mirrors `close_pane`'s path when UndoClosedPanes is off.
+    fn close_side_panel_pane(&mut self, pane_id: PaneId, ctx: &mut ViewContext<Self>) {
+        if self.pane_count() == 1 || !self.pane_contents.contains_key(&pane_id) {
+            return;
+        }
+        self.clean_up_pane(pane_id, ctx);
+        self.focus_next_terminal_pane_and_activate_session(pane_id, PaneRemovalReason::Close, ctx);
+        self.pane_contents.remove(&pane_id);
+        if !self.panes.remove(pane_id) {
+            report_error!("Pane not found");
+        }
+        self.forget_transitively_shared_pane(pane_id);
+        self.handle_pane_count_change(ctx);
+        ctx.emit(Event::TerminalViewStateChanged);
+        ctx.emit(Event::AppStateChanged);
+    }
+
     pub fn add_terminal_pane_ignoring_default_session_mode(
         &mut self,
         direction: Direction,

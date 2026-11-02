@@ -36,7 +36,8 @@ How the fork tracks upstream Warp is in [docs/upstream-sync.md](docs/upstream-sy
 Everything is listed, with the commit that implements it, in [docs/differences-from-warp.md](docs/differences-from-warp.md). The short version:
 
 - **Offline by default** — no Warp login, no calls to Warp's servers, no telemetry or crash reports, no auto-update. The local install-detection server Warp's website talks to is not started. [Details](docs/privacy-and-offline.md).
-- **A terminal, not an agent platform** — Warp's Oz cloud-agent features (cloud mode, ambient and scheduled agents, agent management, Oz platform and handoff) are switched off, and Settings hides pages that only manage Warp accounts. Claude Code, Codex and other CLI agents running inside the terminal keep Warp's integrations.
+- **A terminal, not an agent platform** — Warp's Oz cloud-agent features and its in-terminal Agent Mode are switched off, and Settings hides pages that only manage Warp accounts. Claude Code, Codex and other CLI agents running inside the terminal keep Warp's integrations.
+- **Claude Code is the agent** — the agent-panel toggle opens [MadQTT](https://github.com/MadnessEngineering/MadQTT), a live dashboard of your Claude Code sessions, in a side pane.
 - **[`shellomancy` control CLI](docs/shellomancy-cli.md)** — Warp's local-control CLI (`warpctrl`), on by default and extended so a script can open a tab that runs a command:
 
   ```sh
