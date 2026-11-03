@@ -168,6 +168,15 @@ impl LocalControlBridge {
                 &request.action,
                 ctx,
             ),
+            ActionKind::ThemeWindowSet => metadata_config::window_theme_set(
+                &self.instance_id,
+                &request.target,
+                &request.action,
+                ctx,
+            ),
+            ActionKind::ThemeWindowClear => {
+                metadata_config::window_theme_clear(&self.instance_id, &request.target, ctx)
+            }
             ActionKind::AppearanceGet => settings_surfaces::appearance_get(ctx),
             ActionKind::AppearanceFontSizeIncrease
             | ActionKind::AppearanceFontSizeDecrease

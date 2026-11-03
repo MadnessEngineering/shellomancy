@@ -5,6 +5,7 @@ mod entity;
 mod model;
 mod view;
 mod window;
+mod window_scope;
 
 use std::any::{Any, TypeId};
 use std::collections::HashSet;
@@ -28,6 +29,7 @@ use pathfinder_geometry::rect::RectF;
 use serde::{Deserialize, Serialize};
 pub use view::*;
 pub use window::*;
+pub use window_scope::{WindowScope, current_window_id, with_window_scope};
 
 use crate::platform::{self, FullscreenState, WindowBounds, WindowStyle};
 use crate::rendering::OnGPUDeviceSelected;

@@ -18,6 +18,7 @@ use super::settings_surfaces::{
     ALLOWLISTED_SETTING_KEYS, public_theme_name, rejected_setting_key, setting_summary_for_key,
 };
 use crate::WindowSettings;
+use crate::appearance::AppearanceManager;
 use crate::local_control::LocalControlBridge;
 use crate::local_control::handlers::ack;
 use crate::local_control::resolver::{require_active_window_id_for_action, workspace_for_window};
@@ -149,6 +150,71 @@ pub(crate) fn theme_set(
         }
     }
     Ok(ack(instance_id, action_kind))
+}
+
+/// `theme.window.set`: show a theme in one window only, without saving it to settings.
+pub(crate) fn window_theme_set(
+    instance_id: &Option<InstanceId>,
+    target: &TargetSelector,
+    action: &::local_control::Action,
+    ctx: &mut ModelContext<LocalControlBridge>,
+) -> Result<serde_json::Value, ControlError> {
+    let window_id = select_single_window_id(target, ActionKind::ThemeWindowSet, ctx)?;
+    let theme = theme_kind_for_name(&theme_name(action)?, ctx)?;
+    AppearanceManager::handle(ctx).update(ctx, |appearance_manager, ctx| {
+        appearance_manager.set_window_theme(window_id, Some(theme), ctx);
+    });
+    Ok(window_mutation_result(
+        instance_id,
+        ActionKind::ThemeWindowSet,
+        window_id,
+    ))
+}
+
+/// `theme.window.clear`: return one window to the global theme.
+pub(crate) fn window_theme_clear(
+    instance_id: &Option<InstanceId>,
+    target: &TargetSelector,
+    ctx: &mut ModelContext<LocalControlBridge>,
+) -> Result<serde_json::Value, ControlError> {
+    let window_id = select_single_window_id(target, ActionKind::ThemeWindowClear, ctx)?;
+    AppearanceManager::handle(ctx).update(ctx, |appearance_manager, ctx| {
+        appearance_manager.set_window_theme(window_id, None, ctx);
+    });
+    Ok(window_mutation_result(
+        instance_id,
+        ActionKind::ThemeWindowClear,
+        window_id,
+    ))
+}
+
+fn select_single_window_id(
+    target: &TargetSelector,
+    action: ActionKind,
+    ctx: &mut ModelContext<LocalControlBridge>,
+) -> Result<WindowId, ControlError> {
+    select_window_ids(target, action, ctx)?
+        .into_iter()
+        .next()
+        .ok_or_else(|| {
+            ControlError::new(
+                ErrorCode::StaleTarget,
+                format!("{} cannot resolve a window", action.as_str()),
+            )
+        })
+}
+
+fn window_mutation_result(
+    instance_id: &Option<InstanceId>,
+    action: ActionKind,
+    window_id: WindowId,
+) -> serde_json::Value {
+    json!({
+        "action": action.as_str(),
+        "ok": true,
+        "instance_id": instance_id.as_ref().map(|id| id.0.as_str()),
+        "window_id": window_id.to_string(),
+    })
 }
 
 pub(crate) fn appearance_mutation(

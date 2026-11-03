@@ -238,6 +238,8 @@ define_action_catalog! {
         ThemeSystemSet => { name: "theme.system.set", status: Implemented, target: Appearance, params: BooleanValue, result: Acknowledgement },
         ThemeLightSet => { name: "theme.light.set", status: Implemented, target: Appearance, params: ThemeName, result: Acknowledgement },
         ThemeDarkSet => { name: "theme.dark.set", status: Implemented, target: Appearance, params: ThemeName, result: Acknowledgement },
+        ThemeWindowSet => { name: "theme.window.set", status: Implemented, target: Window, params: ThemeName, result: Acknowledgement },
+        ThemeWindowClear => { name: "theme.window.clear", status: Implemented, target: Window, params: None, result: Acknowledgement },
     }
 
     appearance {

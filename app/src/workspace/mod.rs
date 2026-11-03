@@ -51,6 +51,7 @@ use crate::palette::PaletteMode;
 use crate::server::telemetry::{AgentModeEntrypoint, PaletteSource};
 use crate::settings_view::{self, SettingsSection, flags};
 use crate::tab::{NewSessionMenuItem, uses_vertical_tabs};
+use crate::themes::theme_chooser::ThemeChooserMode;
 use crate::util::bindings::{self, CustomAction, cmd_or_ctrl_shift, is_binding_pty_compliant};
 use crate::{code, modal, notebooks, tab_configs};
 
@@ -534,6 +535,20 @@ pub fn init(app: &mut AppContext) {
             "workspace:show_theme_chooser",
             "Open theme picker",
             WorkspaceAction::ShowThemeChooserForActiveTheme,
+        )
+        .with_context_predicate(id!("Workspace"))
+        .with_group(bindings::BindingGroup::Settings.as_str()),
+        EditableBinding::new(
+            "workspace:show_window_theme_chooser",
+            "Set theme for this window",
+            WorkspaceAction::ShowThemeChooser(ThemeChooserMode::ThisWindow),
+        )
+        .with_context_predicate(id!("Workspace"))
+        .with_group(bindings::BindingGroup::Settings.as_str()),
+        EditableBinding::new(
+            "workspace:reset_window_theme",
+            "Use the default theme in this window",
+            WorkspaceAction::ResetWindowTheme,
         )
         .with_context_predicate(id!("Workspace"))
         .with_group(bindings::BindingGroup::Settings.as_str()),

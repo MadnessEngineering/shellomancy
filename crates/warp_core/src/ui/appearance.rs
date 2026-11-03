@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+
 use warpui_core::fonts::{FamilyId, Weight};
-use warpui_core::{Entity, ModelContext, SingletonEntity};
+use warpui_core::{Entity, ModelContext, SingletonEntity, WindowId, current_window_id};
 
 use super::builder::UiBuilder;
 use super::theme::WarpTheme;
@@ -29,6 +31,16 @@ pub struct Appearance {
     ai_font_family: FamilyId,
     /// A font that is used for password fields.
     password_font_family: FamilyId,
+
+    /// Windows showing a theme other than the global one. While a window is current (see
+    /// [`warpui_core::current_window_id`]), [`Self::theme`] and [`Self::ui_builder`] return its
+    /// override. Overrides are temporary: they live in memory only.
+    window_overrides: HashMap<WindowId, WindowThemeOverride>,
+}
+
+struct WindowThemeOverride {
+    theme: WarpTheme,
+    ui_builder: UiBuilder,
 }
 
 /// Defines appearance change events.
@@ -95,6 +107,7 @@ impl Appearance {
             ),
             ai_font_family,
             password_font_family,
+            window_overrides: HashMap::new(),
         }
     }
 
@@ -133,18 +146,13 @@ impl Appearance {
             ui_font_family,
             ai_font_family: FamilyId(0),
             password_font_family: FamilyId(0),
+            window_overrides: HashMap::new(),
         }
     }
 
     pub fn set_theme(&mut self, new_theme: WarpTheme, ctx: &mut ModelContext<Self>) {
         self.theme = new_theme;
-        self.ui_builder = UiBuilder::new(
-            self.theme.clone(),
-            self.ui_font_family,
-            self.ui_font_size(),
-            DEFAULT_COMMAND_PALETTE_FONT_SIZE,
-            self.line_height_ratio,
-        );
+        self.rebuild_ui_builders();
 
         // Request a redraw of all windows.
         ctx.invalidate_all_views();
@@ -178,13 +186,7 @@ impl Appearance {
         let previous_family_id = self.ui_font_family;
         self.ui_font_family = new_family;
 
-        self.ui_builder = UiBuilder::new(
-            self.theme.clone(),
-            self.ui_font_family,
-            self.ui_font_size(),
-            DEFAULT_COMMAND_PALETTE_FONT_SIZE,
-            self.line_height_ratio,
-        );
+        self.rebuild_ui_builders();
 
         // Request a redraw of all windows.
         ctx.invalidate_all_views();
@@ -252,13 +254,7 @@ impl Appearance {
     ) {
         let previous_line_height_ratio = self.line_height_ratio;
         self.line_height_ratio = new_line_height_ratio;
-        self.ui_builder = UiBuilder::new(
-            self.theme.clone(),
-            self.ui_font_family,
-            DEFAULT_UI_FONT_SIZE,
-            DEFAULT_COMMAND_PALETTE_FONT_SIZE,
-            self.line_height_ratio,
-        );
+        self.rebuild_ui_builders();
 
         // Request a redraw of all windows.
         ctx.invalidate_all_views();
@@ -269,12 +265,95 @@ impl Appearance {
         });
     }
 
-    pub fn ui_builder(&self) -> &UiBuilder {
-        &self.ui_builder
+    fn build_ui_builder(&self, theme: WarpTheme) -> UiBuilder {
+        UiBuilder::new(
+            theme,
+            self.ui_font_family,
+            self.ui_font_size(),
+            DEFAULT_COMMAND_PALETTE_FONT_SIZE,
+            self.line_height_ratio,
+        )
     }
 
-    pub fn theme(&self) -> &WarpTheme {
+    /// Rebuilds the global UI builder and every window override's, after a theme or font change.
+    fn rebuild_ui_builders(&mut self) {
+        self.ui_builder = self.build_ui_builder(self.theme.clone());
+        let rebuilt: Vec<_> = self
+            .window_overrides
+            .iter()
+            .map(|(window_id, o)| (*window_id, self.build_ui_builder(o.theme.clone())))
+            .collect();
+        for (window_id, ui_builder) in rebuilt {
+            if let Some(o) = self.window_overrides.get_mut(&window_id) {
+                o.ui_builder = ui_builder;
+            }
+        }
+    }
+
+    fn current_override(&self) -> Option<&WindowThemeOverride> {
+        if self.window_overrides.is_empty() {
+            return None;
+        }
+        self.window_overrides.get(&current_window_id()?)
+    }
+
+    /// Shows `theme` in `window_id` instead of the global theme, or with `None`, returns the
+    /// window to the global theme.
+    pub fn set_window_theme_override(
+        &mut self,
+        window_id: WindowId,
+        theme: Option<WarpTheme>,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        match theme {
+            Some(theme) => {
+                let ui_builder = self.build_ui_builder(theme.clone());
+                self.window_overrides
+                    .insert(window_id, WindowThemeOverride { theme, ui_builder });
+            }
+            None => {
+                if self.window_overrides.remove(&window_id).is_none() {
+                    return;
+                }
+            }
+        }
+
+        // Same fan-out as a global theme change: views that cache theme colors recompute them
+        // from inside their own window's scope, so each picks up the right theme.
+        ctx.invalidate_all_views();
+        ctx.emit(AppearanceEvent::ThemeChanged);
+        ctx.notify();
+    }
+
+    /// The theme `window_id` overrides the global theme with, if any.
+    pub fn window_theme_override(&self, window_id: WindowId) -> Option<&WarpTheme> {
+        self.window_overrides.get(&window_id).map(|o| &o.theme)
+    }
+
+    /// Forgets a closed window's override without redrawing anything.
+    pub fn forget_window(&mut self, window_id: WindowId) {
+        self.window_overrides.remove(&window_id);
+    }
+
+    /// The global theme, ignoring any window override.
+    pub fn global_theme(&self) -> &WarpTheme {
         &self.theme
+    }
+
+    pub fn ui_builder(&self) -> &UiBuilder {
+        match self.current_override() {
+            Some(o) => &o.ui_builder,
+            None => &self.ui_builder,
+        }
+    }
+
+    /// The theme for the window currently being updated or drawn: its override if it has one,
+    /// otherwise the global theme.
+    pub fn theme(&self) -> &WarpTheme {
+        match self.current_override() {
+            Some(o) => &o.theme,
+            None => &self.theme,
+        }
     }
 
     pub fn monospace_font_family(&self) -> FamilyId {
@@ -335,3 +414,48 @@ impl Entity for Appearance {
 }
 
 impl SingletonEntity for Appearance {}
+
+#[cfg(all(test, feature = "test-util"))]
+mod tests {
+    use warpui_core::{WindowId, with_window_scope};
+
+    use super::*;
+
+    #[test]
+    fn window_override_applies_only_inside_its_window() {
+        let mut appearance = Appearance::mock();
+        let mut other_theme = appearance.theme().clone();
+        other_theme.set_name("Window only".to_string());
+        let overridden = WindowId::from_usize(7001);
+        let plain = WindowId::from_usize(7002);
+        let ui_builder = appearance.build_ui_builder(other_theme.clone());
+        appearance.window_overrides.insert(
+            overridden,
+            WindowThemeOverride {
+                theme: other_theme,
+                ui_builder,
+            },
+        );
+
+        let name = |a: &Appearance| a.theme().name();
+        assert_eq!(name(&appearance), Some("Dark".to_string()));
+        assert_eq!(
+            with_window_scope(overridden, || name(&appearance)),
+            Some("Window only".to_string())
+        );
+        assert_eq!(
+            with_window_scope(plain, || name(&appearance)),
+            Some("Dark".to_string())
+        );
+        assert_eq!(
+            with_window_scope(overridden, || appearance.global_theme().name()),
+            Some("Dark".to_string())
+        );
+
+        appearance.forget_window(overridden);
+        assert_eq!(
+            with_window_scope(overridden, || name(&appearance)),
+            Some("Dark".to_string())
+        );
+    }
+}

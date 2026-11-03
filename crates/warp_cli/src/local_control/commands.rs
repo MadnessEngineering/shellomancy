@@ -605,6 +605,20 @@ pub(super) fn run_theme_command(
             },
             output_format,
         ),
+        ThemeCommand::WindowSet(args) => run_action_with_params(
+            args.target,
+            ActionKind::ThemeWindowSet,
+            ThemeNameParams {
+                theme_name: args.name,
+            },
+            output_format,
+        ),
+        ThemeCommand::WindowClear(args) => run_action_with_params(
+            args,
+            ActionKind::ThemeWindowClear,
+            EmptyParams {},
+            output_format,
+        ),
     }
 }
 

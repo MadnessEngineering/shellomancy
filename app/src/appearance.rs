@@ -1,6 +1,10 @@
 use settings::Setting as _;
+use std::collections::HashMap;
 use warpui::fonts::FamilyId;
-use warpui::{AddSingletonModel, AppContext, AssetProvider, Entity, ModelContext, SingletonEntity};
+
+use warpui::{
+    AddSingletonModel, AppContext, AssetProvider, Entity, ModelContext, SingletonEntity, WindowId,
+};
 
 #[cfg(target_os = "macos")]
 mod macos_app_icon {
@@ -32,6 +36,10 @@ pub struct AppearanceManager {
     // The transient theme is a theme that is set by the user but not saved
     // as a setting. It is used when the user is actively choosing a theme.
     transient_theme: Option<WarpTheme>,
+
+    /// Windows showing a theme other than the global one, chosen with the theme picker's
+    /// "this window" mode. Temporary: in memory only, forgotten when the window closes.
+    window_theme_kinds: HashMap<WindowId, ThemeKind>,
 
     #[cfg(target_os = "macos")]
     app_icon_at_startup: AppIcon,
@@ -126,6 +134,7 @@ impl AppearanceManager {
 
         Self {
             transient_theme: None,
+            window_theme_kinds: HashMap::new(),
             #[cfg(target_os = "macos")]
             app_icon_at_startup: *AppIconSettings::handle(ctx).as_ref(ctx).app_icon.value(),
         }
@@ -160,6 +169,43 @@ impl AppearanceManager {
     #[cfg(target_os = "macos")]
     pub fn apply_dock_icon_visibility(&self, app: &AppContext) {
         app.set_dock_icon_visible(*AppIconSettings::as_ref(app).show_dock_icon.value());
+    }
+
+    /// Shows `theme` in `window_id` only, or with `None`, returns the window to the global theme.
+    pub fn set_window_theme(
+        &mut self,
+        window_id: WindowId,
+        theme: Option<ThemeKind>,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let warp_theme = theme
+            .as_ref()
+            .map(|kind| Settings::theme_for_theme_kind(kind, ctx));
+        match theme {
+            Some(kind) => {
+                self.window_theme_kinds.insert(window_id, kind);
+            }
+            None => {
+                self.window_theme_kinds.remove(&window_id);
+            }
+        }
+        Appearance::handle(ctx).update(ctx, |appearance, ctx| {
+            appearance.set_window_theme_override(window_id, warp_theme, ctx);
+        });
+    }
+
+    /// The theme `window_id` shows instead of the global one, if any.
+    pub fn window_theme(&self, window_id: WindowId) -> Option<&ThemeKind> {
+        self.window_theme_kinds.get(&window_id)
+    }
+
+    /// Drops a closed window's theme without redrawing other windows.
+    pub fn forget_window(&mut self, window_id: WindowId, ctx: &mut ModelContext<Self>) {
+        if self.window_theme_kinds.remove(&window_id).is_some() {
+            Appearance::handle(ctx).update(ctx, |appearance, _| {
+                appearance.forget_window(window_id);
+            });
+        }
     }
 
     pub fn clear_transient_theme(&mut self, ctx: &mut ModelContext<Self>) {

@@ -33,6 +33,7 @@ use crate::assets::AssetProvider;
 use crate::assets::asset_cache::{AssetCache, AssetHandle, AssetSource, AssetState};
 use crate::r#async::executor::{self, Background, Foreground, ForegroundTask};
 use crate::r#async::{FutureId, SpawnableOutput, Timer, block_on};
+use crate::core::window_scope::{WindowScope, with_window_scope};
 use crate::core::{ActionType, StoredView, Window};
 use crate::event::KeyState;
 use crate::fonts::{self, ExternalFontFamily, FallbackFontModel, RequestedFallbackFontSource};
@@ -2918,6 +2919,8 @@ impl AppContext {
 
     /// Builds a new scene for the given window.
     fn build_scene(&mut self, window_id: WindowId, window: &dyn WindowContext) -> Rc<Scene> {
+        // Layout and paint read window-scoped state such as a per-window theme override.
+        let _window_scope = WindowScope::enter(window_id);
         let mut scene = Rc::new(Scene::new(
             window.backing_scale_factor(),
             self.rendering_config(),
@@ -4864,7 +4867,7 @@ impl AppContext {
         match window.views.get(&view_id) {
             Some(StoredView::Gui(view)) => {
                 Ok(autotracking::render_view(window_id, view_id, || {
-                    view.render(self)
+                    with_window_scope(window_id, || view.render(self))
                 }))
             }
             #[cfg(feature = "tui")]
@@ -4880,6 +4883,7 @@ impl AppContext {
     // exercised when the additive `tui` feature adds the non-GUI variant.
     #[allow(clippy::unnecessary_filter_map)]
     pub fn render_views(&self, window_id: WindowId) -> Result<EntityIdMap<Box<dyn Element>>> {
+        let _window_scope = WindowScope::enter(window_id);
         self.windows
             .get(&window_id)
             .map(|w| {

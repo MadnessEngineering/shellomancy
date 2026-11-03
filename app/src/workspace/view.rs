@@ -12808,7 +12808,10 @@ impl Workspace {
             .unwrap_or_default();
         let template = PaneTemplateType::PaneTemplate {
             cwd,
-            commands: command.into_iter().map(|exec| CommandTemplate { exec }).collect(),
+            commands: command
+                .into_iter()
+                .map(|exec| CommandTemplate { exec })
+                .collect(),
             is_focused: Some(true),
             pane_mode: PaneMode::Terminal,
             shell: None,
@@ -18866,6 +18869,7 @@ impl Workspace {
             ThemeChooserMode::SystemAgnostic => true,
             ThemeChooserMode::SystemLight => Workspace::should_keep_theme(SystemTheme::Light, ctx),
             ThemeChooserMode::SystemDark => Workspace::should_keep_theme(SystemTheme::Dark, ctx),
+            ThemeChooserMode::ThisWindow => true,
         };
         if keep_theme {
             self.keep_theme(ctx);
@@ -19108,8 +19112,10 @@ impl Workspace {
         self.theme_chooser_view.update(ctx, |view, ctx| {
             view.record_open_theme(ctx);
             if let Some(theme_chooser_mode) = theme_chooser_mode {
-                view.select_theme(theme_chooser_mode.into_theme_kind(ctx), ctx);
+                // Mode first: in "this window" mode, selecting applies to the window instead of
+                // previewing globally.
                 view.set_mode(theme_chooser_mode);
+                view.select_theme(theme_chooser_mode.into_theme_kind(ctx), ctx);
             } else {
                 view.reload_and_set_latest_theme(ctx);
             }
@@ -24803,6 +24809,12 @@ impl TypedActionView for Workspace {
             }
             ShowThemeChooser(mode) => self.show_theme_chooser(Some(*mode), ctx),
             ShowThemeChooserForActiveTheme => self.show_theme_chooser_for_active_theme(ctx),
+            ResetWindowTheme => {
+                let window_id = ctx.window_id();
+                AppearanceManager::handle(ctx).update(ctx, |appearance_manager, ctx| {
+                    appearance_manager.set_window_theme(window_id, None, ctx);
+                });
+            }
             IncreaseFontSize => self.increase_font_size(ctx),
             DecreaseFontSize => self.decrease_font_size(ctx),
             ResetFontSize => self.reset_font_size(ctx),
@@ -28386,6 +28398,10 @@ impl View for Workspace {
 
         WorkspaceRegistry::handle(ctx).update(ctx, |registry, _| {
             registry.unregister(window_id);
+        });
+
+        AppearanceManager::handle(ctx).update(ctx, |appearance_manager, ctx| {
+            appearance_manager.forget_window(window_id, ctx);
         });
 
         // If this workspace's close was registered as part of a tab-drag

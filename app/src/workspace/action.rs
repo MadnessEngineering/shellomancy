@@ -283,6 +283,8 @@ pub enum WorkspaceAction {
     },
     ShowThemeChooser(ThemeChooserMode),
     ShowThemeChooserForActiveTheme,
+    /// Return this window to the global theme after a "this window" theme pick.
+    ResetWindowTheme,
     IncreaseFontSize,
     DecreaseFontSize,
     ResetFontSize,
@@ -1029,6 +1031,7 @@ impl WorkspaceAction {
             | ShowSettingsPageWithSearch { .. }
             | ShowThemeChooser(_)
             | ShowThemeChooserForActiveTheme
+            | ResetWindowTheme
             | IncreaseFontSize
             | DecreaseFontSize
             | ResetFontSize

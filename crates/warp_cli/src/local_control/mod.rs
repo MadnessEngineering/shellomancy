@@ -509,6 +509,13 @@ pub enum ThemeCommand {
 
     /// Set the dark theme used when following the system theme.
     DarkSet(ThemeSetArgs),
+
+    /// Show a theme in one window only (the active window unless --window is given).
+    /// Temporary: not saved to settings, forgotten when the window closes.
+    WindowSet(ThemeSetArgs),
+
+    /// Return one window to the global theme.
+    WindowClear(TargetArgs),
 }
 
 #[derive(Debug, Clone, Subcommand)]

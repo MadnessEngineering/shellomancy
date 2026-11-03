@@ -153,7 +153,8 @@ fn surface_list_rejects_target_selectors() {
 
 #[test]
 fn capabilities_advertises_the_complete_catalog() {
-    assert_eq!(capabilities().len(), 84);
+    // Warp's 84 plus Shellomancy's theme.window.set and theme.window.clear.
+    assert_eq!(capabilities().len(), 86);
 }
 
 #[test]

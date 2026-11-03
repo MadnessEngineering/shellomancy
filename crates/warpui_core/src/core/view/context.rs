@@ -61,6 +61,8 @@ pub struct ViewContext<'a, T: ?Sized> {
     window_id: WindowId,
     view_id: EntityId,
     view_type: PhantomData<T>,
+    /// Keeps this context's window current (see [`crate::current_window_id`]) while it lives.
+    _window_scope: crate::core::WindowScope,
 }
 
 impl<'a, T: Entity> ViewContext<'a, T> {
@@ -74,6 +76,7 @@ impl<'a, T: Entity> ViewContext<'a, T> {
             window_id,
             view_id,
             view_type: PhantomData,
+            _window_scope: crate::core::WindowScope::enter(window_id),
         }
     }
 

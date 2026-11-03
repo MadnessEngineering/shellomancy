@@ -2857,6 +2857,7 @@ impl ThemeSelectWidget {
             ThemeChooserMode::SystemLight => "Light",
             ThemeChooserMode::SystemDark => "Dark",
             ThemeChooserMode::SystemAgnostic => "Current theme",
+            ThemeChooserMode::ThisWindow => "This window",
         };
 
         ConstrainedBox::new(

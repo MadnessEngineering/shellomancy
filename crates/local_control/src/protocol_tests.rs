@@ -195,8 +195,9 @@ fn malformed_and_removed_action_names_are_not_deserialized() {
 }
 
 #[test]
-fn catalog_has_exactly_84_retained_actions() {
-    assert_eq!(ActionKind::ALL.len(), 84);
+fn catalog_has_upstreams_84_actions_plus_shellomancys() {
+    // Warp's 84, plus Shellomancy's theme.window.set and theme.window.clear.
+    assert_eq!(ActionKind::ALL.len(), 86);
 }
 
 #[test]

@@ -479,6 +479,14 @@ fn retained_action_examples() -> Vec<(ActionKind, Vec<&'static str>)> {
             vec!["warpctrl", "theme", "dark-set", "Dark"],
         ),
         (
+            ActionKind::ThemeWindowSet,
+            vec!["warpctrl", "theme", "window-set", "Dracula"],
+        ),
+        (
+            ActionKind::ThemeWindowClear,
+            vec!["warpctrl", "theme", "window-clear"],
+        ),
+        (
             ActionKind::AppearanceGet,
             vec!["warpctrl", "appearance", "get"],
         ),
@@ -689,6 +697,8 @@ fn parsed_action_kind(command: &ControlCommand) -> Option<ActionKind> {
             ThemeCommand::SystemSet(_) => Some(ActionKind::ThemeSystemSet),
             ThemeCommand::LightSet(_) => Some(ActionKind::ThemeLightSet),
             ThemeCommand::DarkSet(_) => Some(ActionKind::ThemeDarkSet),
+            ThemeCommand::WindowSet(_) => Some(ActionKind::ThemeWindowSet),
+            ThemeCommand::WindowClear(_) => Some(ActionKind::ThemeWindowClear),
         },
         ControlCommand::Appearance(command) => match command {
             AppearanceCommand::Get(_) => Some(ActionKind::AppearanceGet),

@@ -33,7 +33,7 @@ use crate::resource_center::{
 };
 use crate::send_telemetry_from_ctx;
 use crate::server::telemetry::TelemetryEvent;
-use crate::settings::{ThemeSettings, respect_system_theme};
+use crate::settings::{ThemeSettings, active_theme_kind, respect_system_theme};
 use crate::themes::theme::{
     RespectSystemTheme, SelectedSystemThemes, ThemeKind, WarpTheme, WarpThemeConfig,
 };
@@ -82,6 +82,8 @@ pub enum ThemeChooserMode {
     SystemLight,
     /// Select a theme to use when the system is using a dark theme.
     SystemDark,
+    /// Select a temporary theme for the picker's own window only. Nothing is saved to settings.
+    ThisWindow,
 }
 
 impl ThemeChooserMode {
@@ -98,6 +100,13 @@ impl ThemeChooserMode {
     }
 
     pub fn into_theme_kind(self, ctx: &AppContext) -> ThemeKind {
+        if let ThemeChooserMode::ThisWindow = self {
+            // Called from the picker's window, so that window is the current one.
+            return warpui::current_window_id()
+                .and_then(|window_id| AppearanceManager::as_ref(ctx).window_theme(window_id))
+                .cloned()
+                .unwrap_or_else(|| active_theme_kind(ThemeSettings::as_ref(ctx), ctx));
+        }
         let theme_settings = ThemeSettings::as_ref(ctx);
         let theme_kind = theme_settings.theme_kind.value();
         match (self, &respect_system_theme(theme_settings)) {
@@ -108,6 +117,7 @@ impl ThemeChooserMode {
             (ThemeChooserMode::SystemDark, RespectSystemTheme::On(system_themes)) => {
                 system_themes.dark.clone()
             }
+            (ThemeChooserMode::ThisWindow, _) => unreachable!("handled above"),
             (_, _) => ThemeKind::default(),
         }
     }
@@ -123,6 +133,10 @@ impl ThemeChooserMode {
             ThemeChooserMode::SystemDark => appearance
                 .ui_builder()
                 .paragraph("Pick a theme for when your system is in dark mode.".to_string()),
+            ThemeChooserMode::ThisWindow => appearance.ui_builder().paragraph(
+                "Pick a theme for this window only. Other windows keep theirs, and it isn't saved."
+                    .to_string(),
+            ),
         };
         hint_text
             .build()
@@ -427,6 +441,8 @@ impl ThemeChooser {
             .cloned()
             .unwrap_or_default();
         match self.mode {
+            // `select_theme` already applied it to this window; nothing to save.
+            ThemeChooserMode::ThisWindow => {}
             ThemeChooserMode::SystemAgnostic => {
                 theme_settings.update(ctx, |theme_settings, ctx| {
                     report_if_error!(
@@ -485,8 +501,14 @@ impl ThemeChooser {
             ctx.notify();
         });
 
+        let window_id = self.window_id;
+        let this_window = matches!(self.mode, ThemeChooserMode::ThisWindow);
         AppearanceManager::handle(ctx).update(ctx, |appearance_manager, ctx| {
-            appearance_manager.set_transient_theme(kind, ctx);
+            if this_window {
+                appearance_manager.set_window_theme(window_id, Some(kind), ctx);
+            } else {
+                appearance_manager.set_transient_theme(kind, ctx);
+            }
         });
     }
 
