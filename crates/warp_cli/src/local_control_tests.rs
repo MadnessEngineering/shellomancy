@@ -316,6 +316,26 @@ fn structured_error_output_uses_stable_error_code() {
 }
 
 #[test]
+fn renders_window_list_one_line_per_window() {
+    let rendered = render_human_readable_for_test(
+        local_control::protocol::ActionKind::WindowList,
+        &json!({
+            "action": "window.list",
+            "windows": [
+                {"window_id": "0", "is_active": true, "tab_count": 3,
+                 "active_tab_title": "~/lab", "theme": null, "is_quake": false},
+                {"window_id": "4", "is_active": false, "tab_count": 1,
+                 "active_tab_title": "prod", "theme": "Dracula", "is_quake": true},
+            ]
+        }),
+    );
+    assert_eq!(
+        rendered,
+        "* 0  3 tabs  \"~/lab\"  theme: (default)\n  4  1 tab  \"prod\"  theme: Dracula  [quake]"
+    );
+}
+
+#[test]
 fn renders_human_readable_tab_create_output() {
     let rendered = render_human_readable_for_test(
         local_control::protocol::ActionKind::TabCreate,

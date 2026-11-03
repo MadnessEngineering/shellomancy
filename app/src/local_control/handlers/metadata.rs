@@ -15,6 +15,7 @@ use settings::Setting as _;
 use warp_core::channel::ChannelState;
 use warpui::{AppContext, ModelContext, SingletonEntity, ViewHandle, WindowId};
 
+use crate::appearance::AppearanceManager;
 use crate::drive::settings::WarpDriveSettings;
 use crate::features::FeatureFlag;
 use crate::local_control::LocalControlBridge;
@@ -387,12 +388,32 @@ pub(crate) fn window_list(
     )?;
     let active_window = ctx.windows().active_window();
     let mut windows = Vec::new();
+    let quake_window = crate::root_view::quake_mode_window_id();
     for entry in select_window_entries(target, false, ActionKind::WindowList, ctx)? {
+        let workspace = workspace_for_window(entry.window_id, ActionKind::WindowList, ctx)?;
+        // Shellomancy: enough to tell windows apart from a script, plus the window's own theme
+        // (null when it follows the global theme).
+        let (tab_count, active_tab_title) = match &workspace {
+            Some(workspace) => workspace.read(ctx, |workspace, ctx| {
+                let title = workspace
+                    .get_pane_group_view(workspace.active_tab_index())
+                    .map(|pane_group| pane_group.as_ref(ctx).display_title(ctx));
+                (Some(workspace.tab_count() as u32), title)
+            }),
+            None => (None, None),
+        };
+        let theme = AppearanceManager::as_ref(ctx)
+            .window_theme(entry.window_id)
+            .map(|kind| kind.to_string());
         windows.push(json!({
             "window_id": entry.window_id.to_string(),
             "index": entry.index as u32,
             "is_active": Some(entry.window_id) == active_window,
-            "has_workspace": workspace_for_window(entry.window_id, ActionKind::WindowList, ctx)?.is_some(),
+            "has_workspace": workspace.is_some(),
+            "is_quake": Some(entry.window_id) == quake_window,
+            "tab_count": tab_count,
+            "active_tab_title": active_tab_title,
+            "theme": theme,
         }));
     }
     Ok(json!({

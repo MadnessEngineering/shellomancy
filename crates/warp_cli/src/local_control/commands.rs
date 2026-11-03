@@ -157,8 +157,51 @@ fn render_human_readable(action: ActionKind, data: &serde_json::Value) -> String
             "Split created pane {}",
             nested_value_or_unknown(data, &["pane", "id"])
         ),
+        ActionKind::WindowList => render_window_list(data),
         _ => serde_json::to_string_pretty(data).unwrap_or_else(|_| data.to_string()),
     }
+}
+
+/// One line per window: id, active marker, tab count, active tab title, theme, quake.
+fn render_window_list(data: &serde_json::Value) -> String {
+    let Some(windows) = data.get("windows").and_then(|w| w.as_array()) else {
+        return serde_json::to_string_pretty(data).unwrap_or_else(|_| data.to_string());
+    };
+    if windows.is_empty() {
+        return "No windows.".to_owned();
+    }
+    windows
+        .iter()
+        .map(|window| {
+            let mut line = format!(
+                "{} {}",
+                if window["is_active"].as_bool() == Some(true) {
+                    "*"
+                } else {
+                    " "
+                },
+                value_or_unknown(window, "window_id"),
+            );
+            if let Some(count) = window["tab_count"].as_u64() {
+                line.push_str(&format!(
+                    "  {count} tab{}",
+                    if count == 1 { "" } else { "s" }
+                ));
+            }
+            if let Some(title) = window["active_tab_title"].as_str() {
+                line.push_str(&format!("  \"{title}\""));
+            }
+            match window["theme"].as_str() {
+                Some(theme) => line.push_str(&format!("  theme: {theme}")),
+                None => line.push_str("  theme: (default)"),
+            }
+            if window["is_quake"].as_bool() == Some(true) {
+                line.push_str("  [quake]");
+            }
+            line
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn value_or_unknown(data: &serde_json::Value, key: &str) -> String {
