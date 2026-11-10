@@ -2,8 +2,9 @@ use std::fs;
 
 use super::{
     ClaudeCodePluginManager, CliAgentPluginManager, MINIMUM_PLATFORM_PLUGIN_VERSION,
-    check_installed, check_platform_plugin_installed, claude_code_marketplace_has_local_override,
-    installed_platform_plugin_version, installed_version,
+    MINIMUM_PLUGIN_VERSION, check_installed, check_platform_plugin_installed,
+    claude_code_marketplace_has_local_override, installed_platform_plugin_version,
+    installed_version, shell_quote,
 };
 
 /// A version strictly below `version`, so below-minimum tests track the
@@ -31,7 +32,7 @@ fn installed_when_plugin_present() {
 
     let json = serde_json::json!({
         "plugins": {
-            "warp@claude-code-warp": [{"version": "1.0.0"}]
+            "shellomancy@shellomancy": [{"version": "1.0.0"}]
         }
     });
     fs::write(
@@ -245,7 +246,7 @@ fn platform_plugin_not_installed_when_only_notification_plugin_present() {
 
     let json = serde_json::json!({
         "plugins": {
-            "warp@claude-code-warp": [{"version": "1.0.0"}]
+            "shellomancy@shellomancy": [{"version": "1.0.0"}]
         }
     });
     fs::write(
@@ -278,6 +279,54 @@ fn not_installed_when_plugin_key_absent() {
 }
 
 #[test]
+fn not_installed_when_only_warp_plugin_present() {
+    // Warp's plugin does not count: the install chip should offer ours.
+    let dir = tempfile::tempdir().unwrap();
+    let plugins_dir = dir.path().join("plugins");
+    fs::create_dir_all(&plugins_dir).unwrap();
+
+    let json = serde_json::json!({
+        "plugins": {
+            "warp@claude-code-warp": [{"version": "2.4.0"}]
+        }
+    });
+    fs::write(
+        plugins_dir.join("installed_plugins.json"),
+        serde_json::to_string(&json).unwrap(),
+    )
+    .unwrap();
+
+    assert!(!check_installed(dir.path()));
+}
+
+#[test]
+fn warp_plugin_versions_read_as_outdated() {
+    // A Warp plugin reporting in over the CLI agent protocol is compared
+    // against our minimum, so every 2.x release must fall below it.
+    use super::compare_versions;
+    assert!(compare_versions("2.4.0", MINIMUM_PLUGIN_VERSION).is_lt());
+    assert!(compare_versions("2.99.99", MINIMUM_PLUGIN_VERSION).is_lt());
+}
+
+#[test]
+fn bundled_marketplace_manifest_matches_minimum_version() {
+    let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../resources/bundled/claude-plugin/.claude-plugin/marketplace.json");
+    let manifest: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(manifest).unwrap()).unwrap();
+    let plugin = &manifest["plugins"][0];
+    assert_eq!(manifest["name"], "shellomancy");
+    assert_eq!(plugin["name"], "shellomancy");
+    assert_eq!(plugin["version"], MINIMUM_PLUGIN_VERSION);
+}
+
+#[test]
+fn shell_quote_wraps_and_escapes_single_quotes() {
+    assert_eq!(shell_quote("/Apps/Shello mancy.app"), "'/Apps/Shello mancy.app'");
+    assert_eq!(shell_quote("it's"), "'it'\\''s'");
+}
+
+#[test]
 fn not_installed_when_plugin_array_empty() {
     let dir = tempfile::tempdir().unwrap();
     let plugins_dir = dir.path().join("plugins");
@@ -285,7 +334,7 @@ fn not_installed_when_plugin_array_empty() {
 
     let json = serde_json::json!({
         "plugins": {
-            "warp@claude-code-warp": []
+            "shellomancy@shellomancy": []
         }
     });
     fs::write(
@@ -340,7 +389,7 @@ fn is_installed_via_trait_with_claude_config_dir_env() {
 
     let json = serde_json::json!({
         "plugins": {
-            "warp@claude-code-warp": [{"version": "1.0.0"}]
+            "shellomancy@shellomancy": [{"version": "1.0.0"}]
         }
     });
     fs::write(
@@ -380,7 +429,7 @@ fn installed_version_returns_version_when_present() {
 
     let json = serde_json::json!({
         "plugins": {
-            "warp@claude-code-warp": [{"version": "1.5.0"}]
+            "shellomancy@shellomancy": [{"version": "1.5.0"}]
         }
     });
     fs::write(
@@ -400,7 +449,7 @@ fn installed_version_returns_none_when_no_version_field() {
 
     let json = serde_json::json!({
         "plugins": {
-            "warp@claude-code-warp": [{"scope": "user"}]
+            "shellomancy@shellomancy": [{"scope": "user"}]
         }
     });
     fs::write(

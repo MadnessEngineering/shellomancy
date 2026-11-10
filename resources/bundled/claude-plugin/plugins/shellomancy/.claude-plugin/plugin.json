@@ -1,0 +1,9 @@
+{
+  "name": "shellomancy",
+  "description": "Shellomancy integration for Claude Code: the terminal hears when Claude finishes, stalls, or asks permission",
+  "version": "3.0.0",
+  "author": {
+    "name": "Madness Interactive",
+    "url": "https://madnessinteractive.cc"
+  }
+}

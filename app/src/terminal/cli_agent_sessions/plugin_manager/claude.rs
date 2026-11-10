@@ -13,15 +13,26 @@ use super::{
 use crate::terminal::model::session::LocalCommandExecutor;
 use crate::terminal::shell::ShellType;
 
-const PLUGIN_KEY: &str = "warp@claude-code-warp";
+// Shellomancy: the notification plugin is our fork, shipped inside the app
+// bundle (resources/bundled/claude-plugin) and installed from disk.
+const PLUGIN_KEY: &str = "shellomancy@shellomancy";
+const MARKETPLACE_NAME: &str = "shellomancy";
+/// Location of the bundled marketplace, relative to the bundled resources dir.
+const BUNDLED_MARKETPLACE_SUBDIR: &str = "bundled/claude-plugin";
+
+// Keep in sync with resources/bundled/claude-plugin/.claude-plugin/marketplace.json.
+// 3.0.0 continues past Warp's 2.x, so a Warp plugin still installed reads as
+// outdated and the update flow replaces it.
+const MINIMUM_PLUGIN_VERSION: &str = "3.0.0";
+
+/// Warp's notification plugin, uninstalled when ours goes in so both don't fire.
+const WARP_PLUGIN_KEY: &str = "warp@claude-code-warp";
+
+// The Oz platform plugin is Warp-cloud only and still comes from Warp's marketplace.
 const PLATFORM_PLUGIN_KEY: &str = "oz-harness-support@claude-code-warp";
+const WARP_MARKETPLACE_REPO: &str = "warpdotdev/claude-code-warp";
+const WARP_MARKETPLACE_NAME: &str = "claude-code-warp";
 
-const MARKETPLACE_REPO: &str = "warpdotdev/claude-code-warp";
-const MARKETPLACE_NAME: &str = "claude-code-warp";
-
-// Keep in sync with the plugin version in warpdotdev/claude-code-warp.
-// (See the Versioning section of that repo's README.)
-const MINIMUM_PLUGIN_VERSION: &str = "2.4.0";
 // Keep in sync with the oz-harness-support plugin version in warpdotdev/claude-code-warp.
 const MINIMUM_PLATFORM_PLUGIN_VERSION: &str = "1.1.2";
 
@@ -49,6 +60,42 @@ impl ClaudeCodePluginManager {
             .as_deref()
             .map(|path| HashMap::from([("PATH".to_owned(), path.to_owned())]));
         run_cli_command_logged("claude", args, &self.executor, env_vars, log).await
+    }
+
+    /// Installs the bundled Shellomancy plugin, replacing Warp's if present.
+    ///
+    /// The marketplace is removed and re-added on every run so a newer app
+    /// bundle's plugin replaces the copy Claude cached from the last one. We use
+    /// `plugin install` (not `plugin update`) because `marketplace remove`
+    /// unlinks the plugin, so `plugin update` would fail with "Plugin is not
+    /// installed".
+    async fn install_from_bundle(&self, log: &mut String) -> Result<(), PluginInstallError> {
+        let marketplace_dir = bundled_marketplace_dir().map_err(|message| PluginInstallError {
+            message,
+            log: log.clone(),
+        })?;
+        let marketplace_arg = shell_quote(&marketplace_dir.to_string_lossy());
+
+        let _ = self
+            .run_logged(&["plugin", "uninstall", WARP_PLUGIN_KEY], log)
+            .await;
+        if let Ok(claude_dir) = claude_home_dir()
+            && !check_platform_plugin_installed(&claude_dir)
+        {
+            let _ = self
+                .run_logged(
+                    &["plugin", "marketplace", "remove", WARP_MARKETPLACE_NAME],
+                    log,
+                )
+                .await;
+        }
+        let _ = self
+            .run_logged(&["plugin", "marketplace", "remove", MARKETPLACE_NAME], log)
+            .await;
+        self.run_logged(&["plugin", "marketplace", "add", &marketplace_arg], log)
+            .await?;
+        self.run_logged(&["plugin", "install", PLUGIN_KEY], log)
+            .await
     }
 }
 
@@ -97,36 +144,12 @@ impl CliAgentPluginManager for ClaudeCodePluginManager {
     /// Runs `claude plugin` CLI commands via the session shell.
     async fn install(&self) -> Result<(), PluginInstallError> {
         let mut log = String::new();
-        self.run_logged(
-            &["plugin", "marketplace", "add", MARKETPLACE_REPO],
-            &mut log,
-        )
-        .await?;
-        self.run_logged(&["plugin", "install", PLUGIN_KEY], &mut log)
-            .await?;
-        Ok(())
+        self.install_from_bundle(&mut log).await
     }
 
     async fn update(&self) -> Result<(), PluginInstallError> {
         let mut log = String::new();
-        // Remove/re-add the marketplace to ensure the local clone is fresh, then
-        // reinstall the plugin.
-        // We use `plugin install` (not `plugin update`) because `marketplace
-        // remove` unlinks the plugin, so `plugin update` would fail with
-        // "Plugin is not installed".
-        let _ = self
-            .run_logged(
-                &["plugin", "marketplace", "remove", MARKETPLACE_NAME],
-                &mut log,
-            )
-            .await;
-        self.run_logged(
-            &["plugin", "marketplace", "add", MARKETPLACE_REPO],
-            &mut log,
-        )
-        .await?;
-        self.run_logged(&["plugin", "install", PLUGIN_KEY], &mut log)
-            .await?;
+        self.install_from_bundle(&mut log).await?;
 
         // Sanity check: verify the on-disk version actually changed.
         let still_outdated = claude_home_dir()
@@ -145,11 +168,11 @@ impl CliAgentPluginManager for ClaudeCodePluginManager {
     }
 
     fn install_success_message(&self) -> &'static str {
-        "Warp plugin installed. Please run /reload-plugins to activate."
+        "Shellomancy plugin installed. Run /reload-plugins to wake it."
     }
 
     fn update_success_message(&self) -> &'static str {
-        "Warp plugin updated. Please run /reload-plugins to activate."
+        "Shellomancy plugin updated. Run /reload-plugins to wake it."
     }
 
     fn install_instructions(&self) -> &'static PluginInstructions {
@@ -174,7 +197,7 @@ impl CliAgentPluginManager for ClaudeCodePluginManager {
     async fn install_platform_plugin(&self) -> Result<(), PluginInstallError> {
         let mut log = String::new();
         self.run_logged(
-            &["plugin", "marketplace", "add", MARKETPLACE_REPO],
+            &["plugin", "marketplace", "add", WARP_MARKETPLACE_REPO],
             &mut log,
         )
         .await?;
@@ -186,7 +209,7 @@ impl CliAgentPluginManager for ClaudeCodePluginManager {
     async fn update_platform_plugin(&self) -> Result<(), PluginInstallError> {
         let mut log = String::new();
         self.run_logged(
-            &["plugin", "marketplace", "add", MARKETPLACE_REPO],
+            &["plugin", "marketplace", "add", WARP_MARKETPLACE_REPO],
             &mut log,
         )
         .await?;
@@ -209,55 +232,91 @@ impl CliAgentPluginManager for ClaudeCodePluginManager {
     }
 }
 
+/// `claude plugin marketplace add` command for the bundled marketplace, built
+/// once because the instructions below need `'static` strings.
+static MARKETPLACE_ADD_COMMAND: LazyLock<&'static str> = LazyLock::new(|| {
+    let dir = bundled_marketplace_dir().unwrap_or_else(|_| {
+        PathBuf::from("/Applications/Shellomancy.app/Contents/Resources")
+            .join(BUNDLED_MARKETPLACE_SUBDIR)
+    });
+    let command = format!(
+        "claude plugin marketplace add {}",
+        shell_quote(&dir.to_string_lossy())
+    );
+    Box::leak(command.into_boxed_str())
+});
+
 static INSTALL_INSTRUCTIONS: LazyLock<PluginInstructions> = LazyLock::new(|| PluginInstructions {
-    title: "Install Warp Plugin for Claude Code",
-    subtitle: "Ensure that jq is installed on your machine. Then, run these commands.",
-    steps: &[
+    title: "Bind Shellomancy to Claude Code",
+    subtitle: "Ensure that jq is installed on your machine. Then, run these commands. \
+               The plugin ships inside Shellomancy; nothing is downloaded.",
+    steps: Box::leak(Box::new([
         PluginInstructionStep {
-            description: "Add the Warp plugin marketplace repository",
-            command: "claude plugin marketplace add warpdotdev/claude-code-warp",
+            description: "Add Shellomancy's bundled plugin marketplace",
+            command: *MARKETPLACE_ADD_COMMAND,
             executable: true,
             link: None,
         },
         PluginInstructionStep {
-            description: "Install the Warp plugin",
-            command: "claude plugin install warp@claude-code-warp",
+            description: "Install the Shellomancy plugin",
+            command: "claude plugin install shellomancy@shellomancy",
             executable: true,
             link: None,
         },
-    ],
-    post_install_notes: &[
-        "Restart Claude Code to activate the plugin.",
-        "There are some known issues with Claude Code's plugin system. \
-             If the plugin is not found after step 1, you can try manually adding an \"extraKnownMarketplaces\" entry to ~/.claude/settings.json.",
-    ],
+    ])),
+    post_install_notes: &["Restart Claude Code to activate the plugin."],
 });
 
 static UPDATE_INSTRUCTIONS: LazyLock<PluginInstructions> = LazyLock::new(|| PluginInstructions {
-    title: "Update Warp Plugin for Claude Code",
-    subtitle: "Run the following commands.",
-    steps: &[
+    title: "Rebind Shellomancy to Claude Code",
+    subtitle: "Run the following commands. They retire Warp's plugin if it is still installed.",
+    steps: Box::leak(Box::new([
         PluginInstructionStep {
-            description: "Remove the existing marketplace (if present)",
-            command: "claude plugin marketplace remove claude-code-warp",
+            description: "Retire Warp's plugin (if present)",
+            command: "claude plugin uninstall warp@claude-code-warp",
             executable: true,
             link: None,
         },
         PluginInstructionStep {
-            description: "Re-add the marketplace",
-            command: "claude plugin marketplace add warpdotdev/claude-code-warp",
+            description: "Remove the existing Shellomancy marketplace (if present)",
+            command: "claude plugin marketplace remove shellomancy",
+            executable: true,
+            link: None,
+        },
+        PluginInstructionStep {
+            description: "Re-add the bundled marketplace",
+            command: *MARKETPLACE_ADD_COMMAND,
             executable: true,
             link: None,
         },
         PluginInstructionStep {
             description: "Install the latest plugin version",
-            command: "claude plugin install warp@claude-code-warp",
+            command: "claude plugin install shellomancy@shellomancy",
             executable: true,
             link: None,
         },
-    ],
+    ])),
     post_install_notes: &["Restart Claude Code to activate the update."],
 });
+
+/// The marketplace directory inside this app's bundled resources.
+fn bundled_marketplace_dir() -> Result<PathBuf, String> {
+    let dir = warp_core::paths::bundled_resources_dir()
+        .ok_or_else(|| "Could not locate Shellomancy's bundled resources".to_owned())?
+        .join(BUNDLED_MARKETPLACE_SUBDIR);
+    if !dir.join(".claude-plugin").join("marketplace.json").is_file() {
+        return Err(format!(
+            "This Shellomancy build has no bundled Claude Code plugin at {}",
+            dir.display()
+        ));
+    }
+    Ok(dir)
+}
+
+/// Single-quotes `value` for a POSIX shell; the plugin CLI runs through a login shell.
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
 
 fn check_installed(claude_dir: &Path) -> bool {
     check_plugin_installed(claude_dir, PLUGIN_KEY)
@@ -318,7 +377,7 @@ fn claude_code_marketplace_has_local_override(claude_dir: &Path) -> bool {
 
     settings
         .get("extraKnownMarketplaces")
-        .and_then(|marketplaces| marketplaces.get(MARKETPLACE_NAME))
+        .and_then(|marketplaces| marketplaces.get(WARP_MARKETPLACE_NAME))
         .map(marketplace_entry_has_local_path)
         .unwrap_or(false)
 }
