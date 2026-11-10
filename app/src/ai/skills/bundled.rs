@@ -570,7 +570,7 @@ pub(crate) fn activation_for_bundled_skill(
             BundledSkillActivation::RequiresFile(resources_dir.join("settings_schema.json"))
         }
         "tui-migrate-setup" => BundledSkillActivation::TuiOnly,
-        "warpctrl" => BundledSkillActivation::RequiresFeature(FeatureFlag::WarpControlCli),
+        "shelloctrl" => BundledSkillActivation::RequiresFeature(FeatureFlag::WarpControlCli),
         // Gate the Factory MCP skill on the same flag that attaches the
         // Factory MCP server, so the skill and the server it documents roll
         // out together.

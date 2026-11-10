@@ -337,7 +337,7 @@ fn test_read_skill_executor_rejects_warp_control_bundled_skills_when_disabled() 
         initialize_app(&mut app);
         let _bundled_skills = FeatureFlag::BundledSkills.override_enabled(true);
         let _warp_control_cli = FeatureFlag::WarpControlCli.override_enabled(false);
-        let skill_id = "warpctrl";
+        let skill_id = "shelloctrl";
         SkillManager::handle(&app).update(&mut app, |manager, _ctx| {
             manager.add_bundled_skill_for_testing(
                 skill_id,
