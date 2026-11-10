@@ -27,7 +27,7 @@ pub const CONTROL_MODE_FLAG: &str = "--warpctrl";
 #[command(
     name = "warpctrl",
     display_name = "warpctrl",
-    about = "Control a running local Warp app instance"
+    about = "Control a running local Shellomancy app instance"
 )]
 pub struct ControlArgs {
     /// Set the output format.
@@ -143,10 +143,10 @@ impl ControlArgs {
 /// Top-level `warpctrl` command groups.
 #[derive(Debug, Clone, Subcommand)]
 pub enum ControlCommand {
-    /// Inspect local Warp app instances.
+    /// Inspect local Shellomancy app instances.
     #[command(subcommand)]
     Instance(InstanceCommand),
-    /// Inspect a selected local Warp app.
+    /// Inspect a selected local Shellomancy app.
     #[command(subcommand)]
     App(AppCommand),
     /// Inspect local-control capabilities.
@@ -156,18 +156,18 @@ pub enum ControlCommand {
     #[command(subcommand)]
     Action(ActionCatalogCommand),
 
-    /// Inspect local Warp windows.
+    /// Inspect local Shellomancy windows.
     #[command(subcommand)]
     Window(WindowCommand),
 
-    /// Control local Warp tabs.
+    /// Control local Shellomancy tabs.
     #[command(subcommand)]
     Tab(TabCommand),
-    /// Inspect local Warp panes.
+    /// Inspect local Shellomancy panes.
     #[command(subcommand)]
     Pane(PaneCommand),
 
-    /// Inspect local Warp sessions.
+    /// Inspect local Shellomancy sessions.
     #[command(subcommand)]
     Session(SessionCommand),
 
@@ -175,7 +175,7 @@ pub enum ControlCommand {
     #[command(subcommand)]
     Input(InputCommand),
 
-    /// Inspect Warp themes.
+    /// Inspect Shellomancy themes.
     #[command(subcommand)]
     Theme(ThemeCommand),
 
@@ -195,25 +195,25 @@ pub enum ControlCommand {
     #[command(subcommand)]
     File(FileCommand),
 
-    /// Open or toggle local Warp surfaces.
+    /// Open or toggle local Shellomancy surfaces.
     #[command(subcommand)]
     Surface(SurfaceCommand),
 
     /// Generate shell completions for your shell to stdout.
     ///
     /// For bash, add the following to ~/.bashrc:
-    ///     source <(path/to/warpctrl completions bash)
+    ///     source <(shellomancy completions bash)
     ///
     /// For zsh, add the following to ~/.zshrc:
-    ///     source <(path/to/warpctrl completions zsh)
+    ///     source <(shellomancy completions zsh)
     ///
     /// For fish, add the following to ~/.config/fish/config.fish:
-    ///     path/to/warpctrl completions fish | source
+    ///     shellomancy completions fish | source
     ///
     /// For Powershell, add the following to $PROFILE:
-    ///     path\to\warpctrl completions powershell | Out-String | Invoke-Expression
+    ///     shellomancy completions powershell | Out-String | Invoke-Expression
     ///
-    /// If no shell is provided, this defaults to the shell that Warp was run from.
+    /// If no shell is provided, this defaults to the shell that Shellomancy was run from.
     #[command(verbatim_doc_comment)]
     Completions {
         /// Shell to generate completions for.
@@ -222,29 +222,29 @@ pub enum ControlCommand {
     },
 }
 
-/// Commands that inspect locally discoverable Warp instances.
+/// Commands that inspect locally discoverable Shellomancy instances.
 #[derive(Debug, Clone, Subcommand)]
 pub enum InstanceCommand {
-    /// List locally discoverable Warp instances.
+    /// List locally discoverable Shellomancy instances.
     List,
 
     /// Print app, protocol, active target, and action metadata for the selected instance.
     Inspect(TargetArgs),
 }
 
-/// Commands that inspect the selected Warp app instance.
+/// Commands that inspect the selected Shellomancy app instance.
 #[derive(Debug, Clone, Subcommand)]
 pub enum AppCommand {
-    /// Check that the selected local Warp app responds.
+    /// Check that the selected local Shellomancy app responds.
     Ping(TargetArgs),
 
-    /// Print protocol and build identity metadata for the selected local Warp app.
+    /// Print protocol and build identity metadata for the selected local Shellomancy app.
     Version(TargetArgs),
 
     /// Print the active window/tab/pane/session chain.
     Active(TargetArgs),
 
-    /// Focus the selected local Warp app.
+    /// Focus the selected local Shellomancy app.
     Focus(TargetArgs),
 }
 
@@ -263,10 +263,10 @@ pub enum CapabilityCommand {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum WindowCommand {
-    /// List windows in the selected local Warp app.
+    /// List windows in the selected local Shellomancy app.
     List(TargetArgs),
 
-    /// Inspect one window in the selected local Warp app.
+    /// Inspect one window in the selected local Shellomancy app.
     Inspect(TargetArgs),
 
     /// Create a new window.
@@ -279,13 +279,13 @@ pub enum WindowCommand {
     Close(TargetArgs),
 }
 
-/// Commands that control tabs in the selected Warp app instance.
+/// Commands that control tabs in the selected Shellomancy app instance.
 #[derive(Debug, Clone, Subcommand)]
 pub enum TabCommand {
-    /// List tabs in the selected local Warp app.
+    /// List tabs in the selected local Shellomancy app.
     List(TargetArgs),
 
-    /// Inspect one tab in the selected local Warp app.
+    /// Inspect one tab in the selected local Shellomancy app.
     Inspect(TargetArgs),
 
     /// Create a new terminal tab in the active window.
@@ -321,13 +321,13 @@ pub enum TabColorCommand {
     Clear(TargetArgs),
 }
 
-/// Commands that inspect local Warp panes.
+/// Commands that inspect local Shellomancy panes.
 #[derive(Debug, Clone, Subcommand)]
 pub enum PaneCommand {
-    /// List panes in the selected local Warp app.
+    /// List panes in the selected local Shellomancy app.
     List(TargetArgs),
 
-    /// Inspect one pane in the selected local Warp app.
+    /// Inspect one pane in the selected local Shellomancy app.
     Inspect(TargetArgs),
 
     /// Split the active pane.
@@ -358,13 +358,13 @@ pub enum PaneCommand {
     ResetName(TargetArgs),
 }
 
-/// Commands that inspect local Warp sessions.
+/// Commands that inspect local Shellomancy sessions.
 #[derive(Debug, Clone, Subcommand)]
 pub enum SessionCommand {
-    /// List sessions in the selected local Warp app.
+    /// List sessions in the selected local Shellomancy app.
     List(TargetArgs),
 
-    /// Inspect one session in the selected local Warp app.
+    /// Inspect one session in the selected local Shellomancy app.
     Inspect(TargetArgs),
 
     /// Activate a session.
@@ -489,7 +489,7 @@ pub enum SurfaceToggleCommand {
     Toggle(TargetArgs),
 }
 
-/// Commands that inspect Warp themes.
+/// Commands that inspect Shellomancy themes.
 #[derive(Debug, Clone, Subcommand)]
 pub enum ThemeCommand {
     /// List available themes.
@@ -501,7 +501,7 @@ pub enum ThemeCommand {
     /// Set the current theme.
     Set(ThemeSetArgs),
 
-    /// Set whether Warp follows the system theme.
+    /// Set whether Shellomancy follows the system theme.
     SystemSet(ThemeSystemSetArgs),
 
     /// Set the light theme used when following the system theme.
@@ -568,18 +568,18 @@ pub enum KeybindingCommand {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum FileCommand {
-    /// Open a file in Warp.
+    /// Open a file in Shellomancy.
     Open(FileOpenArgs),
 }
 
-/// Exact selectors for a target within the selected Warp instance.
+/// Exact selectors for a target within the selected Shellomancy instance.
 #[derive(Debug, Clone, Args, Default)]
 pub struct TargetArgs {
-    /// Target a specific local Warp instance id from `warpctrl instance list`.
+    /// Target a specific local Shellomancy instance id from `shellomancy instance list`.
     #[arg(long = "instance", conflicts_with = "pid")]
     pub instance: Option<String>,
 
-    /// Target a specific local Warp process id.
+    /// Target a specific local Shellomancy process id.
     #[arg(long = "pid", conflicts_with = "instance")]
     pub pid: Option<u32>,
 
