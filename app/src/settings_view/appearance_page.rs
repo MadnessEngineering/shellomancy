@@ -57,6 +57,7 @@ use crate::gpu_state::{GPUState, GPUStateEvent};
 use crate::prompt::editor_modal::OpenSource as PromptEditorOpenSource;
 use crate::server::telemetry::{InputUXChangeOrigin, TelemetryEvent};
 use crate::settings::app_icon::{AppIcon, AppIconSettings, ShowDockIconState};
+use crate::settings::madness_voice::{MadnessVoice, MadnessVoiceSettings};
 use crate::settings::{
     AIFontName, AISettings, AppEditorSettings, CodeSettings, CursorBlink, CursorBlinkEnabled,
     CursorDisplayType, DEFAULT_MONOSPACE_FONT_NAME, EnforceMinimumContrast, FocusPaneOnHover,
@@ -475,6 +476,8 @@ pub enum AppearancePageAction {
     SetInputType(InputBoxType),
     SetAppIcon(AppIcon),
     ToggleShowDockIcon,
+    /// Shellomancy: a MadnessThemes voice id.
+    SetMadnessVoice(&'static str),
     SetCursorType(CursorDisplayType),
     SetWorkspaceDecorationVisibility(WorkspaceDecorationVisibility),
     ToggleWorkspaceDecorationVisibility,
@@ -543,6 +546,7 @@ pub struct AppearanceSettingsPageView {
     window_backdrop_dropdown: ViewHandle<Dropdown<AppearancePageAction>>,
     input_type_radio_state: RadioButtonStateHandle,
     app_icon_dropdown: ViewHandle<Dropdown<AppearancePageAction>>,
+    madness_voice_dropdown: ViewHandle<Dropdown<AppearancePageAction>>,
     workspace_decorations_dropdown: ViewHandle<Dropdown<AppearancePageAction>>,
     tab_close_button_position_dropdown: ViewHandle<Dropdown<AppearancePageAction>>,
     zoom_level_dropdown: ViewHandle<Dropdown<AppearancePageAction>>,
@@ -665,6 +669,7 @@ impl TypedActionView for AppearanceSettingsPageView {
             SetInputType(input_type) => self.set_input_type(*input_type, ctx),
             SetAppIcon(new_icon) => self.set_app_icon(*new_icon, ctx),
             ToggleShowDockIcon => self.toggle_show_dock_icon(ctx),
+            SetMadnessVoice(id) => self.set_madness_voice(id, ctx),
             SetCursorType(cursor_display_type) => self.set_cursor_type(*cursor_display_type, ctx),
             OpacitySliderDragged(val) => self.set_opacity(*val, false, ctx),
             BlurSliderDragged(val) => self.set_blur(*val, false, ctx),
@@ -1328,6 +1333,7 @@ impl AppearanceSettingsPageView {
             window_backdrop_dropdown: Self::build_window_backdrop_dropdown(ctx),
             input_type_radio_state,
             app_icon_dropdown,
+            madness_voice_dropdown: Self::build_madness_voice_dropdown(ctx),
             enforce_min_contrast_dropdown,
             workspace_decorations_dropdown: Self::build_workspace_decoration_visibility_dropdown(
                 ctx,
@@ -1360,6 +1366,11 @@ impl AppearanceSettingsPageView {
                 Box::new(ThemeSelectWidget::default()),
             ],
         )];
+
+        categories.push(Category::new(
+            madness_themes::t("shellomancy.settings.voice.category"),
+            vec![Box::new(MadnessVoiceWidget)],
+        ));
 
         if AppIconSettings::as_ref(ctx).is_supported_on_current_platform() {
             categories.push(Category::new(
@@ -2388,6 +2399,51 @@ impl AppearanceSettingsPageView {
         }
     }
 
+    /// Shellomancy: one entry per MadnessThemes voice compiled into the build.
+    fn build_madness_voice_dropdown(
+        ctx: &mut ViewContext<Self>,
+    ) -> ViewHandle<Dropdown<AppearancePageAction>> {
+        ctx.add_typed_action_view(|ctx| {
+            let mut dropdown = Dropdown::new(ctx);
+            dropdown.set_top_bar_max_width(INPUT_MODE_DROPDOWN_WIDTH);
+            dropdown.set_menu_width(INPUT_MODE_DROPDOWN_WIDTH, ctx);
+
+            let voices = madness_themes::voices();
+            let current = MadnessVoiceSettings::as_ref(ctx).voice.value().clone();
+            let selected_index = voices
+                .iter()
+                .position(|voice| voice.id == current)
+                .or_else(|| {
+                    voices
+                        .iter()
+                        .position(|voice| voice.id == madness_themes::DEFAULT_VOICE)
+                })
+                .unwrap_or(0);
+
+            dropdown.add_items(
+                voices
+                    .iter()
+                    .map(|voice| {
+                        DropdownItem::new(
+                            voice.name.as_str(),
+                            AppearancePageAction::SetMadnessVoice(voice.id.as_str()),
+                        )
+                    })
+                    .collect(),
+                ctx,
+            );
+            dropdown.set_selected_by_index(selected_index, ctx);
+            dropdown
+        })
+    }
+
+    fn set_madness_voice(&mut self, id: &'static str, ctx: &mut ViewContext<Self>) {
+        MadnessVoiceSettings::handle(ctx).update(ctx, |settings, ctx| {
+            report_if_error!(settings.voice.set_value(id.to_owned(), ctx));
+        });
+        ctx.notify();
+    }
+
     fn set_app_icon(&mut self, new_icon: AppIcon, ctx: &mut ViewContext<Self>) {
         AppIconSettings::handle(ctx).update(ctx, |app_icon_settings, ctx| {
             report_if_error!(app_icon_settings.app_icon.set_value(new_icon, ctx));
@@ -3019,6 +3075,39 @@ impl SettingsWidget for ThemeSelectWidget {
                     .finish(),
             )
             .finish()
+    }
+}
+
+/// Shellomancy: picks the MadnessThemes voice for the UI text.
+struct MadnessVoiceWidget;
+
+impl SettingsWidget for MadnessVoiceWidget {
+    type View = AppearanceSettingsPageView;
+
+    fn search_terms(&self) -> &str {
+        "voice language text wording personality madness themes shellomancer"
+    }
+
+    fn render(
+        &self,
+        view: &Self::View,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        render_dropdown_item(
+            appearance,
+            madness_themes::t("shellomancy.settings.voice.label"),
+            Some(madness_themes::t("shellomancy.settings.voice.restartNote")),
+            None,
+            LocalOnlyIconState::for_setting(
+                MadnessVoice::storage_key(),
+                MadnessVoice::sync_to_cloud(),
+                &mut view.local_only_icon_tooltip_states.borrow_mut(),
+                app,
+            ),
+            None,
+            &view.madness_voice_dropdown,
+        )
     }
 }
 

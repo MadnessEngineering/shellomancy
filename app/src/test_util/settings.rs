@@ -30,6 +30,7 @@ pub fn initialize_settings_for_tests_with_mode(
     use crate::drive::settings::WarpDriveSettings;
     use crate::search::command_search::settings::CommandSearchSettings;
     use crate::settings::app_icon::AppIconSettings;
+    use crate::settings::madness_voice::MadnessVoiceSettings;
     use crate::settings::manager::SettingsManager;
     use crate::settings::{
         AISettings, AccessibilitySettings, AliasExpansionSettings, AppEditorSettings,
@@ -75,6 +76,7 @@ pub fn initialize_settings_for_tests_with_mode(
     CommandSearchSettings::register(app);
     DebugSettings::register(app);
     AppIconSettings::register(app);
+    MadnessVoiceSettings::register(app);
     EmacsBindingsSettings::register(app);
 
     #[cfg(feature = "local_fs")]

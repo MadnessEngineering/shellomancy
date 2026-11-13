@@ -1193,21 +1193,26 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     // When the SettingsFile feature flag is enabled, public settings live in
     // the TOML-backed store. When disabled, they live in the platform-native
     // store (same backend as private). Use the correct one for pre-app reads.
-    #[cfg_attr(
-        not(any(
-            enable_crash_recovery,
-            target_os = "linux",
-            target_os = "freebsd",
-            target_os = "macos"
-        )),
-        expect(unused)
-    )]
     let prefs_for_public_settings: &dyn warpui_extras::user_preferences::UserPreferences =
         if FeatureFlag::SettingsFile.is_enabled() {
             public_preferences.as_ref()
         } else {
             private_preferences.deref()
         };
+
+    // Shellomancy: choose the MadnessThemes voice before any view builds its
+    // text. Strings already built keep their words, so a change waits for a
+    // restart.
+    let voice = crate::settings::madness_voice::MadnessVoice::read_from_preferences(
+        prefs_for_public_settings,
+    )
+    .unwrap_or_else(crate::settings::madness_voice::MadnessVoice::default_value);
+    if !madness_themes::set_voice(&voice) {
+        log::warn!(
+            "Unknown voice {voice:?} in appearance.voice; using {}",
+            madness_themes::DEFAULT_VOICE
+        );
+    }
 
     #[cfg(enable_crash_recovery)]
     let crash_recovery =

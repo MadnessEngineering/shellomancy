@@ -23,6 +23,9 @@ ActionButton::new(madness_themes::t("shellomancy.plugin.update"), theme)
 ```
 
 `t()` answers from the active voice, then `standard`, then gives the key back.
+Pick the voice in **Settings › Appearance › Voice** (or `appearance.voice` in
+the settings file); it's read once at startup, so a change applies after a
+restart.
 The default voice is **shellomancer**: practical magic, dryly delivered (spells,
 chambers, the Mana Bar, familiars). Its lexicon, tone rules and examples are its
 voice card in
@@ -53,6 +56,7 @@ conflict on them.
 ### Converted so far
 
 - The agent-plugin footer chip and its toasts (`shellomancy.plugin.*`).
+- The Voice picker's own labels (`shellomancy.settings.voice.*`).
 
 ## Palettes: terminal colours
 
