@@ -34,17 +34,27 @@ voice card in
 
 ### Moving a string off Warp's literal
 
-1. In MadnessThemes, add the key to `standard` (plain), `shellomancer`, and
-   `debug` (its own path), then copy it to the other voices:
+Write a mapping file (key, standard wording, shellomancer wording, and which
+Rust literals it replaces) and run the sweep tool; its header documents the
+format:
 
-   ```sh
-   ./themetool.py patch standard keys.json      # likewise shellomancer, debug
-   ./themetool.py sync standard banana biomedical corporate-clean corporate-drone cyan-lab dwarf gunmetal labops mad-wizard templar-light
-   ./themetool.py parity --strict
-   ```
+```sh
+script/voice_sweep.py sweeps/settings.json --dry-run   # checks every count
+script/voice_sweep.py sweeps/settings.json             # voices + Rust in one go
+```
 
-2. Commit and push MadnessThemes, then bump `madness-themes` here.
-3. Replace the literal with `madness_themes::t("shellomancy.…")`.
+It writes the keys into `standard`, `shellomancer` and `debug`, copies
+standard's wording to the other voices (so they read as owed a pass), checks
+parity, and swaps each literal for `madness_themes::t("…")`. A `const`, a
+`format!` template, or a string that is also an identifier needs a hand edit
+afterwards; `cargo check -p warp` finds them. Strings with values use
+`{{name}}` placeholders and `madness_themes::tf(key, &[("name", value)])`.
+Then commit and push `madness-themes`, and commit here with the bump.
+
+**Standard** keeps plain nouns (Shellomancy, Drive, block, pane, shell
+integration); **shellomancer** uses the lexicon (Mana Bar, spell, chamber,
+Enchant). Only reachable text is reworded: features that need Warp's servers
+are hidden instead. The About page's "A fork of Warp" credit line stays.
 
 `cargo test -p madness_themes` fails if a voice is missing a key, if `debug`
 doesn't echo its keys, or if any `shellomancy` string says "Warp".

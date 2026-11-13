@@ -82,6 +82,17 @@ pub fn t(key: &'static str) -> &'static str {
         .unwrap_or(key)
 }
 
+/// [`t`] with `{{name}}` placeholders filled in, the MadnessThemes convention:
+/// `tf("shellomancy.x", &[("count", &n.to_string())])`. A placeholder with no
+/// value is left as written, so a missing argument shows up instead of vanishing.
+pub fn tf(key: &'static str, args: &[(&str, &str)]) -> String {
+    let mut text = t(key).to_owned();
+    for (name, value) in args {
+        text = text.replace(&format!("{{{{{name}}}}}"), value);
+    }
+    text
+}
+
 /// Sixteen ANSI colours, as `#rrggbb`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct AnsiColors {

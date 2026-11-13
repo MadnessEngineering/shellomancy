@@ -74,3 +74,9 @@ fn every_palette_has_a_full_terminal_block() {
         assert!(t.details == "darker" || t.details == "lighter", "{}", p.id);
     }
 }
+
+#[test]
+fn tf_fills_named_placeholders_and_keeps_unknown_ones() {
+    // A key no voice has comes back as itself, so feed tf a key-shaped template.
+    assert_eq!(tf("shellomancy.{{a}}.{{b}}", &[("a", "x")]), "shellomancy.x.{{b}}");
+}
