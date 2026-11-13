@@ -10,7 +10,7 @@ use settings::Setting as _;
 #[cfg(target_family = "wasm")]
 use url::Url;
 use uuid::Uuid;
-use warp_core::channel::ChannelState;
+use warp_core::channel::{Channel, ChannelState};
 use warp_core::features::FeatureFlag;
 use warp_errors::{report_error, report_if_error};
 use warp_graphql::mutations::create_anonymous_user::{
@@ -868,7 +868,18 @@ impl AuthManager {
         state
     }
 
+    /// Shellomancy: this build never contacts Warp's servers, so its login,
+    /// sign-up and upgrade links open Settings > Account instead, where the
+    /// Madness Interactive sign-in lives.
+    fn shellomancy_account_url() -> Option<String> {
+        (ChannelState::channel() == Channel::Oss)
+            .then(|| format!("{}://settings", ChannelState::url_scheme()))
+    }
+
     pub fn sign_up_url(&mut self) -> String {
+        if let Some(url) = Self::shellomancy_account_url() {
+            return url;
+        }
         let state = self.generate_auth_state();
         format!(
             // TODO: we should probably be able to remove the public_beta flag
@@ -880,6 +891,9 @@ impl AuthManager {
     }
 
     pub fn sign_in_url(&mut self) -> String {
+        if let Some(url) = Self::shellomancy_account_url() {
+            return url;
+        }
         let state = self.generate_auth_state();
         format!(
             "{}/login/remote?scheme={}&state={}",
@@ -892,6 +906,9 @@ impl AuthManager {
     /// The upgrade confirmation page will kick the user back to the app with a refresh token
     /// if we send a `state` query param to /upgrade
     pub fn upgrade_url(&mut self) -> String {
+        if let Some(url) = Self::shellomancy_account_url() {
+            return url;
+        }
         let state = self.generate_auth_state();
         format!(
             "{}/upgrade?scheme={}&state={}",

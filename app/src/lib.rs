@@ -44,6 +44,7 @@ mod interval_timer;
 mod linear;
 #[cfg(feature = "local_fs")]
 mod local_control;
+mod madness_account;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod login_item;
 mod menu;
@@ -1637,6 +1638,10 @@ pub(crate) fn initialize_app(
             ctx,
         )
     });
+
+    // Shellomancy: the Madness Interactive account, restored from secure storage
+    // (registered above) without touching the network.
+    ctx.add_singleton_model(madness_account::MadnessAccount::new);
 
     ctx.add_singleton_model(|_ctx| GPUState::new());
 

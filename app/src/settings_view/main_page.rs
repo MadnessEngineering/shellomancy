@@ -42,6 +42,8 @@ use crate::auth::auth_state::AuthState;
 use crate::auth::auth_view_modal::AuthViewVariant;
 use crate::auth::{AuthStateProvider, UserUid};
 use crate::autoupdate::{self, AutoupdateStage, AutoupdateState};
+use crate::editor::{EditorView, Event as EditorEvent, SingleLineEditorOptions, TextOptions};
+use crate::madness_account::{MADNESS_KEYS_URL, MadnessAccount, MadnessAccountState};
 use crate::server::ids::ServerId;
 use crate::settings::cloud_preferences::CloudPreferencesSettings;
 use crate::workspace::WorkspaceAction;
@@ -127,6 +129,9 @@ pub enum MainPageAction {
     },
     SignupAnonymousUser,
     OpenUrl(String),
+    /// Shellomancy: sign in to madnessinteractive.cc with the pasted key.
+    MadnessSignIn,
+    MadnessSignOut,
     #[cfg(not(target_family = "wasm"))]
     RefreshIapCredentials,
 }
@@ -165,6 +170,8 @@ pub struct MainSettingsPageView {
     self_handle: WeakViewHandle<Self>,
     page: PageType<Self>,
     auth_state: Arc<AuthState>,
+    /// Shellomancy: where the Madness API key is pasted.
+    madness_key_editor: ViewHandle<EditorView>,
 }
 
 impl Entity for MainSettingsPageView {
@@ -239,6 +246,10 @@ impl TypedActionView for MainSettingsPageView {
             MainPageAction::OpenUrl(url) => {
                 ctx.open_url(url);
             }
+            MainPageAction::MadnessSignIn => self.madness_sign_in(ctx),
+            MainPageAction::MadnessSignOut => {
+                MadnessAccount::handle(ctx).update(ctx, |account, ctx| account.sign_out(ctx));
+            }
             #[cfg(not(target_family = "wasm"))]
             MainPageAction::RefreshIapCredentials => {
                 IapManager::handle(ctx).update(ctx, |manager, ctx| manager.start_refresh(ctx));
@@ -277,14 +288,50 @@ impl MainSettingsPageView {
             ctx.notify();
         });
 
-        let mut widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
-            Box::new(AccountWidget::default()),
-            Box::new(DividerWidget {}),
-        ];
+        let madness_key_editor = ctx.add_typed_action_view(|ctx| {
+            let options = SingleLineEditorOptions {
+                text: TextOptions::ui_font_size(Appearance::as_ref(ctx)),
+                is_password: true,
+                ..Default::default()
+            };
+            let mut editor = EditorView::single_line(options, ctx);
+            editor.set_placeholder_text(
+                madness_themes::t("shellomancy.account.madness.keyPlaceholder"),
+                ctx,
+            );
+            editor
+        });
+        ctx.subscribe_to_view(&madness_key_editor, |me, _, event, ctx| {
+            if matches!(event, EditorEvent::Enter) {
+                me.madness_sign_in(ctx);
+            }
+        });
 
-        widgets.push(Box::new(SettingsSyncWidget::default()));
-
-        widgets.push(Box::new(EarnRewardsWidget::default()));
+        // Shellomancy: Warp's account, settings sync, referrals and logout all
+        // need Warp's servers. On this channel the page is the Madness account
+        // instead; other channels keep Warp's widgets.
+        let madness = ChannelState::channel() == warp_core::channel::Channel::Oss
+            && ctx.has_singleton_model::<MadnessAccount>();
+        let mut widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = Vec::new();
+        if madness {
+            ctx.subscribe_to_model(&MadnessAccount::handle(ctx), |me, _, _, ctx| {
+                if matches!(
+                    MadnessAccount::as_ref(ctx).state(),
+                    MadnessAccountState::SignedIn { .. }
+                ) {
+                    me.madness_key_editor
+                        .update(ctx, |editor, ctx| editor.set_buffer_text("", ctx));
+                }
+                ctx.notify();
+            });
+            widgets.push(Box::new(MadnessAccountWidget::default()));
+            widgets.push(Box::new(DividerWidget {}));
+        } else {
+            widgets.push(Box::new(AccountWidget::default()));
+            widgets.push(Box::new(DividerWidget {}));
+            widgets.push(Box::new(SettingsSyncWidget::default()));
+            widgets.push(Box::new(EarnRewardsWidget::default()));
+        }
 
         #[cfg(not(target_family = "wasm"))]
         if IapManager::as_ref(ctx).is_enabled() {
@@ -301,7 +348,9 @@ impl MainSettingsPageView {
             widgets.push(Box::new(VersionInfoWidget::default()));
         }
 
-        widgets.push(Box::new(LogoutWidget::default()));
+        if !madness {
+            widgets.push(Box::new(LogoutWidget::default()));
+        }
 
         let page = PageType::new_uncategorized(widgets, Some(PageTitle::new("Account")));
 
@@ -309,7 +358,13 @@ impl MainSettingsPageView {
             self_handle: ctx.handle(),
             page,
             auth_state,
+            madness_key_editor,
         }
+    }
+
+    fn madness_sign_in(&mut self, ctx: &mut ViewContext<Self>) {
+        let key = self.madness_key_editor.as_ref(ctx).buffer_text(ctx);
+        MadnessAccount::handle(ctx).update(ctx, |account, ctx| account.sign_in(key, ctx));
     }
 
     fn handle_autoupdate_state_change(
@@ -660,6 +715,169 @@ impl SettingsWidget for AccountWidget {
         Flex::column()
             .with_child(Container::new(account_info).finish())
             .finish()
+    }
+}
+
+/// Shellomancy: sign in to madnessinteractive.cc with an Omnispindle API key.
+#[derive(Default)]
+struct MadnessAccountWidget {
+    sign_in_button: MouseStateHandle,
+    sign_out_button: MouseStateHandle,
+    get_key_link: MouseStateHandle,
+}
+
+impl SettingsWidget for MadnessAccountWidget {
+    type View = MainSettingsPageView;
+
+    fn search_terms(&self) -> &str {
+        "account sign in login madness interactive omnispindle api key inventorium"
+    }
+
+    fn render(
+        &self,
+        view: &Self::View,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        let theme = appearance.theme();
+        let ui = appearance.ui_builder();
+        let muted = UiComponentStyles {
+            font_color: Some(theme.sub_text_color(theme.background()).into_solid()),
+            margin: Some(Coords::default().bottom(8.)),
+            ..Default::default()
+        };
+        let mut column = Flex::column().with_child(
+            ui.wrappable_text(madness_themes::t("shellomancy.account.madness.title"), true)
+                .with_style(UiComponentStyles {
+                    font_size: Some(18.),
+                    font_weight: Some(Weight::Semibold),
+                    margin: Some(Coords::default().bottom(8.)),
+                    ..Default::default()
+                })
+                .build()
+                .finish(),
+        );
+        column.add_child(
+            ui.wrappable_text(
+                madness_themes::t("shellomancy.account.madness.description"),
+                true,
+            )
+            .with_style(muted.clone())
+            .build()
+            .finish(),
+        );
+
+        let state = MadnessAccount::as_ref(app).state().clone();
+        if let MadnessAccountState::SignedIn { display } = &state {
+            column.add_child(
+                Flex::row()
+                    .with_cross_axis_alignment(CrossAxisAlignment::Center)
+                    .with_child(
+                        Shrinkable::new(
+                            1.,
+                            ui.wrappable_text(
+                                madness_themes::tf(
+                                    "shellomancy.account.madness.signedInAs",
+                                    &[("who", display)],
+                                ),
+                                true,
+                            )
+                            .build()
+                            .finish(),
+                        )
+                        .finish(),
+                    )
+                    .with_child(
+                        ui.button(ButtonVariant::Secondary, self.sign_out_button.clone())
+                            .with_text_label(
+                                madness_themes::t("shellomancy.account.madness.signOut").to_owned(),
+                            )
+                            .build()
+                            .on_click(|ctx, _, _| {
+                                ctx.dispatch_typed_action(MainPageAction::MadnessSignOut);
+                            })
+                            .finish(),
+                    )
+                    .finish(),
+            );
+            return column.finish();
+        }
+
+        let checking = matches!(state, MadnessAccountState::Checking);
+        column.add_child(
+            Flex::row()
+                .with_cross_axis_alignment(CrossAxisAlignment::Center)
+                .with_child(
+                    Shrinkable::new(
+                        1.,
+                        ui.text_input(view.madness_key_editor.clone())
+                            .with_style(UiComponentStyles {
+                                padding: Some(Coords {
+                                    top: 6.,
+                                    bottom: 6.,
+                                    left: 8.,
+                                    right: 8.,
+                                }),
+                                margin: Some(Coords::default().right(8.)),
+                                background: Some(theme.surface_2().into()),
+                                ..Default::default()
+                            })
+                            .build()
+                            .finish(),
+                    )
+                    .finish(),
+                )
+                .with_child(
+                    ui.button(ButtonVariant::Accent, self.sign_in_button.clone())
+                        .with_text_label(
+                            madness_themes::t(if checking {
+                                "shellomancy.account.madness.checking"
+                            } else {
+                                "shellomancy.account.madness.signIn"
+                            })
+                            .to_owned(),
+                        )
+                        .build()
+                        .on_click(move |ctx, _, _| {
+                            if !checking {
+                                ctx.dispatch_typed_action(MainPageAction::MadnessSignIn);
+                            }
+                        })
+                        .finish(),
+                )
+                .finish(),
+        );
+        if let MadnessAccountState::Failed(message) = &state {
+            column.add_child(
+                ui.wrappable_text(message.clone(), true)
+                    .with_style(UiComponentStyles {
+                        font_color: Some(theme.ui_error_color()),
+                        margin: Some(Coords::default().top(8.)),
+                        ..Default::default()
+                    })
+                    .build()
+                    .finish(),
+            );
+        }
+        column.add_child(
+            Container::new(
+                ui.link(
+                    madness_themes::t("shellomancy.account.madness.getKey").to_owned(),
+                    None,
+                    Some(Box::new(|ctx| {
+                        ctx.dispatch_typed_action(MainPageAction::OpenUrl(
+                            MADNESS_KEYS_URL.to_owned(),
+                        ));
+                    })),
+                    self.get_key_link.clone(),
+                )
+                .build()
+                .finish(),
+            )
+            .with_margin_top(8.)
+            .finish(),
+        );
+        column.finish()
     }
 }
 

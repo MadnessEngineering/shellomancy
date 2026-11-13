@@ -11794,7 +11794,21 @@ impl Workspace {
     ) {
         match event {
             AuthManagerEvent::AttemptedLoginGatedFeature { auth_view_variant } => {
-                self.open_require_login_modal(*auth_view_variant, ctx)
+                // Shellomancy: Warp's login leads to Warp's servers, which this
+                // build never contacts. Say so instead of opening a dead login.
+                if ChannelState::channel() == Channel::Oss {
+                    self.toast_stack.update(ctx, |toast_stack, ctx| {
+                        toast_stack.add_ephemeral_toast(
+                            DismissibleToast::default(
+                                madness_themes::t("shellomancy.account.cloudOnlyFeature")
+                                    .to_string(),
+                            ),
+                            ctx,
+                        );
+                    });
+                } else {
+                    self.open_require_login_modal(*auth_view_variant, ctx)
+                }
             }
             AuthManagerEvent::LoginOverrideDetected(interrupted_auth_payload) => {
                 self.open_auth_override_warning_modal(interrupted_auth_payload.clone(), ctx);

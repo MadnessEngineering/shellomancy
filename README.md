@@ -46,6 +46,7 @@ Everything is listed, with the commit that implements it, in [docs/differences-f
 
   A stdlib Python client in [`script/shellomancy_client`](script/shellomancy_client/shellomancy_client.py) does the same from hooks without starting the app binary.
 - **[MQTT bridge](docs/mqtt-bridge.md)** — publishes open instances and tabs to the workshop broker and accepts `attach` (open a tab on a Claude session) and `focus` commands.
+- **Madness Interactive account** — Settings › Account signs in to madnessinteractive.cc with an Omnispindle API key (kept in the Keychain), the start of the Inventorium and Omnispindle integrations. Warp's own login, sign-up and upgrade links lead there instead of to Warp, and features that need Warp's cloud say so rather than opening a dead login.
 - **`~/.mad`** — settings live in `~/.mad/shellomancy`, and the control API's discovery records in `~/.mad/local-control`, a dot-dir shared with other workshop tools.
 - **The nautilus** — new app icon, Dock-icon variants (Abyss, Bone, Ember, Mono, Toxic), loading animation and in-app marks, all generated from one SVG by [`script/shellomancy_brand`](script/shellomancy_brand/README.md).
 

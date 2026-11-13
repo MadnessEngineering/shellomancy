@@ -1,0 +1,67 @@
+[
+ {
+  "key": "shellomancy.account.madness.title",
+  "standard": "Madness Interactive account",
+  "shellomancer": "Madness Interactive account"
+ },
+ {
+  "key": "shellomancy.account.madness.description",
+  "standard": "Sign in with an Omnispindle API key (omni_…) from madnessinteractive.cc to connect Shellomancy to your todos, lessons and quests. Shellomancy stays offline until you sign in.",
+  "shellomancer": "Bind Shellomancy to madnessinteractive.cc with an Omnispindle API key (omni_…). Until you do, it talks to no one."
+ },
+ {
+  "key": "shellomancy.account.madness.keyPlaceholder",
+  "standard": "Paste an omni_ API key",
+  "shellomancer": "Paste an omni_ API key"
+ },
+ {
+  "key": "shellomancy.account.madness.signIn",
+  "standard": "Sign in",
+  "shellomancer": "Bind"
+ },
+ {
+  "key": "shellomancy.account.madness.checking",
+  "standard": "Checking the key…",
+  "shellomancer": "Checking the key…"
+ },
+ {
+  "key": "shellomancy.account.madness.signedInAs",
+  "standard": "Signed in as {{who}}",
+  "shellomancer": "Bound to {{who}}"
+ },
+ {
+  "key": "shellomancy.account.madness.signOut",
+  "standard": "Sign out",
+  "shellomancer": "Unbind"
+ },
+ {
+  "key": "shellomancy.account.madness.getKey",
+  "standard": "Get a key at madnessinteractive.cc",
+  "shellomancer": "Get a key at madnessinteractive.cc"
+ },
+ {
+  "key": "shellomancy.account.madness.errorNotKey",
+  "standard": "That isn't an Omnispindle API key; those start with omni_.",
+  "shellomancer": "That isn't an Omnispindle API key; those start with omni_."
+ },
+ {
+  "key": "shellomancy.account.madness.errorRejected",
+  "standard": "madnessinteractive.cc didn't accept that key (HTTP {{status}}).",
+  "shellomancer": "madnessinteractive.cc didn't accept that key (HTTP {{status}})."
+ },
+ {
+  "key": "shellomancy.account.madness.errorNetwork",
+  "standard": "Couldn't reach madnessinteractive.cc: {{error}}",
+  "shellomancer": "Couldn't reach madnessinteractive.cc: {{error}}"
+ },
+ {
+  "key": "shellomancy.account.madness.errorStorage",
+  "standard": "The key works, but it couldn't be saved to the Keychain: {{error}}",
+  "shellomancer": "The key works, but the Keychain wouldn't keep it: {{error}}"
+ },
+ {
+  "key": "shellomancy.account.cloudOnlyFeature",
+  "standard": "That feature needs a cloud service Shellomancy doesn't use.",
+  "shellomancer": "That one needed a cloud Shellomancy cut loose."
+ }
+]

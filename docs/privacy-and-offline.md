@@ -28,6 +28,7 @@ These are user actions, not Warp services:
 - **Language servers**: enabling one may download it from GitHub, npm or nodejs.org.
 - **Your shell, prompt and plugins**: whatever they do on their own.
 - **Links you click**: they open in your browser.
+- **Signing in to your Madness Interactive account** (Settings › Account): pasting an Omnispindle API key sends one request, `GET https://madnessinteractive.cc/api/auth/user-info`, to check it. The key is then kept in the Keychain. A saved sign-in is restored at startup without a request, and nothing is sent while signed out.
 
 ## Local listeners
 
