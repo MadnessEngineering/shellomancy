@@ -485,3 +485,72 @@ fn in_memory_theme_generation_test() {
         )
     );
 }
+
+#[test]
+fn every_madness_palette_becomes_a_theme_with_its_colours() {
+    let config = WarpThemeConfig::new();
+    let lower = |v: &serde_json::Value| v.as_str().unwrap_or_default().to_lowercase();
+    assert!(madness_themes::palettes().len() >= 13);
+    for palette in madness_themes::palettes() {
+        let kind = ThemeKind::Madness(palette.id.clone());
+        assert_eq!(kind.to_string(), palette.name);
+
+        let theme =
+            madness_theme(palette).unwrap_or_else(|| panic!("{} did not convert", palette.id));
+        assert_eq!(theme.name().as_deref(), Some(palette.name.as_str()));
+        let json = serde_json::to_value(&theme).unwrap();
+        let t = &palette.terminal;
+        assert_eq!(
+            lower(&json["background"]),
+            t.background.to_lowercase(),
+            "{}",
+            palette.id
+        );
+        assert_eq!(
+            lower(&json["foreground"]),
+            t.foreground.to_lowercase(),
+            "{}",
+            palette.id
+        );
+        assert_eq!(
+            lower(&json["accent"]),
+            t.accent.to_lowercase(),
+            "{}",
+            palette.id
+        );
+        assert_eq!(
+            lower(&json["terminal_colors"]["normal"]["red"]),
+            t.normal.red.to_lowercase(),
+            "{}",
+            palette.id
+        );
+        assert_eq!(
+            lower(&json["terminal_colors"]["bright"]["cyan"]),
+            t.bright.cyan.to_lowercase(),
+            "{}",
+            palette.id
+        );
+
+        assert!(
+            config.theme_items().any(|(k, _)| *k == kind),
+            "{} not in the chooser",
+            palette.id
+        );
+    }
+}
+
+#[test]
+fn madness_palettes_list_before_warps_themes_and_keep_the_others() {
+    let config = WarpThemeConfig::new();
+    assert!(ThemeKind::Madness("standard".to_owned()) < ThemeKind::Dark);
+    assert!(config.theme_items().any(|(k, _)| *k == ThemeKind::Dracula));
+}
+
+#[test]
+fn a_chosen_madness_palette_round_trips_through_settings() {
+    let kind = ThemeKind::Madness("mad-laboratory".to_owned());
+    let value = kind.to_file_value();
+    assert_eq!(ThemeKind::from_file_value(&value), Some(kind.clone()));
+    let json = serde_json::to_value(&kind).unwrap();
+    assert_eq!(serde_json::from_value::<ThemeKind>(json).unwrap(), kind);
+}

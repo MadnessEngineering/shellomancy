@@ -45,6 +45,11 @@ pub enum ThemeKind {
     SentReferralReward,
     #[schemars(skip)]
     ReceivedReferralReward,
+    /// Shellomancy: a MadnessThemes palette compiled into the app, by palette id
+    /// (`mad-laboratory`). Declared before Warp's themes, so the chooser lists
+    /// these first.
+    #[schemars(description = "A MadnessThemes palette built into Shellomancy, by id.")]
+    Madness(String),
     #[schemars(description = "Adeberry")]
     Adeberry,
     #[schemars(description = "Phenomenon")]
@@ -136,6 +141,10 @@ impl std::fmt::Display for ThemeKind {
             ThemeKind::Custom(custom_theme) => custom_theme.name.as_str(),
             ThemeKind::CustomBase16(custom_theme) => custom_theme.name.as_str(),
             ThemeKind::InMemory(in_memory_theme) => in_memory_theme.name.as_str(),
+            ThemeKind::Madness(id) => madness_themes::palettes()
+                .iter()
+                .find(|palette| &palette.id == id)
+                .map_or(id.as_str(), |palette| palette.name.as_str()),
         };
         write!(f, "{value}")
     }
@@ -493,6 +502,13 @@ impl WarpThemeConfig {
             (ThemeKind::SolarFlare, solar_flare()),
             (ThemeKind::Adeberry, adeberry()),
         ]);
+        let mut theme_map = theme_map;
+        theme_map.extend(madness_themes::palettes().iter().filter_map(|palette| {
+            Some((
+                ThemeKind::Madness(palette.id.clone()),
+                madness_theme(palette)?,
+            ))
+        }));
         WarpThemeConfig { theme_map }
     }
 
@@ -510,6 +526,38 @@ impl WarpThemeConfig {
 
     pub fn theme(&self, name: &ThemeKind) -> WarpTheme {
         self.theme_map.get(name).cloned().unwrap_or_else(dark_theme)
+    }
+}
+
+/// Shellomancy: a MadnessThemes palette's `terminal` block as a Warp theme. The
+/// block has the same fields a custom theme file does, so it goes through the
+/// same deserializer.
+pub(crate) fn madness_theme(palette: &madness_themes::Palette) -> Option<WarpTheme> {
+    let t = &palette.terminal;
+    let ansi = |c: &madness_themes::AnsiColors| {
+        serde_json::json!({
+            "black": c.black, "red": c.red, "green": c.green, "yellow": c.yellow,
+            "blue": c.blue, "magenta": c.magenta, "cyan": c.cyan, "white": c.white,
+        })
+    };
+    let value = serde_json::json!({
+        "background": t.background,
+        "foreground": t.foreground,
+        "accent": t.accent,
+        "cursor": t.cursor,
+        "details": t.details,
+        "terminal_colors": { "normal": ansi(&t.normal), "bright": ansi(&t.bright) },
+        "name": palette.name,
+    });
+    match serde_json::from_value(value) {
+        Ok(theme) => Some(theme),
+        Err(err) => {
+            log::warn!(
+                "MadnessThemes palette {} is not a valid theme: {err}",
+                palette.id
+            );
+            None
+        }
     }
 }
 

@@ -62,4 +62,8 @@ conflict on them.
 
 Every MadnessThemes palette (`*-colors.json`) carries a `terminal` block:
 background, foreground, accent, cursor, and the 16 ANSI colours.
-`madness_themes::palettes()` exposes them; they are not in the theme picker yet.
+Each one is a built-in theme (`ThemeKind::Madness("<palette id>")`), listed
+first in the theme picker, ahead of Warp's own themes, which stay. Its colours are
+the palette's `terminal` block, read through the same deserializer as a custom
+theme file. To change one, edit the palette in MadnessThemes (`palettetool.py`
+explains the derivation and checks contrast) and bump the submodule.
