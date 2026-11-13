@@ -38,6 +38,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -98,16 +99,17 @@ def themetool(*args):
     return out.stdout
 
 
-def write_voices(entries, scratch):
+def write_voices(entries):
     patches = {
         "standard": {e["key"]: e["standard"] for e in entries},
         "shellomancer": {e["key"]: e["shellomancer"] for e in entries},
         "debug": {e["key"]: e["key"] for e in entries},
     }
-    for voice, patch in patches.items():
-        f = scratch / f"voice_sweep_{voice}.json"
-        f.write_text(json.dumps(patch, ensure_ascii=False))
-        print(themetool("patch", voice, str(f)).strip().splitlines()[-1])
+    with tempfile.TemporaryDirectory() as scratch:
+        for voice, patch in patches.items():
+            f = Path(scratch) / f"{voice}.json"
+            f.write_text(json.dumps(patch, ensure_ascii=False))
+            print(themetool("patch", voice, str(f)).strip().splitlines()[-1])
     others = sorted(p.stem for p in THEMES.glob("*.json")
                     if not p.stem.endswith("-colors") and p.stem not in OWN)
     themetool("sync", "standard", *others)
@@ -130,7 +132,7 @@ def main():
     if args.dry_run:
         return
 
-    write_voices(entries, Path(args.mapping).resolve().parent)
+    write_voices(entries)
     for path, old, new in plan:
         path.write_text(path.read_text().replace(old, new))
     files = sorted({str(path.relative_to(REPO)) for path, _, _ in plan})

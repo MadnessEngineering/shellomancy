@@ -595,7 +595,7 @@ fn make_new_blocks_menu(ctx: &AppContext) -> Menu {
         items.extend(debug_items);
     }
 
-    Menu::new("Blocks", items)
+    Menu::new(madness_themes::t("shellomancy.menu.blocks"), items)
 }
 
 fn make_new_drive_menu(ctx: &AppContext) -> Menu {

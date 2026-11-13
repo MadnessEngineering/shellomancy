@@ -9409,12 +9409,15 @@ impl Workspace {
             async { cli_install::install_warpctrl() },
             |view, result, ctx| {
                 let command_name = ChannelState::channel().warpctrl_command_name();
-                let message = format!("Installed the Warp Control CLI globally. You can now run '{command_name}' from any terminal outside of Warp.");
+                let message = madness_themes::tf(
+                    "shellomancy.workspace.controlCli.installed",
+                    &[("command", command_name)],
+                );
                 let toast = DismissibleToast::success(message);
                 view.handle_cli_command_result(
                     result,
                     toast,
-                    "Failed to install Warp Control command",
+                    madness_themes::t("shellomancy.workspace.controlCli.installFailed"),
                     ctx,
                 );
             },
@@ -9428,13 +9431,12 @@ impl Workspace {
             async { cli_install::uninstall_warpctrl() },
             |view, result, ctx| {
                 let toast = DismissibleToast::success(
-                    "Removed the global Warp Control CLI installation — it still works inside Warp."
-                        .to_string(),
+                    madness_themes::t("shellomancy.workspace.controlCli.removed").to_string(),
                 );
                 view.handle_cli_command_result(
                     result,
                     toast,
-                    "Failed to uninstall Warp Control command",
+                    madness_themes::t("shellomancy.workspace.controlCli.uninstallFailed"),
                     ctx,
                 );
             },
@@ -10078,7 +10080,7 @@ impl Workspace {
 
         #[cfg(not(target_family = "wasm"))]
         items.push(
-            MenuItemFields::new("View Warp logs")
+            MenuItemFields::new(madness_themes::t("shellomancy.palette.viewLogs"))
                 .with_on_select_action(WorkspaceAction::ViewLogs)
                 .into_item(),
         );
@@ -14732,7 +14734,7 @@ impl Workspace {
                         let url = NOTIFICATIONS_TROUBLESHOOT_URL.to_string();
                         view.toast_stack.update(ctx, |toast_stack, ctx| {
                             let toast = DismissibleToast::error(
-                                "Warp doesn't have permission to send desktop notifications."
+                                madness_themes::t("shellomancy.workspace.notificationsDenied")
                                     .to_string(),
                             )
                             .with_link(
@@ -22128,7 +22130,7 @@ impl Workspace {
                 icons::Icon::Lightbulb,
                 &self.mouse_states.resource_center_icon,
                 WorkspaceAction::ToggleResourceCenter,
-                "Warp Essentials".to_string(),
+                madness_themes::t("shellomancy.workspace.resourceCenter").to_string(),
                 self.cached_keybindings[TOGGLE_RESOURCE_CENTER_KEYBINDING_NAME].clone(),
                 false,
                 false,

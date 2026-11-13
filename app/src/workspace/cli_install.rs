@@ -57,6 +57,12 @@ pub fn is_warpctrl_installed() -> bool {
 
 /// Create a symlink with elevated privileges using osascript
 ///
+/// Escapes text for an AppleScript string literal (the admin prompt comes from
+/// the active voice, so it may hold quotes or backslashes).
+fn applescript_escape(text: &str) -> String {
+    text.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
 /// This function uses macOS's osascript to prompt for administrator privileges
 /// and create a symlink
 fn create_symlink_with_admin(source: &Path, target: &Path) -> Result<()> {
@@ -71,8 +77,11 @@ fn create_symlink_with_admin(source: &Path, target: &Path) -> Result<()> {
     let escaped_target = ShellFamily::Posix.shell_escape(target_str);
 
     // Use osascript to run the ln command with admin privileges, with a custom prompt
+    let prompt = applescript_escape(madness_themes::t(
+        "shellomancy.cliInstall.adminPromptInstall",
+    ));
     let script = format!(
-        "do shell script \"ln -sf {escaped_source} {escaped_target}\" with prompt \"Warp needs administrator privileges to install the command in /usr/local/bin.\" with administrator privileges"
+        "do shell script \"ln -sf {escaped_source} {escaped_target}\" with prompt \"{prompt}\" with administrator privileges"
     );
 
     log::debug!("Creating symlink with admin privileges");
@@ -107,8 +116,11 @@ fn remove_file_with_admin(target: &Path) -> Result<()> {
 
     let escaped_target = ShellFamily::Posix.shell_escape(target_str);
 
+    let prompt = applescript_escape(madness_themes::t(
+        "shellomancy.cliInstall.adminPromptUninstall",
+    ));
     let script = format!(
-        "do shell script \"rm {escaped_target}\" with prompt \"Warp needs administrator privileges to uninstall the command from /usr/local/bin.\" with administrator privileges"
+        "do shell script \"rm {escaped_target}\" with prompt \"{prompt}\" with administrator privileges"
     );
 
     log::debug!("Removing file with admin privileges");
@@ -224,18 +236,25 @@ pub fn install_warpctrl() -> Result<()> {
     let warpctrl_source = warpctrl_bundle_source_path()?;
 
     if !warpctrl_source.exists() {
-        return Err(anyhow!(
-            "Cannot install Warp Control CLI: bundled wrapper not found at {}",
-            warpctrl_source.display()
-        ));
+        return Err(anyhow!(madness_themes::tf(
+            "shellomancy.cliInstall.wrapperMissing",
+            &[("path", &warpctrl_source.display().to_string())],
+        )));
     }
 
-    install_symlink(&warpctrl_source, &warpctrl_path, "Warp Control CLI")
+    install_symlink(
+        &warpctrl_source,
+        &warpctrl_path,
+        madness_themes::t("shellomancy.cliInstall.label"),
+    )
 }
 
 /// Uninstall the Warp Control CLI by removing the symlink from /usr/local/bin
 pub fn uninstall_warpctrl() -> Result<()> {
-    uninstall_symlink(&warpctrl_install_target_path(), "Warp Control command")
+    uninstall_symlink(
+        &warpctrl_install_target_path(),
+        madness_themes::t("shellomancy.cliInstall.label"),
+    )
 }
 
 #[cfg(test)]

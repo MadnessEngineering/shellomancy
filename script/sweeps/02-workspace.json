@@ -1,0 +1,205 @@
+[
+ {
+  "key": "shellomancy.app.name",
+  "standard": "Shellomancy",
+  "shellomancer": "Shellomancy"
+ },
+ {
+  "key": "shellomancy.palette.quit",
+  "standard": "Quit Shellomancy",
+  "shellomancer": "Quit Shellomancy",
+  "replace": [
+   {
+    "file": "app/src/workspace/mod.rs",
+    "literal": "Quit Warp",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.palette.installControlCli",
+  "standard": "Install the shellomancy command globally for use outside of Shellomancy",
+  "shellomancer": "Install the shellomancy command for use from any terminal",
+  "replace": [
+   {
+    "file": "app/src/workspace/mod.rs",
+    "literal": "Install Warp Control CLI globally for use outside of Warp",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.palette.uninstallControlCli",
+  "standard": "Undo the global shellomancy command installation (it still works inside Shellomancy)",
+  "shellomancer": "Remove the global shellomancy command (it still works inside Shellomancy)",
+  "replace": [
+   {
+    "file": "app/src/workspace/mod.rs",
+    "literal": "Undo global Warp Control CLI installation (warpctrl will still work within Warp)",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.menu.about",
+  "standard": "About Shellomancy",
+  "shellomancer": "About Shellomancy",
+  "replace": [
+   {
+    "file": "app/src/workspace/mod.rs",
+    "literal": "About Warp",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.palette.openSettingsWarpify",
+  "standard": "Open Settings: Shell integration",
+  "shellomancer": "Open Settings: Enchant",
+  "replace": [
+   {
+    "file": "app/src/workspace/mod.rs",
+    "literal": "Open Settings: Warpify",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.menu.configureWarpify",
+  "standard": "Configure Shell Integration...",
+  "shellomancer": "Configure Enchantments...",
+  "replace": [
+   {
+    "file": "app/src/workspace/mod.rs",
+    "literal": "Configure Warpify...",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.palette.viewLogs",
+  "standard": "View Shellomancy logs",
+  "shellomancer": "View Shellomancy logs",
+  "replace": [
+   {
+    "file": "app/src/workspace/mod.rs",
+    "literal": "View Warp logs",
+    "count": 1
+   },
+   {
+    "file": "app/src/workspace/view.rs",
+    "literal": "View Warp logs",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.cliInstall.adminPromptInstall",
+  "standard": "Shellomancy needs administrator privileges to install the command in /usr/local/bin.",
+  "shellomancer": "Shellomancy needs administrator privileges to install the command in /usr/local/bin."
+ },
+ {
+  "key": "shellomancy.cliInstall.adminPromptUninstall",
+  "standard": "Shellomancy needs administrator privileges to uninstall the command from /usr/local/bin.",
+  "shellomancer": "Shellomancy needs administrator privileges to uninstall the command from /usr/local/bin."
+ },
+ {
+  "key": "shellomancy.cliInstall.wrapperMissing",
+  "standard": "Cannot install the shellomancy command: bundled wrapper not found at {{path}}",
+  "shellomancer": "Cannot install the shellomancy command: bundled wrapper not found at {{path}}"
+ },
+ {
+  "key": "shellomancy.cliInstall.label",
+  "standard": "shellomancy command",
+  "shellomancer": "shellomancy command",
+  "replace": [
+   {
+    "file": "app/src/workspace/cli_install.rs",
+    "literal": "Warp Control CLI",
+    "count": 1
+   },
+   {
+    "file": "app/src/workspace/cli_install.rs",
+    "literal": "Warp Control command",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.workspace.controlCli.installed",
+  "standard": "Installed the shellomancy command globally. You can now run '{{command}}' from any terminal.",
+  "shellomancer": "The shellomancy command is bound. '{{command}}' now answers from any terminal."
+ },
+ {
+  "key": "shellomancy.workspace.controlCli.installFailed",
+  "standard": "Failed to install the shellomancy command",
+  "shellomancer": "Failed to install the shellomancy command",
+  "replace": [
+   {
+    "file": "app/src/workspace/view.rs",
+    "literal": "Failed to install Warp Control command",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.workspace.controlCli.removed",
+  "standard": "Removed the global shellomancy command. It still works inside Shellomancy.",
+  "shellomancer": "Removed the global shellomancy command. It still works inside Shellomancy.",
+  "replace": [
+   {
+    "file": "app/src/workspace/view.rs",
+    "literal": "Removed the global Warp Control CLI installation — it still works inside Warp.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.workspace.controlCli.uninstallFailed",
+  "standard": "Failed to uninstall the shellomancy command",
+  "shellomancer": "Failed to uninstall the shellomancy command",
+  "replace": [
+   {
+    "file": "app/src/workspace/view.rs",
+    "literal": "Failed to uninstall Warp Control command",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.workspace.notificationsDenied",
+  "standard": "Shellomancy doesn't have permission to send desktop notifications.",
+  "shellomancer": "macOS won't let Shellomancy send desktop notifications.",
+  "replace": [
+   {
+    "file": "app/src/workspace/view.rs",
+    "literal": "Warp doesn't have permission to send desktop notifications.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.workspace.resourceCenter",
+  "standard": "Shellomancy Essentials",
+  "shellomancer": "Field Guide",
+  "replace": [
+   {
+    "file": "app/src/workspace/view.rs",
+    "literal": "Warp Essentials",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.menu.blocks",
+  "standard": "Blocks",
+  "shellomancer": "Spells",
+  "replace": [
+   {
+    "file": "app/src/app_menus.rs",
+    "literal": "Blocks",
+    "count": 1
+   }
+  ]
+ }
+]
