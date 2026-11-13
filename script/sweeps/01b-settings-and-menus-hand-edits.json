@@ -1,0 +1,52 @@
+[
+ {
+  "key": "shellomancy.settings.nav.drive",
+  "standard": "Drive",
+  "shellomancer": "Mana Bar"
+ },
+ {
+  "key": "shellomancy.settings.nav.agent",
+  "standard": "Agent",
+  "shellomancer": "Familiars"
+ },
+ {
+  "key": "shellomancy.menu.showSshBlocks",
+  "standard": "Show Integrated SSH Blocks",
+  "shellomancer": "Show Enchanted SSH Spells"
+ },
+ {
+  "key": "shellomancy.menu.hideSshBlocks",
+  "standard": "Hide Integrated SSH Blocks",
+  "shellomancer": "Hide Enchanted SSH Spells"
+ },
+ {
+  "key": "shellomancy.menu.documentation",
+  "standard": "Shellomancy Documentation...",
+  "shellomancer": "Shellomancy Documentation..."
+ },
+ {
+  "key": "shellomancy.menu.issues",
+  "standard": "Shellomancy Issues...",
+  "shellomancer": "Shellomancy Issues..."
+ },
+ {
+  "key": "shellomancy.settings.warpify.reuseControlMasterDescription",
+  "standard": "Attach to a live SSH ControlMaster you already have configured for the destination host instead of creating a Shellomancy-owned one. Takes effect in new tabs.",
+  "shellomancer": "Attach to a live SSH ControlMaster you already have configured for the destination host instead of creating a Shellomancy-owned one. Takes effect in new tabs."
+ },
+ {
+  "key": "shellomancy.settings.warpify.extensionInstallDescription",
+  "standard": "Controls the installation behavior for Shellomancy's SSH extension when a remote host doesn't have it installed.",
+  "shellomancer": "Controls the installation behavior for Shellomancy's SSH extension when a remote host doesn't have it installed."
+ },
+ {
+  "key": "shellomancy.settings.scripting.installed",
+  "standard": "Installed the Shellomancy control CLI. You can now run '{{command}}' from the command line.",
+  "shellomancer": "Control CLI bound. '{{command}}' now answers from any terminal."
+ },
+ {
+  "key": "shellomancy.settings.scripting.installFailed",
+  "standard": "Failed to install the Shellomancy control command: {{error}}",
+  "shellomancer": "Failed to install the Shellomancy control command: {{error}}"
+ }
+]

@@ -93,7 +93,10 @@ fn match_data_countable_zero_is_not_truthy() {
 
 #[test]
 fn subpage_display_names_are_correct() {
-    assert_eq!(SettingsSection::WarpAgent.to_string(), "Warp Agent");
+    assert_eq!(
+        SettingsSection::WarpAgent.to_string(),
+        madness_themes::t("shellomancy.settings.nav.agent")
+    );
     assert_eq!(SettingsSection::AgentProfiles.to_string(), "Profiles");
     assert_eq!(SettingsSection::AgentMCPServers.to_string(), "MCP servers");
     assert_eq!(SettingsSection::Knowledge.to_string(), "Knowledge");
@@ -153,8 +156,14 @@ const ALL_SECTIONS: &[SettingsSection] = &[
 /// Sections whose user-facing Display label has deliberately diverged from the
 /// slug it was seeded from, because the slug is a stored contract that the
 /// rename must not follow.
-const SECTIONS_WITH_RENAMED_DISPLAY_LABELS: &[SettingsSection] =
-    &[SettingsSection::WarpCloudAgentAPIKeys];
+const SECTIONS_WITH_RENAMED_DISPLAY_LABELS: &[SettingsSection] = &[
+    SettingsSection::WarpCloudAgentAPIKeys,
+    // Shellomancy: these read from the MadnessThemes voice now; their slugs
+    // ("Warp Drive", "Warp Agent", "Warpify") stay as the stored contract.
+    SettingsSection::WarpDrive,
+    SettingsSection::WarpAgent,
+    SettingsSection::Warpify,
+];
 
 #[test]
 fn all_sections_list_is_exhaustive() {
@@ -242,6 +251,24 @@ fn renamed_sections_keep_the_slug_they_were_seeded_with() {
         SettingsSection::WarpCloudAgentAPIKeys.slug(),
         "Oz Cloud API Keys"
     );
+}
+
+#[test]
+fn voiced_sections_keep_their_warp_slugs_and_never_display_warp() {
+    // Shellomancy: the label comes from the active voice; the slug is what
+    // deep links and saved sessions store, so it keeps Warp's spelling.
+    for (section, slug) in [
+        (SettingsSection::WarpDrive, "Warp Drive"),
+        (SettingsSection::WarpAgent, "Warp Agent"),
+        (SettingsSection::Warpify, "Warpify"),
+    ] {
+        assert_eq!(section.slug(), slug);
+        assert_eq!(SettingsSection::from_slug(slug), Some(section));
+        assert!(
+            !section.to_string().contains("Warp"),
+            "{section:?}: {section}"
+        );
+    }
 }
 
 #[test]
@@ -1171,7 +1198,10 @@ fn offline_build_hides_warp_cloud_pages_only() {
         SettingsSection::WarpAgent,
         SettingsSection::CloudEnvironments,
     ] {
-        assert!(is_hidden_in_offline_build(hidden), "{hidden:?} should be hidden");
+        assert!(
+            is_hidden_in_offline_build(hidden),
+            "{hidden:?} should be hidden"
+        );
     }
     for shown in [
         SettingsSection::Appearance,
@@ -1181,6 +1211,9 @@ fn offline_build_hides_warp_cloud_pages_only() {
         SettingsSection::ThirdPartyCLIAgents,
         SettingsSection::About,
     ] {
-        assert!(!is_hidden_in_offline_build(shown), "{shown:?} should stay visible");
+        assert!(
+            !is_hidden_in_offline_build(shown),
+            "{shown:?} should stay visible"
+        );
     }
 }

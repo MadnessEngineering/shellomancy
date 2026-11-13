@@ -120,8 +120,9 @@ impl ScriptingSettingsPageView {
                 match result {
                     Ok(()) => {
                         let command_name = ChannelState::channel().warpctrl_command_name();
-                        let message = format!(
-                            "Successfully installed the Warp Control CLI! You can now run '{command_name}' from the command line."
+                        let message = madness_themes::tf(
+                            "shellomancy.settings.scripting.installed",
+                            &[("command", &command_name)],
                         );
                         ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
                             toast_stack.add_ephemeral_toast(
@@ -132,7 +133,10 @@ impl ScriptingSettingsPageView {
                         });
                     }
                     Err(error) => {
-                        let message = format!("Failed to install Warp Control command: {error}");
+                        let message = madness_themes::tf(
+                            "shellomancy.settings.scripting.installFailed",
+                            &[("error", &error.to_string())],
+                        );
                         log::warn!("{message}");
                         ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
                             toast_stack.add_persistent_toast(
@@ -259,13 +263,16 @@ impl SettingsWidget for WarpControlCliInstallWidget {
         };
 
         render_body_item::<ScriptingSettingsPageAction>(
-            "Warp Control CLI command".into(),
+            madness_themes::t("shellomancy.settings.scripting.cliCommand").into(),
             None,
             LocalOnlyIconState::Hidden,
             ToggleState::Enabled,
             appearance,
             button,
-            Some("Install the warpctrl command for scripting Warp from your terminal.".to_owned()),
+            Some(
+                madness_themes::t("shellomancy.settings.scripting.cliCommandDescription")
+                    .to_owned(),
+            ),
         )
     }
 }
@@ -296,7 +303,7 @@ impl SettingsWidget for LocalControlModeWidget {
             ToggleState::Enabled,
             appearance,
             ChildView::new(&view.local_control_mode_dropdown).finish(),
-            Some("warpctrl allows for scripting Warp's UI. Use with care.".to_owned()),
+            Some(madness_themes::t("shellomancy.settings.scripting.modeDescription").to_owned()),
         )
     }
 }

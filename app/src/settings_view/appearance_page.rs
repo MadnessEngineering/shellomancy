@@ -249,7 +249,7 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
     // Add command palette entry for toggling between Warp and Classic input modes
     app.register_fixed_bindings(vec![
         FixedBinding::empty(
-            "Toggle Input Mode (Warp/Classic)".to_string(),
+            madness_themes::t("shellomancy.settings.appearance.toggleInputModeBinding").to_string(),
             builder(SettingsAction::AppearancePageToggle(
                 AppearancePageAction::ToggleInputMode,
             )),
@@ -1666,7 +1666,9 @@ impl AppearanceSettingsPageView {
 
     fn input_mode_dropdown_item_label(val: InputMode) -> &'static str {
         match val {
-            InputMode::PinnedToBottom => "Pin to the bottom (Warp mode)",
+            InputMode::PinnedToBottom => {
+                madness_themes::t("shellomancy.settings.appearance.inputPinnedBottom")
+            }
             InputMode::PinnedToTop => "Pin to the top (Reverse mode)",
             InputMode::Waterfall => "Start at the top (Classic mode)",
         }
@@ -3155,7 +3157,7 @@ impl SettingsWidget for CustomAppIconWidget {
         );
 
         let show_dock_icon_toggle = render_body_item::<AppearancePageAction>(
-            "Show Warp in Dock".into(),
+            madness_themes::t("shellomancy.settings.appearance.showInDock").into(),
             None,
             LocalOnlyIconState::for_setting(
                 ShowDockIconState::storage_key(),
@@ -3195,13 +3197,11 @@ impl SettingsWidget for CustomAppIconWidget {
                     appearance
                         .ui_builder()
                         .wrappable_text(
-                            "You may need to restart Warp for MacOS to apply the preferred icon style.",
+                            madness_themes::t("shellomancy.settings.appearance.iconRestartNote"),
                             true,
                         )
                         .with_style(UiComponentStyles {
-                            font_color: Some(
-                                theme.sub_text_color(theme.background()).into_solid(),
-                            ),
+                            font_color: Some(theme.sub_text_color(theme.background()).into_solid()),
                             margin: Some(Coords::default().bottom(8.)),
                             ..Default::default()
                         })
@@ -3784,7 +3784,7 @@ impl SettingsWidget for ToolsPanelWarpDriveWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         render_body_item::<AppearancePageAction>(
-            "Warp Drive".to_string(),
+            madness_themes::t("shellomancy.settings.appearance.toolsPanelDrive").to_string(),
             None,
             LocalOnlyIconState::Hidden,
             ToggleState::Enabled,
@@ -3798,7 +3798,10 @@ impl SettingsWidget for ToolsPanelWarpDriveWidget {
                     evt_ctx.dispatch_typed_action(AppearancePageAction::ToggleToolsPanelWarpDrive);
                 })
                 .finish(),
-            Some("Show the Warp Drive tab in the tools panel.".to_string()),
+            Some(
+                madness_themes::t("shellomancy.settings.appearance.toolsPanelDriveDescription")
+                    .to_string(),
+            ),
         )
     }
 }
@@ -3834,7 +3837,9 @@ impl SettingsWidget for InputTypeWidget {
             .radio_buttons(
                 self.radio_buttons_states.clone(),
                 vec![
-                    RadioButtonItem::text("Warp"),
+                    RadioButtonItem::text(madness_themes::t(
+                        "shellomancy.settings.appearance.promptTypeShellomancy",
+                    )),
                     RadioButtonItem::text("Shell (PS1)"),
                 ],
                 view.input_type_radio_state.clone(),

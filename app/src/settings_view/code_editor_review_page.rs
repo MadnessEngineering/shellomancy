@@ -693,10 +693,7 @@ impl SettingsWidget for AutoSaveToggleWidget {
                     ctx.dispatch_typed_action(EditorAndCodeReviewPageAction::ToggleAutoSave);
                 })
                 .finish(),
-            Some(
-                "Automatically saves changes in the Warp text editor as you type and when the editor loses focus."
-                    .into(),
-            ),
+            Some(madness_themes::t("shellomancy.settings.codeEditor.autosave").into()),
         )
     }
 }

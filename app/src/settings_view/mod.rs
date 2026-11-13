@@ -369,8 +369,15 @@ impl Display for SettingsSection {
             SettingsSection::Keybindings => write!(f, "Keyboard shortcuts"),
             SettingsSection::SharedBlocks => write!(f, "Shared blocks"),
             SettingsSection::Scripting => write!(f, "Scripting"),
-            SettingsSection::WarpDrive => write!(f, "Warp Drive"),
-            SettingsSection::WarpAgent => write!(f, "Warp Agent"),
+            SettingsSection::WarpDrive => {
+                f.write_str(madness_themes::t("shellomancy.settings.nav.drive"))
+            }
+            SettingsSection::WarpAgent => {
+                f.write_str(madness_themes::t("shellomancy.settings.nav.agent"))
+            }
+            SettingsSection::Warpify => {
+                f.write_str(madness_themes::t("shellomancy.settings.warpify.title"))
+            }
             SettingsSection::AgentProfiles => write!(f, "Profiles"),
             SettingsSection::AgentMCPServers => write!(f, "MCP servers"),
             SettingsSection::Knowledge => write!(f, "Knowledge"),

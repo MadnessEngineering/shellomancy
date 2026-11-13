@@ -1,0 +1,350 @@
+[
+ {
+  "key": "shellomancy.settings.appearance.toggleInputModeBinding",
+  "standard": "Toggle Input Mode (Shellomancy/Classic)",
+  "shellomancer": "Toggle Input Mode (Shellomancy/Classic)",
+  "replace": [
+   {
+    "file": "app/src/settings_view/appearance_page.rs",
+    "literal": "Toggle Input Mode (Warp/Classic)",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.appearance.inputPinnedBottom",
+  "standard": "Pin to the bottom (Shellomancy mode)",
+  "shellomancer": "Pin to the bottom (Shellomancy mode)",
+  "replace": [
+   {
+    "file": "app/src/settings_view/appearance_page.rs",
+    "literal": "Pin to the bottom (Warp mode)",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.appearance.showInDock",
+  "standard": "Show Shellomancy in Dock",
+  "shellomancer": "Show Shellomancy in Dock",
+  "replace": [
+   {
+    "file": "app/src/settings_view/appearance_page.rs",
+    "literal": "Show Warp in Dock",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.appearance.iconRestartNote",
+  "standard": "You may need to restart Shellomancy for macOS to apply the icon style.",
+  "shellomancer": "macOS may not honor the new icon until Shellomancy restarts.",
+  "replace": [
+   {
+    "file": "app/src/settings_view/appearance_page.rs",
+    "literal": "You may need to restart Warp for MacOS to apply the preferred icon style.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.appearance.toolsPanelDrive",
+  "standard": "Drive",
+  "shellomancer": "Mana Bar",
+  "replace": [
+   {
+    "file": "app/src/settings_view/appearance_page.rs",
+    "literal": "Warp Drive",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.appearance.toolsPanelDriveDescription",
+  "standard": "Show the Drive tab in the tools panel.",
+  "shellomancer": "Show the Mana Bar in the tools panel.",
+  "replace": [
+   {
+    "file": "app/src/settings_view/appearance_page.rs",
+    "literal": "Show the Warp Drive tab in the tools panel.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.appearance.promptTypeShellomancy",
+  "standard": "Shellomancy",
+  "shellomancer": "Shellomancy",
+  "replace": [
+   {
+    "file": "app/src/settings_view/appearance_page.rs",
+    "literal": "Warp",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.features.makeDefaultTerminal",
+  "standard": "Make Shellomancy the default terminal",
+  "shellomancer": "Make Shellomancy the default terminal",
+  "replace": [
+   {
+    "file": "app/src/settings_view/features_page.rs",
+    "literal": "Make Warp the default terminal",
+    "count": 2
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.features.startAtLoginMac",
+  "standard": "Start Shellomancy at login (requires macOS 13+)",
+  "shellomancer": "Start Shellomancy at login (requires macOS 13+)",
+  "replace": [
+   {
+    "file": "app/src/settings_view/features_page.rs",
+    "literal": "Start Warp at login (requires macOS 13+)",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.features.startAtLogin",
+  "standard": "Start Shellomancy at login",
+  "shellomancer": "Start Shellomancy at login",
+  "replace": [
+   {
+    "file": "app/src/settings_view/features_page.rs",
+    "literal": "Start Warp at login",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.features.isDefaultTerminal",
+  "standard": "Shellomancy is the default terminal",
+  "shellomancer": "Shellomancy is the default terminal",
+  "replace": [
+   {
+    "file": "app/src/settings_view/features_page.rs",
+    "literal": "Warp is the default terminal",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.features.desktopNotifications",
+  "standard": "Receive desktop notifications from Shellomancy",
+  "shellomancer": "Receive desktop notifications from Shellomancy",
+  "replace": [
+   {
+    "file": "app/src/settings_view/features_page.rs",
+    "literal": "Receive desktop notifications from Warp",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.features.completions",
+  "standard": "Shellomancy completions",
+  "shellomancer": "Shellomancy completions",
+  "replace": [
+   {
+    "file": "app/src/settings_view/features_page.rs",
+    "literal": "Warp completions",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.features.restartForX11",
+  "standard": "\n\nRestart Shellomancy for changes to take effect.",
+  "shellomancer": "\n\nRestart Shellomancy for changes to take effect.",
+  "replace": [
+   {
+    "file": "app/src/settings_view/features_page.rs",
+    "literal": "\\n\\nRestart Warp for changes to take effect.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.warpify.sshToggleBinding",
+  "standard": "SSH integration",
+  "shellomancer": "SSH enchantment",
+  "replace": [
+   {
+    "file": "app/src/settings_view/warpify_page.rs",
+    "literal": "SSH Warpification",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.warpify.sshSubtitle",
+  "standard": "Integrate Shellomancy with your interactive SSH sessions.",
+  "shellomancer": "Enchant SSH sessions so spells, scrying, and completions work there too.",
+  "replace": [
+   {
+    "file": "app/src/settings_view/warpify_page.rs",
+    "literal": "Warpify your interactive SSH sessions.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.warpify.title",
+  "standard": "Shell integration",
+  "shellomancer": "Enchant",
+  "replace": [
+   {
+    "file": "app/src/settings_view/warpify_page.rs",
+    "literal": "Warpify",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.warpify.sshSessions",
+  "standard": "Integrate SSH sessions",
+  "shellomancer": "Enchant SSH sessions",
+  "replace": [
+   {
+    "file": "app/src/settings_view/warpify_page.rs",
+    "literal": "Warpify SSH Sessions",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.scripting.cliCommand",
+  "standard": "Shellomancy control CLI command",
+  "shellomancer": "The shellomancy command",
+  "replace": [
+   {
+    "file": "app/src/settings_view/scripting_page.rs",
+    "literal": "Warp Control CLI command",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.scripting.cliCommandDescription",
+  "standard": "Install the shellomancy command for scripting Shellomancy from your terminal.",
+  "shellomancer": "Install the shellomancy command so scripts can reach into Shellomancy from any terminal.",
+  "replace": [
+   {
+    "file": "app/src/settings_view/scripting_page.rs",
+    "literal": "Install the warpctrl command for scripting Warp from your terminal.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.scripting.modeDescription",
+  "standard": "The shellomancy command can script Shellomancy's UI. Use with care.",
+  "shellomancer": "The shellomancy command can script Shellomancy's UI. It does exactly what it's told.",
+  "replace": [
+   {
+    "file": "app/src/settings_view/scripting_page.rs",
+    "literal": "warpctrl allows for scripting Warp's UI. Use with care.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.externalEditor.shellomancy",
+  "standard": "Shellomancy",
+  "shellomancer": "Shellomancy",
+  "replace": [
+   {
+    "file": "app/src/settings_view/features/external_editor.rs",
+    "literal": "Warp",
+    "count": 2
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.externalEditor.layout",
+  "standard": "Choose a layout to open files in Shellomancy",
+  "shellomancer": "Choose a layout to open files in Shellomancy",
+  "replace": [
+   {
+    "file": "app/src/settings_view/features/external_editor.rs",
+    "literal": "Choose a layout to open files in Warp",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.externalEditor.markdownViewer",
+  "standard": "Open Markdown files in Shellomancy's Markdown viewer by default",
+  "shellomancer": "Open Markdown files in Shellomancy's own viewer by default",
+  "replace": [
+   {
+    "file": "app/src/settings_view/features/external_editor.rs",
+    "literal": "Open Markdown files in Warp's Markdown Viewer by default",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.codeEditor.autosave",
+  "standard": "Automatically saves changes in Shellomancy's text editor as you type and when the editor loses focus.",
+  "shellomancer": "Automatically saves changes in Shellomancy's text editor as you type and when the editor loses focus.",
+  "replace": [
+   {
+    "file": "app/src/settings_view/code_editor_review_page.rs",
+    "literal": "Automatically saves changes in the Warp text editor as you type and when the editor loses focus.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.settings.cliAgents.requiresPlugin",
+  "standard": "Requires the Shellomancy plugin for your coding agent",
+  "shellomancer": "Requires the Shellomancy plugin for your familiar",
+  "replace": [
+   {
+    "file": "app/src/settings_view/cli_agents_page.rs",
+    "literal": "Requires the Warp plugin for your coding agent",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.menu.app",
+  "standard": "Shellomancy",
+  "shellomancer": "Shellomancy",
+  "replace": [
+   {
+    "file": "app/src/app_menus.rs",
+    "literal": "Warp",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.menu.setDefaultTerminal",
+  "standard": "Set Shellomancy as Default Terminal",
+  "shellomancer": "Set Shellomancy as Default Terminal",
+  "replace": [
+   {
+    "file": "app/src/app_menus.rs",
+    "literal": "Set Warp as Default Terminal",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.menu.useShellomancyPrompt",
+  "standard": "Use Shellomancy's Prompt",
+  "shellomancer": "Use Shellomancy's Prompt",
+  "replace": [
+   {
+    "file": "app/src/app_menus.rs",
+    "literal": "Use Warp's Prompt",
+    "count": 1
+   }
+  ]
+ }
+]
