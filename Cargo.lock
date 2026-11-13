@@ -8142,6 +8142,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "670fdfda89751bc4a84ac13eaa63e205cf0fd22b4c9a5fbfa085b63c1f1d3a30"
 
 [[package]]
+name = "madness_themes"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "malloc_buf"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15373,6 +15381,7 @@ dependencies = [
  "lsp-types",
  "lz4_flex 0.11.6",
  "mach2 0.5.0",
+ "madness_themes",
  "markdown_parser",
  "mcp",
  "memchr",

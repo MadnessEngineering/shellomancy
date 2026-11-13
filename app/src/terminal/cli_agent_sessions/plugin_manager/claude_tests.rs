@@ -322,7 +322,10 @@ fn bundled_marketplace_manifest_matches_minimum_version() {
 
 #[test]
 fn shell_quote_wraps_and_escapes_single_quotes() {
-    assert_eq!(shell_quote("/Apps/Shello mancy.app"), "'/Apps/Shello mancy.app'");
+    assert_eq!(
+        shell_quote("/Apps/Shello mancy.app"),
+        "'/Apps/Shello mancy.app'"
+    );
     assert_eq!(shell_quote("it's"), "'it'\\''s'");
 }
 

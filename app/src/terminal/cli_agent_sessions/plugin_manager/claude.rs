@@ -168,11 +168,11 @@ impl CliAgentPluginManager for ClaudeCodePluginManager {
     }
 
     fn install_success_message(&self) -> &'static str {
-        "Shellomancy plugin installed. Run /reload-plugins to wake it."
+        madness_themes::t("shellomancy.plugin.claudeInstalled")
     }
 
     fn update_success_message(&self) -> &'static str {
-        "Shellomancy plugin updated. Run /reload-plugins to wake it."
+        madness_themes::t("shellomancy.plugin.claudeUpdated")
     }
 
     fn install_instructions(&self) -> &'static PluginInstructions {
@@ -304,7 +304,11 @@ fn bundled_marketplace_dir() -> Result<PathBuf, String> {
     let dir = warp_core::paths::bundled_resources_dir()
         .ok_or_else(|| "Could not locate Shellomancy's bundled resources".to_owned())?
         .join(BUNDLED_MARKETPLACE_SUBDIR);
-    if !dir.join(".claude-plugin").join("marketplace.json").is_file() {
+    if !dir
+        .join(".claude-plugin")
+        .join("marketplace.json")
+        .is_file()
+    {
         return Err(format!(
             "This Shellomancy build has no bundled Claude Code plugin at {}",
             dir.display()

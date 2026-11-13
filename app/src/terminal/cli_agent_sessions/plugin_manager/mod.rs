@@ -200,12 +200,12 @@ pub(crate) trait CliAgentPluginManager: Send + Sync {
 
     /// Toast message shown after a successful auto-install.
     fn install_success_message(&self) -> &'static str {
-        "Shellomancy plugin installed. Restart the session to wake it."
+        madness_themes::t("shellomancy.plugin.installed")
     }
 
     /// Toast message shown after a successful auto-update.
     fn update_success_message(&self) -> &'static str {
-        "Shellomancy plugin updated. Restart the session to wake it."
+        madness_themes::t("shellomancy.plugin.updated")
     }
 
     /// Manual installation instructions for the modal UI.
