@@ -1643,10 +1643,10 @@ fn add_open_setting_pages_as_editable_binding(app: &mut AppContext) {
         .with_context_predicate(id!("Workspace")),
         EditableBinding::new(
             "workspace:show_settings_warpify_page",
-            BindingDescription::new(madness_themes::t("shellomancy.palette.openSettingsWarpify"))
+            BindingDescription::new(madness_themes::t("shellomancy.palette.openSettingsIntegration"))
                 .with_custom_description(
                     bindings::MAC_MENUS_CONTEXT,
-                    madness_themes::t("shellomancy.menu.configureWarpify"),
+                    madness_themes::t("shellomancy.menu.configureIntegration"),
                 ),
             WorkspaceAction::ShowSettingsPage(SettingsSection::Warpify),
         )

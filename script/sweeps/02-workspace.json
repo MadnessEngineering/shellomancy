@@ -53,7 +53,7 @@
   ]
  },
  {
-  "key": "shellomancy.palette.openSettingsWarpify",
+  "key": "shellomancy.palette.openSettingsIntegration",
   "standard": "Open Settings: Shell integration",
   "shellomancer": "Open Settings: Enchant",
   "replace": [
@@ -65,7 +65,7 @@
   ]
  },
  {
-  "key": "shellomancy.menu.configureWarpify",
+  "key": "shellomancy.menu.configureIntegration",
   "standard": "Configure Shell Integration...",
   "shellomancer": "Configure Enchantments...",
   "replace": [

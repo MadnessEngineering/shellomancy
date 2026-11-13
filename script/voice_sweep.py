@@ -22,6 +22,9 @@ Mapping file: a JSON list of entries.
         {"file": "app/src/settings_view/appearance_page.rs",
          "literal": "Warp Drive",     # as written between the quotes
          "count": 1,                  # occurrences expected in that file
+         "exact": null,               # optional: match this source snippet
+                                      # instead (it must contain the quoted
+                                      # literal), e.g. to skip a comment
          "code": null}                # optional replacement, default t(key)
       ]
     }
@@ -60,6 +63,8 @@ def load(path):
             fail(f"key must start with shellomancy.: {key!r}")
         if key in keys:
             fail(f"duplicate key {key}")
+        if WARP.search(key):
+            fail(f"key says Warp (the debug voice shows keys as text): {key}")
         keys.add(key)
         for voice in ("standard", "shellomancer"):
             text = e.get(voice)
@@ -81,8 +86,15 @@ def plan_replacements(entries):
                 if not path.is_file():
                     fail(f"{e['key']}: no such file {r['file']}")
                 texts[path] = path.read_text()
-            old = f'"{r["literal"]}"'
-            new = r.get("code") or f'madness_themes::t("{e["key"]}")'
+            call = f'madness_themes::t("{e["key"]}")'
+            if "exact" in r:
+                # A precise source snippet, for a literal that also appears
+                # somewhere it must not change (a comment, an identifier).
+                old = r["exact"]
+                new = r.get("code") or old.replace(f'"{r["literal"]}"', call)
+            else:
+                old = f'"{r["literal"]}"'
+                new = r.get("code") or call
             found = texts[path].count(old)
             want = r.get("count", 1)
             if found != want:

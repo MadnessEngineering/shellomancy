@@ -108,21 +108,21 @@ impl WarpifySuccessBlock {
                 })
             })
         };
-        let auto_warpify_snippet = auto_warpify_snippet.map(|(output_grid, can_write_to_rc)| {
-            AutoWarpifySnippet {
+        let auto_warpify_snippet =
+            auto_warpify_snippet.map(|(output_grid, can_write_to_rc)| AutoWarpifySnippet {
                 description: (if !output_grid.is_empty() {
-                    "Run the following to automatically Warpify in the future:"
+                    madness_themes::t("shellomancy.terminal.warpifyRunInFuture")
                 } else {
-                    "In remote subshells, Warp runs commands in the background to power completions, syntax highlighting, and other features."
-                }).into(),
+                    madness_themes::t("shellomancy.terminal.warpifyRemoteNote")
+                })
+                .into(),
                 output_grid: output_grid.into(),
                 selection_handle: Default::default(),
                 selected_text: Default::default(),
                 code_snippet_handles: Default::default(),
                 shell_type: shell.shell_type(),
                 can_write_to_rc,
-            }
-        });
+            });
 
         Self {
             source,
@@ -151,7 +151,7 @@ impl WarpifySuccessBlock {
 
     pub fn render_title_ui(&self, theme: &WarpTheme, appearance: &Appearance) -> Box<dyn Element> {
         let header_contents = render::build_header_row(
-            "Session Warpified",
+            madness_themes::t("shellomancy.terminal.sessionIntegrated"),
             Icon::new(UiIcon::Warp.into(), theme.active_ui_detail()),
             theme,
             appearance,

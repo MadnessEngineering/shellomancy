@@ -842,16 +842,16 @@ impl NotificationsTrigger {
     pub fn discovery_banner_copy(&self) -> &'static str {
         match self {
             NotificationsTrigger::LongRunningCommand(..) => {
-                "Warp can notify you when long-running commands finish."
+                madness_themes::t("shellomancy.terminal.notify.longRunning")
             }
             NotificationsTrigger::AgentTaskCompleted(..) => {
-                "Warp can notify you when an agent finishes responding."
+                madness_themes::t("shellomancy.terminal.notify.agentDone")
             }
             NotificationsTrigger::NeedsAttention => {
-                "Warp can notify you when a command or agent needs your attention."
+                madness_themes::t("shellomancy.terminal.notify.attention")
             }
             NotificationsTrigger::PasswordPrompt => {
-                "Warp can notify you when you're prompted to enter a password."
+                madness_themes::t("shellomancy.terminal.notify.password")
             }
         }
     }
@@ -4015,9 +4015,9 @@ impl TerminalView {
 
         let incompatible_configuration_banner = ctx.add_typed_action_view(|_| {
             Banner::new(BannerTextContent::formatted_text(vec![
-                FormattedTextFragment::plain_text(
-                    "Your shell configuration is incompatible with Warp...  ",
-                ),
+                FormattedTextFragment::plain_text(madness_themes::t(
+                    "shellomancy.terminal.shellIncompatible",
+                )),
                 FormattedTextFragment::hyperlink("More info", KNOWN_ISSUES_URL),
             ]))
         });
@@ -10560,12 +10560,17 @@ impl TerminalView {
         }
 
         let a11y_message = match &warpify_keybinding {
-            Some(keystroke) => format!(
-                "You can press {} to Warpify this {} for more Warp features.",
-                keystroke.displayed(),
-                lowercase_title
+            Some(keystroke) => madness_themes::tf(
+                "shellomancy.terminal.warpifyHintWithKey",
+                &[
+                    ("key", &keystroke.displayed()),
+                    ("session", &lowercase_title),
+                ],
             ),
-            None => format!("You can Warpify this {lowercase_title} for more Warp features."),
+            None => madness_themes::tf(
+                "shellomancy.terminal.warpifyHint",
+                &[("session", &lowercase_title)],
+            ),
         };
 
         model
@@ -10723,7 +10728,7 @@ impl TerminalView {
 
         let a11y_content = AccessibilityContent::new(
             banner_title,
-            "Make sure you have enabled access for Warp notifications in System Preferences.",
+            madness_themes::t("shellomancy.terminal.notify.permissionHint"),
             WarpA11yRole::TextRole,
         );
         ctx.emit_a11y_content(a11y_content);
@@ -17636,9 +17641,11 @@ impl TerminalView {
 
                             if renders_in_warp_notebook_viewer(&path) {
                                 items.push(
-                                    MenuItemFields::new("Open in Warp")
-                                        .with_on_select_action(TerminalAction::OpenFileInWarp(path))
-                                        .into_item(),
+                                    MenuItemFields::new(madness_themes::t(
+                                        "shellomancy.terminal.openInShellomancy",
+                                    ))
+                                    .with_on_select_action(TerminalAction::OpenFileInWarp(path))
+                                    .into_item(),
                                 );
                                 // Because the default for cmd-click is to open in Warp, we also
                                 // have an open-in-editor option.
@@ -23604,7 +23611,9 @@ impl TerminalView {
         let show_banner = if honor_ps1 {
             let banner_content = if shell_plugins.contains("p10k_unsupported") {
                 Some(BannerTextContent::formatted_text(vec![
-                    FormattedTextFragment::bold("Powerlevel10k now supports Warp!  "),
+                    FormattedTextFragment::bold(madness_themes::t(
+                        "shellomancy.terminal.p10kSupport",
+                    )),
                     FormattedTextFragment::plain_text(
                         "You seem to be running an older (unsupported) version, please follow ",
                     ),
@@ -27734,7 +27743,7 @@ impl TypedActionView for TerminalView {
                 WarpA11yRole::TextareaRole,
             )),
             ShowWarpifySettings => Custom(AccessibilityContent::new_without_help(
-                "Opened Warpify Settings",
+                madness_themes::t("shellomancy.terminal.a11y.openedIntegrationSettings"),
                 WarpA11yRole::ButtonRole,
             )),
             OpenFilesPalette { .. } => Custom(AccessibilityContent::new_without_help(

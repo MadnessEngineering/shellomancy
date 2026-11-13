@@ -269,7 +269,7 @@ static INSTALL_INSTRUCTIONS: LazyLock<PluginInstructions> = LazyLock::new(|| Plu
 
 static UPDATE_INSTRUCTIONS: LazyLock<PluginInstructions> = LazyLock::new(|| PluginInstructions {
     title: "Rebind Shellomancy to Claude Code",
-    subtitle: "Run the following commands. They retire Warp's plugin if it is still installed.",
+    subtitle: madness_themes::t("shellomancy.plugin.claudeUpdateSubtitle"),
     steps: Box::leak(Box::new([
         PluginInstructionStep {
             description: "Retire Warp's plugin (if present)",

@@ -1,0 +1,519 @@
+[
+ {
+  "key": "shellomancy.terminal.notify.longRunning",
+  "standard": "Shellomancy can notify you when long-running commands finish.",
+  "shellomancer": "Shellomancy can tell you when a long spell finishes.",
+  "replace": [
+   {
+    "file": "app/src/terminal/view.rs",
+    "literal": "Warp can notify you when long-running commands finish.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.notify.agentDone",
+  "standard": "Shellomancy can notify you when an agent finishes responding.",
+  "shellomancer": "Shellomancy can tell you when your familiar finishes.",
+  "replace": [
+   {
+    "file": "app/src/terminal/view.rs",
+    "literal": "Warp can notify you when an agent finishes responding.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.notify.attention",
+  "standard": "Shellomancy can notify you when a command or agent needs your attention.",
+  "shellomancer": "Shellomancy can tell you when a spell or familiar needs you.",
+  "replace": [
+   {
+    "file": "app/src/terminal/view.rs",
+    "literal": "Warp can notify you when a command or agent needs your attention.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.notify.password",
+  "standard": "Shellomancy can notify you when you're prompted to enter a password.",
+  "shellomancer": "Shellomancy can tell you when something asks for your password.",
+  "replace": [
+   {
+    "file": "app/src/terminal/view.rs",
+    "literal": "Warp can notify you when you're prompted to enter a password.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.notify.permissionHint",
+  "standard": "Make sure notifications for Shellomancy are allowed in System Settings.",
+  "shellomancer": "Make sure notifications for Shellomancy are allowed in System Settings.",
+  "replace": [
+   {
+    "file": "app/src/terminal/view.rs",
+    "literal": "Make sure you have enabled access for Warp notifications in System Preferences.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.shellIncompatible",
+  "standard": "Your shell configuration is incompatible with Shellomancy...  ",
+  "shellomancer": "Your shell configuration and Shellomancy don't agree...  ",
+  "replace": [
+   {
+    "file": "app/src/terminal/view.rs",
+    "literal": "Your shell configuration is incompatible with Warp...  ",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.warpifyHintWithKey",
+  "standard": "You can press {{key}} to integrate Shellomancy with this {{session}} for more features.",
+  "shellomancer": "Press {{key}} to enchant this {{session}}."
+ },
+ {
+  "key": "shellomancy.terminal.warpifyHint",
+  "standard": "You can integrate Shellomancy with this {{session}} for more features.",
+  "shellomancer": "This {{session}} can be enchanted."
+ },
+ {
+  "key": "shellomancy.terminal.openInShellomancy",
+  "standard": "Open in Shellomancy",
+  "shellomancer": "Open in Shellomancy",
+  "replace": [
+   {
+    "file": "app/src/terminal/view.rs",
+    "literal": "Open in Warp",
+    "exact": "MenuItemFields::new(\"Open in Warp\")",
+    "count": 1
+   },
+   {
+    "file": "app/src/terminal/view/tooltips.rs",
+    "literal": "Open in Warp",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.p10kSupport",
+  "standard": "Powerlevel10k works with Shellomancy.  ",
+  "shellomancer": "Powerlevel10k works with Shellomancy.  ",
+  "replace": [
+   {
+    "file": "app/src/terminal/view.rs",
+    "literal": "Powerlevel10k now supports Warp!  ",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.a11y.openedIntegrationSettings",
+  "standard": "Opened shell integration settings",
+  "shellomancer": "Opened Enchant settings",
+  "replace": [
+   {
+    "file": "app/src/terminal/view.rs",
+    "literal": "Opened Warpify Settings",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.openFileIn",
+  "standard": "Open {{path}} in Shellomancy",
+  "shellomancer": "Open {{path}} in Shellomancy"
+ },
+ {
+  "key": "shellomancy.terminal.openBanner.close",
+  "standard": "Close the Open in Shellomancy banner",
+  "shellomancer": "Close the Open in Shellomancy banner",
+  "replace": [
+   {
+    "file": "app/src/terminal/view/open_in_warp.rs",
+    "literal": "Close View in Warp banner",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.openBanner.learnMore",
+  "standard": "Learn more about opening Markdown files in Shellomancy",
+  "shellomancer": "Learn more about opening Markdown files in Shellomancy",
+  "replace": [
+   {
+    "file": "app/src/terminal/view/open_in_warp.rs",
+    "literal": "Learn more about opening Markdown files in Warp",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.openBanner.markdown",
+  "standard": "Shellomancy can display Markdown files directly.",
+  "shellomancer": "Shellomancy reads Markdown, too.",
+  "replace": [
+   {
+    "file": "app/src/terminal/view/inline_banner/open_in_warp.rs",
+    "literal": "Did you know that Warp can directly display Markdown files?",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.openBanner.editLanguage",
+  "standard": "Shellomancy can edit {{language}} files directly.",
+  "shellomancer": "Shellomancy can edit {{language}} files right here."
+ },
+ {
+  "key": "shellomancy.terminal.openBanner.editCode",
+  "standard": "Shellomancy can edit code directly.",
+  "shellomancer": "Shellomancy can edit code right here.",
+  "replace": [
+   {
+    "file": "app/src/terminal/view/inline_banner/open_in_warp.rs",
+    "literal": "Did you know that Warp can directly edit code?",
+    "count": 2
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.openBanner.view",
+  "standard": "View in Shellomancy",
+  "shellomancer": "View in Shellomancy",
+  "replace": [
+   {
+    "file": "app/src/terminal/view/inline_banner/open_in_warp.rs",
+    "literal": "View in Warp",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.openBanner.edit",
+  "standard": "Edit in Shellomancy",
+  "shellomancer": "Edit in Shellomancy",
+  "replace": [
+   {
+    "file": "app/src/terminal/view/inline_banner/open_in_warp.rs",
+    "literal": "Edit in Warp",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.warpifySubshell",
+  "standard": "Integrate subshell",
+  "shellomancer": "Enchant subshell",
+  "replace": [
+   {
+    "file": "app/src/terminal/view/block_banner/warpify.rs",
+    "literal": "Warpify subshell",
+    "count": 1
+   },
+   {
+    "file": "app/src/terminal/view/init.rs",
+    "literal": "Warpify subshell",
+    "count": 1
+   },
+   {
+    "file": "app/src/terminal/view/use_agent_footer/warpify_footer.rs",
+    "literal": "Warpify subshell",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.warpifySessionTooltip",
+  "standard": "Enable Shellomancy shell integration in this session",
+  "shellomancer": "Enchant this session",
+  "replace": [
+   {
+    "file": "app/src/terminal/view/use_agent_footer/warpify_footer.rs",
+    "literal": "Enable Warp shell integration in this session",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.neverIntegrationHost",
+  "standard": "Never integrate with this host",
+  "shellomancer": "Never enchant this host",
+  "replace": [
+   {
+    "file": "app/src/terminal/warpify/render.rs",
+    "literal": "Never Warpify this host",
+    "exact": "\"Never Warpify this host\".into()",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.warpifyRunInFuture",
+  "standard": "Run the following to integrate automatically in the future:",
+  "shellomancer": "Run this to enchant automatically next time:",
+  "replace": [
+   {
+    "file": "app/src/terminal/warpify/success_block.rs",
+    "literal": "Run the following to automatically Warpify in the future:",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.warpifyRemoteNote",
+  "standard": "In remote subshells, Shellomancy runs commands in the background to power completions, syntax highlighting, and other features.",
+  "shellomancer": "In remote subshells, Shellomancy runs commands in the background to power completions, syntax highlighting, and other features.",
+  "replace": [
+   {
+    "file": "app/src/terminal/warpify/success_block.rs",
+    "literal": "In remote subshells, Warp runs commands in the background to power completions, syntax highlighting, and other features.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.sessionIntegrated",
+  "standard": "Session integrated",
+  "shellomancer": "Session enchanted",
+  "replace": [
+   {
+    "file": "app/src/terminal/warpify/success_block.rs",
+    "literal": "Session Warpified",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.showNetworkLog",
+  "standard": "Show network log",
+  "shellomancer": "Show network log",
+  "replace": [
+   {
+    "file": "app/src/terminal/input.rs",
+    "literal": "Show Warp network log",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.aliasExpansion",
+  "standard": "Shellomancy can auto-expand aliases.",
+  "shellomancer": "Shellomancy can auto-expand aliases.",
+  "replace": [
+   {
+    "file": "app/src/terminal/view/inline_banner/alias_expansion.rs",
+    "literal": "Warp can auto-expand aliases.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.notificationsDenied",
+  "standard": "Shellomancy isn't allowed to send you notifications.",
+  "shellomancer": "macOS won't let Shellomancy send you notifications.",
+  "replace": [
+   {
+    "file": "app/src/terminal/view/inline_banner/notifications_discovery.rs",
+    "literal": "Warp was denied permissions to send you notifications.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.initScriptOutput",
+  "standard": "Shellomancy's initialization script output is shown above to help with debugging.",
+  "shellomancer": "Shellomancy's initialization script output is shown above to help with debugging.",
+  "replace": [
+   {
+    "file": "app/src/terminal/view/inline_banner/shell_process_terminated.rs",
+    "literal": "The output from Warp's initialization script is visible above to assist with debugging.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.terminal.vimMode",
+  "standard": "Enable Shellomancy's Vim keybindings?",
+  "shellomancer": "Enable Shellomancy's Vim keybindings?",
+  "replace": [
+   {
+    "file": "app/src/terminal/view/inline_banner/vim_mode.rs",
+    "literal": "Enable Warp's Vim keybindings?",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.plugin.claudeUpdateSubtitle",
+  "standard": "Run the following commands. They also remove the plugin this one replaces, if it's installed.",
+  "shellomancer": "Run the following commands. They also remove the plugin this one replaces, if it's installed.",
+  "replace": [
+   {
+    "file": "app/src/terminal/cli_agent_sessions/plugin_manager/claude.rs",
+    "literal": "Run the following commands. They retire Warp's plugin if it is still installed.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.plugin.codex.installed",
+  "standard": "Notification plugin installed. Restart Codex to activate it.",
+  "shellomancer": "Familiar bound. Restart Codex to wake it.",
+  "replace": [
+   {
+    "file": "app/src/terminal/cli_agent_sessions/plugin_manager/codex.rs",
+    "literal": "Warp plugin installed. Please restart Codex to activate.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.plugin.codex.updated",
+  "standard": "Notification plugin updated. Restart Codex to activate it.",
+  "shellomancer": "Familiar rebound. Restart Codex to wake it.",
+  "replace": [
+   {
+    "file": "app/src/terminal/cli_agent_sessions/plugin_manager/codex.rs",
+    "literal": "Warp plugin updated. Please restart Codex to activate.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.plugin.codex.installTitle",
+  "standard": "Install the notification plugin for Codex",
+  "shellomancer": "Bind the notification plugin for Codex",
+  "replace": [
+   {
+    "file": "app/src/terminal/cli_agent_sessions/plugin_manager/codex.rs",
+    "literal": "Install Warp Plugin for Codex",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.plugin.codex.updateTitle",
+  "standard": "Update the notification plugin for Codex",
+  "shellomancer": "Rebind the notification plugin for Codex",
+  "replace": [
+   {
+    "file": "app/src/terminal/cli_agent_sessions/plugin_manager/codex.rs",
+    "literal": "Update Warp Plugin for Codex",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.plugin.gemini.installed",
+  "standard": "Notification plugin installed. Restart Gemini CLI to activate it.",
+  "shellomancer": "Familiar bound. Restart Gemini CLI to wake it.",
+  "replace": [
+   {
+    "file": "app/src/terminal/cli_agent_sessions/plugin_manager/gemini.rs",
+    "literal": "Warp plugin installed. Please restart Gemini CLI to activate.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.plugin.gemini.updated",
+  "standard": "Notification plugin updated. Restart Gemini CLI to activate it.",
+  "shellomancer": "Familiar rebound. Restart Gemini CLI to wake it.",
+  "replace": [
+   {
+    "file": "app/src/terminal/cli_agent_sessions/plugin_manager/gemini.rs",
+    "literal": "Warp plugin updated. Please restart Gemini CLI to activate.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.plugin.gemini.installTitle",
+  "standard": "Install the notification plugin for Gemini CLI",
+  "shellomancer": "Bind the notification plugin for Gemini CLI",
+  "replace": [
+   {
+    "file": "app/src/terminal/cli_agent_sessions/plugin_manager/gemini.rs",
+    "literal": "Install Warp Plugin for Gemini CLI",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.plugin.gemini.updateTitle",
+  "standard": "Update the notification plugin for Gemini CLI",
+  "shellomancer": "Rebind the notification plugin for Gemini CLI",
+  "replace": [
+   {
+    "file": "app/src/terminal/cli_agent_sessions/plugin_manager/gemini.rs",
+    "literal": "Update Warp Plugin for Gemini CLI",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.plugin.codex.enableNotificationsTitle",
+  "standard": "Enable notifications for Codex",
+  "shellomancer": "Enable notifications for Codex",
+  "replace": [
+   {
+    "file": "app/src/terminal/cli_agent_sessions/plugin_manager/codex.rs",
+    "literal": "Enable Warp Notifications for Codex",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.plugin.codex.enableNotificationsSubtitle",
+  "standard": "Update Codex to the latest version, then enable in-focus notifications so Shellomancy can display them while you work.",
+  "shellomancer": "Update Codex to the latest version, then enable in-focus notifications so Shellomancy can display them while you work.",
+  "replace": [
+   {
+    "file": "app/src/terminal/cli_agent_sessions/plugin_manager/codex.rs",
+    "literal": "Update Codex to the latest version, then enable in-focus notifications so Warp can display them while you work.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.plugin.opencode.installTitle",
+  "standard": "Install the notification plugin for OpenCode",
+  "shellomancer": "Bind the notification plugin for OpenCode",
+  "replace": [
+   {
+    "file": "app/src/terminal/cli_agent_sessions/plugin_manager/opencode.rs",
+    "literal": "Install Warp Plugin for OpenCode",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.plugin.opencode.installSubtitle",
+  "standard": "Add the notification plugin to your OpenCode configuration, then restart OpenCode.",
+  "shellomancer": "Add the notification plugin to your OpenCode configuration, then restart OpenCode.",
+  "replace": [
+   {
+    "file": "app/src/terminal/cli_agent_sessions/plugin_manager/opencode.rs",
+    "literal": "Add the Warp plugin to your OpenCode configuration, then restart OpenCode.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.plugin.opencode.updateTitle",
+  "standard": "Update the notification plugin for OpenCode",
+  "shellomancer": "Rebind the notification plugin for OpenCode",
+  "replace": [
+   {
+    "file": "app/src/terminal/cli_agent_sessions/plugin_manager/opencode.rs",
+    "literal": "Update Warp Plugin for OpenCode",
+    "count": 1
+   }
+  ]
+ }
+]

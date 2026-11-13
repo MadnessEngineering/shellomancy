@@ -46,7 +46,7 @@ impl WarpifyBannerState {
     }
 
     pub fn title(&self) -> &str {
-        "Warpify subshell"
+        madness_themes::t("shellomancy.terminal.warpifySubshell")
     }
 
     pub fn action(&self) -> TerminalAction {

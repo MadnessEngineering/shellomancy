@@ -106,11 +106,11 @@ impl CliAgentPluginManager for GeminiPluginManager {
     }
 
     fn install_success_message(&self) -> &'static str {
-        "Warp plugin installed. Please restart Gemini CLI to activate."
+        madness_themes::t("shellomancy.plugin.gemini.installed")
     }
 
     fn update_success_message(&self) -> &'static str {
-        "Warp plugin updated. Please restart Gemini CLI to activate."
+        madness_themes::t("shellomancy.plugin.gemini.updated")
     }
 
     fn install_instructions(&self) -> &'static PluginInstructions {
@@ -123,7 +123,7 @@ impl CliAgentPluginManager for GeminiPluginManager {
 }
 
 static INSTALL_INSTRUCTIONS: LazyLock<PluginInstructions> = LazyLock::new(|| PluginInstructions {
-    title: "Install Warp Plugin for Gemini CLI",
+    title: madness_themes::t("shellomancy.plugin.gemini.installTitle"),
     subtitle: "Run the following command, then restart Gemini CLI.",
     steps: &[PluginInstructionStep {
         description: "Install the Warp extension",
@@ -135,7 +135,7 @@ static INSTALL_INSTRUCTIONS: LazyLock<PluginInstructions> = LazyLock::new(|| Plu
 });
 
 static UPDATE_INSTRUCTIONS: LazyLock<PluginInstructions> = LazyLock::new(|| PluginInstructions {
-    title: "Update Warp Plugin for Gemini CLI",
+    title: madness_themes::t("shellomancy.plugin.gemini.updateTitle"),
     subtitle: "Run the following command, then restart Gemini CLI.",
     steps: &[PluginInstructionStep {
         description: "Update the Warp extension",

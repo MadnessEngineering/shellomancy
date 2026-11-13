@@ -193,11 +193,11 @@ impl CliAgentPluginManager for CodexPluginManager {
     }
 
     fn install_success_message(&self) -> &'static str {
-        "Warp plugin installed. Please restart Codex to activate."
+        madness_themes::t("shellomancy.plugin.codex.installed")
     }
 
     fn update_success_message(&self) -> &'static str {
-        "Warp plugin updated. Please restart Codex to activate."
+        madness_themes::t("shellomancy.plugin.codex.updated")
     }
 
     fn install_instructions(&self) -> &'static PluginInstructions {
@@ -273,7 +273,7 @@ impl CliAgentPluginManager for CodexPluginManager {
 
 static PLUGIN_INSTALL_INSTRUCTIONS: LazyLock<PluginInstructions> =
     LazyLock::new(|| PluginInstructions {
-        title: "Install Warp Plugin for Codex",
+        title: madness_themes::t("shellomancy.plugin.codex.installTitle"),
         subtitle: "Run the following commands, then restart Codex.",
         steps: &[
             PluginInstructionStep {
@@ -294,8 +294,8 @@ static PLUGIN_INSTALL_INSTRUCTIONS: LazyLock<PluginInstructions> =
 
 static NATIVE_INSTALL_INSTRUCTIONS: LazyLock<PluginInstructions> = LazyLock::new(|| {
     PluginInstructions {
-        title: "Enable Warp Notifications for Codex",
-        subtitle: "Update Codex to the latest version, then enable in-focus notifications so Warp can display them while you work.",
+        title: madness_themes::t("shellomancy.plugin.codex.enableNotificationsTitle"),
+        subtitle: madness_themes::t("shellomancy.plugin.codex.enableNotificationsSubtitle"),
         steps: &[
             PluginInstructionStep {
                 description: "Update Codex to the latest version.",
@@ -323,7 +323,7 @@ static EMPTY_INSTRUCTIONS: LazyLock<PluginInstructions> = LazyLock::new(|| Plugi
 
 static PLUGIN_UPDATE_INSTRUCTIONS: LazyLock<PluginInstructions> = LazyLock::new(|| {
     PluginInstructions {
-        title: "Update Warp Plugin for Codex",
+        title: madness_themes::t("shellomancy.plugin.codex.updateTitle"),
         subtitle: "Run the following commands, then restart Codex.",
         steps: &[
             PluginInstructionStep {
