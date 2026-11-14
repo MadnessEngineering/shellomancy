@@ -564,6 +564,7 @@ pub enum CodeIndexingPageAction {
     CodeMapsMapNow(PathBuf),
     CodeMapsForget(PathBuf),
     CodeMapsToggleUpload,
+    CodeMapsToggleAutoRemap,
     CodeMapsOpenUrl(String),
 }
 
@@ -806,12 +807,22 @@ impl TypedActionView for CodeIndexingPageView {
                 });
                 ctx.notify();
             }
+            #[cfg(not(target_family = "wasm"))]
+            CodeIndexingPageAction::CodeMapsToggleAutoRemap => {
+                CodeMapsSettings::handle(ctx).update(ctx, |settings, ctx| {
+                    if let Err(err) = settings.auto_remap_enabled.toggle_and_save_value(ctx) {
+                        log::warn!("Failed to toggle code map auto re-mapping: {err:?}");
+                    }
+                });
+                ctx.notify();
+            }
             CodeIndexingPageAction::CodeMapsOpenUrl(url) => ctx.open_url(url),
             #[cfg(target_family = "wasm")]
             CodeIndexingPageAction::CodeMapsAddFolder
             | CodeIndexingPageAction::CodeMapsMapNow(_)
             | CodeIndexingPageAction::CodeMapsForget(_)
-            | CodeIndexingPageAction::CodeMapsToggleUpload => {}
+            | CodeIndexingPageAction::CodeMapsToggleUpload
+            | CodeIndexingPageAction::CodeMapsToggleAutoRemap => {}
         }
     }
 }

@@ -31,6 +31,7 @@ pub(super) struct CodeMapsRowMouseStates {
 pub(super) struct CodeMapsMouseStates {
     pub map_folder: MouseStateHandle,
     pub upload_switch: SwitchStateHandle,
+    pub auto_remap_switch: SwitchStateHandle,
     pub rows: Vec<CodeMapsRowMouseStates>,
 }
 
@@ -115,6 +116,21 @@ pub(super) fn render_code_maps(
         .with_margin_top(16.)
         .finish(),
     );
+    column.add_child(render_body_item::<CodeIndexingPageAction>(
+        madness_themes::t("shellomancy.codeMaps.autoRemapLabel").to_owned(),
+        None,
+        LocalOnlyIconState::Hidden,
+        ToggleState::Enabled,
+        appearance,
+        ui.switch(mouse.auto_remap_switch.clone())
+            .check(*CodeMapsSettings::as_ref(app).auto_remap_enabled)
+            .build()
+            .on_click(|ctx, _, _| {
+                ctx.dispatch_typed_action(CodeIndexingPageAction::CodeMapsToggleAutoRemap);
+            })
+            .finish(),
+        Some(madness_themes::t("shellomancy.codeMaps.autoRemapDescription").to_owned()),
+    ));
 
     let code_maps = CodeMaps::as_ref(app);
     let folders = code_maps.folders();
@@ -134,6 +150,7 @@ pub(super) fn render_code_maps(
             home_dir.as_deref(),
             row_mouse,
             appearance,
+            app,
         ));
     }
 
@@ -148,6 +165,7 @@ fn render_folder(
     home_dir: Option<&str>,
     mouse: &CodeMapsRowMouseStates,
     appearance: &Appearance,
+    app: &AppContext,
 ) -> Box<dyn Element> {
     let theme = appearance.theme();
     let ui = appearance.ui_builder();
@@ -156,7 +174,16 @@ fn render_folder(
         ..Default::default()
     };
     let path = folder.path.to_string_lossy();
-    let shown_path = user_friendly_path(path.as_ref(), home_dir).into_owned();
+    let mut shown_path = user_friendly_path(path.as_ref(), home_dir).into_owned();
+    if let Some(git) = &folder.git
+        && *CodeMapsSettings::as_ref(app).auto_remap_enabled
+    {
+        shown_path.push_str(" · ");
+        shown_path.push_str(&madness_themes::tf(
+            "shellomancy.codeMaps.watching",
+            &[("branch", &git.default_branch)],
+        ));
+    }
 
     let mut details = Flex::column()
         .with_child(

@@ -7,6 +7,12 @@
 //! sent to Inventorium (`POST /api/uml-data/upload`), where each upload becomes
 //! a new version that SwarmDesk builds a code city from.
 //!
+//! A mapped folder inside a git repo is mapped again on its own when the
+//! repo's default branch moves (a merge or pull onto main) or its tags change
+//! (a new version), at most once an hour; plain commits on other branches
+//! never trigger it. The repo's refs are watched directly, since Warp's repo
+//! watcher leaves tags and `packed-refs` out.
+//!
 //! Nothing here touches the network except that upload. The list of mapped
 //! folders lives next to the maps in `index.json`.
 
@@ -14,16 +20,21 @@ use std::collections::HashSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Arc;
 use std::time::Duration;
 
 use command::r#async::Command;
 use futures::FutureExt as _;
 use futures::future::BoxFuture;
+use notify_debouncer_full::notify::{RecursiveMode, WatchFilter};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use warp_core::paths::SHELLOMANCY_CONFIG_DIR;
+use warp_util::git::run_git_command;
 use warp_util::path::resolve_executable_in_path;
-use warpui::{Entity, ModelContext, SingletonEntity};
+use warpui::r#async::Timer;
+use warpui::{Entity, ModelContext, ModelHandle, SingletonEntity};
+use watcher::{BulkFilesystemWatcher, BulkFilesystemWatcherEvent};
 
 use crate::madness_account::{MADNESS_API_ROOT, MadnessAccount};
 use crate::settings::code_maps::CodeMapsSettings;
@@ -35,6 +46,11 @@ const NPM_PACKAGE: &str = "@madnessengineering/cartogomancy";
 const UPLOAD_TIMEOUT: Duration = Duration::from_secs(120);
 /// How much of a failed run's output to show.
 const ERROR_TAIL_CHARS: usize = 300;
+/// The least time between two maps of a folder made on their own.
+const AUTO_REMAP_INTERVAL_SECS: i64 = 60 * 60;
+/// How long after startup to look for refs that moved while we were closed.
+const STARTUP_CHECK_DELAY: Duration = Duration::from_secs(30);
+const REFS_WATCH_DEBOUNCE: Duration = Duration::from_secs(2);
 
 /// The numbers shown for a map.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -77,6 +93,20 @@ pub struct MappedFolder {
     /// Why the last attempt failed, ready to show.
     #[serde(default)]
     pub error: Option<String>,
+    /// The repo's refs as of the last map; `None` outside a git repo.
+    #[serde(default)]
+    pub git: Option<GitRefs>,
+}
+
+/// What a folder's repo looked like when it was last mapped.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GitRefs {
+    /// The repo's common git dir, where `refs/` and `packed-refs` live.
+    pub git_dir: PathBuf,
+    /// main, master, or whatever `origin/HEAD` points at.
+    pub default_branch: String,
+    /// A hash of the default branch's commit and every tag.
+    pub signature: String,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -93,6 +123,10 @@ pub struct CodeMaps {
     dir: PathBuf,
     folders: Vec<MappedFolder>,
     mapping: HashSet<PathBuf>,
+    refs_watcher: ModelHandle<BulkFilesystemWatcher>,
+    watched_git_dirs: HashSet<PathBuf>,
+    /// Folders with a re-map waiting out the hourly limit.
+    remap_scheduled: HashSet<PathBuf>,
 }
 
 impl Entity for CodeMaps {
@@ -102,18 +136,45 @@ impl Entity for CodeMaps {
 impl SingletonEntity for CodeMaps {}
 
 impl CodeMaps {
-    pub fn new(_ctx: &mut ModelContext<Self>) -> Self {
+    pub fn new(ctx: &mut ModelContext<Self>) -> Self {
         let dir = maps_dir();
         let folders = std::fs::read_to_string(dir.join(INDEX_FILE))
             .ok()
             .and_then(|raw| serde_json::from_str::<Index>(&raw).ok())
             .map(|index| index.folders)
             .unwrap_or_default();
-        Self {
+        let refs_watcher =
+            ctx.add_model(|ctx| BulkFilesystemWatcher::new(REFS_WATCH_DEBOUNCE, ctx));
+        ctx.subscribe_to_model(&refs_watcher, Self::on_refs_changed);
+        let mut me = Self {
             dir,
             folders,
             mapping: HashSet::new(),
+            refs_watcher,
+            watched_git_dirs: HashSet::new(),
+            remap_scheduled: HashSet::new(),
+        };
+        let git_dirs: Vec<PathBuf> = me
+            .folders
+            .iter()
+            .filter_map(|f| f.git.as_ref().map(|git| git.git_dir.clone()))
+            .collect();
+        for git_dir in git_dirs {
+            me.watch_refs(git_dir, ctx);
         }
+        // Catch up on merges and tags made while Shellomancy was closed.
+        let _ = ctx.spawn(Timer::after(STARTUP_CHECK_DELAY), |me, _, ctx| {
+            let paths: Vec<PathBuf> = me
+                .folders
+                .iter()
+                .filter(|f| f.git.is_some())
+                .map(|f| f.path.clone())
+                .collect();
+            for path in paths {
+                me.check_refs(path, ctx);
+            }
+        });
+        me
     }
 
     pub fn folders(&self) -> &[MappedFolder] {
@@ -142,6 +203,7 @@ impl CodeMaps {
                     summary: None,
                     upload: None,
                     error: None,
+                    git: None,
                 });
                 self.folders.len() - 1
             }
@@ -158,6 +220,9 @@ impl CodeMaps {
         let run_path = path.clone();
         let _ = ctx.spawn(
             async move {
+                // Read the refs before mapping, so a merge that lands while
+                // cartogomancy runs still counts as unmapped.
+                let git = git_refs(&run_path).await;
                 let path_env = path_env.await;
                 run_cartogomancy(path_env, &run_path, &map_file).await?;
                 let map = read_map(&map_file)?;
@@ -166,19 +231,25 @@ impl CodeMaps {
                     Some(key) => upload(&key, &name, map).await,
                     None => UploadOutcome::KeptLocal,
                 };
-                Ok::<_, String>((summary, upload))
+                Ok::<_, String>((summary, upload, git))
             },
             move |me, result, ctx| {
                 me.mapping.remove(&path);
+                let mut watch = None;
                 if let Some(folder) = me.folders.iter_mut().find(|f| f.path == path) {
                     match result {
-                        Ok((summary, upload)) => {
+                        Ok((summary, upload, git)) => {
                             folder.mapped_at = Some(chrono::Utc::now().timestamp());
                             folder.summary = Some(summary);
                             folder.upload = Some(upload);
+                            watch = git.as_ref().map(|git| git.git_dir.clone());
+                            folder.git = git;
                         }
                         Err(error) => folder.error = Some(error),
                     }
+                }
+                if let Some(git_dir) = watch {
+                    me.watch_refs(git_dir, ctx);
                 }
                 me.changed(ctx);
             },
@@ -200,6 +271,90 @@ impl CodeMaps {
         self.changed(ctx);
     }
 
+    /// Watches a repo's branch heads, tags and `packed-refs`.
+    fn watch_refs(&mut self, git_dir: PathBuf, ctx: &mut ModelContext<Self>) {
+        if !self.watched_git_dirs.insert(git_dir.clone()) {
+            return;
+        }
+        let refs_dir = git_dir.join("refs");
+        let root = git_dir.clone();
+        // Only consulted by inotify: keep it out of objects/ and friends.
+        let watch_dir = Arc::new(move |dir: &Path| dir == root || dir.starts_with(&refs_dir));
+        let filter = WatchFilter::with_filter(watch_dir, Arc::new(|path: &Path| is_ref_path(path)));
+        self.refs_watcher.update(ctx, |watcher, _| {
+            std::mem::drop(watcher.register_path(&git_dir, filter, RecursiveMode::Recursive));
+        });
+    }
+
+    fn on_refs_changed(
+        &mut self,
+        _: ModelHandle<BulkFilesystemWatcher>,
+        event: &BulkFilesystemWatcherEvent,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let changed: Vec<&PathBuf> = event
+            .added
+            .iter()
+            .chain(&event.modified)
+            .chain(&event.deleted)
+            .chain(event.moved.keys())
+            .chain(event.moved.values())
+            .collect();
+        let paths: Vec<PathBuf> = self
+            .folders
+            .iter()
+            .filter(|f| {
+                f.git
+                    .as_ref()
+                    .is_some_and(|git| changed.iter().any(|p| p.starts_with(&git.git_dir)))
+            })
+            .map(|f| f.path.clone())
+            .collect();
+        for path in paths {
+            self.check_refs(path, ctx);
+        }
+    }
+
+    /// Maps `path` again if its default branch or tags moved since the last
+    /// map, waiting out the hourly limit first.
+    fn check_refs(&mut self, path: PathBuf, ctx: &mut ModelContext<Self>) {
+        if !*CodeMapsSettings::as_ref(ctx).auto_remap_enabled
+            || self.mapping.contains(&path)
+            || self.remap_scheduled.contains(&path)
+        {
+            return;
+        }
+        let Some(folder) = self.folders.iter().find(|f| f.path == path) else {
+            return;
+        };
+        let Some(known) = folder.git.clone() else {
+            return;
+        };
+        let mapped_at = folder.mapped_at;
+        let check_path = path.clone();
+        let _ = ctx.spawn(
+            async move { refs_signature(&check_path, &known.default_branch).await },
+            move |me, signature, ctx| {
+                let Some(signature) = signature else { return };
+                if signature == known.signature {
+                    return;
+                }
+                match remap_wait(mapped_at, chrono::Utc::now().timestamp()) {
+                    None => me.map(path, ctx),
+                    Some(wait) => {
+                        if !me.remap_scheduled.insert(path.clone()) {
+                            return;
+                        }
+                        let _ = ctx.spawn(Timer::after(wait), move |me, _, ctx| {
+                            me.remap_scheduled.remove(&path);
+                            me.check_refs(path, ctx);
+                        });
+                    }
+                }
+            },
+        );
+    }
+
     fn changed(&mut self, ctx: &mut ModelContext<Self>) {
         if let Err(err) = self.save() {
             log::warn!("Could not save the code maps index: {err}");
@@ -217,6 +372,86 @@ impl CodeMaps {
         std::fs::write(&tmp, raw)?;
         std::fs::rename(tmp, self.dir.join(INDEX_FILE))
     }
+}
+
+/// Whether a path under a git dir is a branch head, a tag or `packed-refs`.
+fn is_ref_path(path: &Path) -> bool {
+    let path = path.to_string_lossy();
+    path.ends_with("packed-refs") || path.contains("/refs/heads/") || path.contains("/refs/tags/")
+}
+
+/// How long to wait before mapping again, given when the last map was made;
+/// `None` means now.
+fn remap_wait(mapped_at: Option<i64>, now: i64) -> Option<Duration> {
+    let next = mapped_at? + AUTO_REMAP_INTERVAL_SECS;
+    (next > now).then(|| Duration::from_secs((next - now) as u64))
+}
+
+/// The repo `folder` is in, its default branch and the current signature of
+/// that branch and the tags; `None` outside a git repo.
+async fn git_refs(folder: &Path) -> Option<GitRefs> {
+    let git_dir = run_git_command(
+        folder,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    )
+    .await
+    .ok()?;
+    let git_dir = PathBuf::from(git_dir.trim());
+    let default_branch = default_branch(folder).await?;
+    let signature = refs_signature(folder, &default_branch).await?;
+    Some(GitRefs {
+        git_dir,
+        default_branch,
+        signature,
+    })
+}
+
+/// What `origin/HEAD` points at, else main, else master.
+async fn default_branch(folder: &Path) -> Option<String> {
+    if let Ok(origin_head) = run_git_command(
+        folder,
+        &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+    )
+    .await
+        && let Some(branch) = origin_head.trim().strip_prefix("origin/")
+        && !branch.is_empty()
+    {
+        return Some(branch.to_owned());
+    }
+    for candidate in ["main", "master"] {
+        let head = format!("refs/heads/{candidate}");
+        if run_git_command(folder, &["rev-parse", "--verify", "--quiet", &head])
+            .await
+            .is_ok()
+        {
+            return Some(candidate.to_owned());
+        }
+    }
+    None
+}
+
+/// A hash of the default branch's commit and every tag's name and target.
+async fn refs_signature(folder: &Path, default_branch: &str) -> Option<String> {
+    let head = format!("refs/heads/{default_branch}");
+    let refs = run_git_command(
+        folder,
+        &[
+            "for-each-ref",
+            "--format=%(refname) %(objectname)",
+            &head,
+            "refs/tags",
+        ],
+    )
+    .await
+    .ok()?;
+    Some(format!("{:08x}", fnv1a(refs.as_bytes())))
+}
+
+/// FNV-1a: stable across runs and Rust versions, unlike DefaultHasher.
+fn fnv1a(bytes: &[u8]) -> u32 {
+    bytes.iter().fold(0x811c9dc5u32, |hash, byte| {
+        (hash ^ u32::from(*byte)).wrapping_mul(0x01000193)
+    })
 }
 
 /// `~/.mad/shellomancy/maps/`, whatever the platform's data dir is.
@@ -392,13 +627,7 @@ fn map_file_name(path: &Path) -> String {
             }
         })
         .collect();
-    // FNV-1a: stable across runs and Rust versions, unlike DefaultHasher.
-    let hash = path
-        .to_string_lossy()
-        .bytes()
-        .fold(0x811c9dc5u32, |hash, byte| {
-            (hash ^ u32::from(byte)).wrapping_mul(0x01000193)
-        });
+    let hash = fnv1a(path.to_string_lossy().as_bytes());
     format!("{safe}-{hash:08x}-uml.json")
 }
 

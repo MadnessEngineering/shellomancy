@@ -111,6 +111,11 @@ fn index_round_trips() {
                 error: "HTTP 500".to_owned(),
             }),
             error: None,
+            git: Some(GitRefs {
+                git_dir: PathBuf::from("/work/app/.git"),
+                default_branch: "main".to_owned(),
+                signature: "deadbeef".to_owned(),
+            }),
         }],
     };
     let raw = serde_json::to_string(&index).unwrap();
@@ -124,4 +129,35 @@ fn index_round_trips() {
     )
     .unwrap();
     assert_eq!(old.folders[0].summary, None);
+}
+
+#[test]
+fn only_branch_heads_tags_and_packed_refs_count() {
+    assert!(is_ref_path(Path::new("/r/.git/refs/heads/main")));
+    assert!(is_ref_path(Path::new("/r/.git/refs/tags/v1.2.0")));
+    assert!(is_ref_path(Path::new("/r/.git/packed-refs")));
+    assert!(!is_ref_path(Path::new("/r/.git/index")));
+    assert!(!is_ref_path(Path::new("/r/.git/HEAD")));
+    assert!(!is_ref_path(Path::new("/r/.git/objects/ab/cdef")));
+    assert!(!is_ref_path(Path::new("/r/.git/refs/remotes/origin/main")));
+}
+
+#[test]
+fn remaps_wait_out_the_hour() {
+    let hour = AUTO_REMAP_INTERVAL_SECS;
+    assert_eq!(remap_wait(None, 1_000), None);
+    assert_eq!(remap_wait(Some(1_000), 1_000 + hour), None);
+    assert_eq!(remap_wait(Some(1_000), 1_000 + hour + 5), None);
+    assert_eq!(
+        remap_wait(Some(1_000), 1_010),
+        Some(Duration::from_secs((hour - 10) as u64))
+    );
+}
+
+#[test]
+fn fnv1a_is_stable() {
+    // Map file names and ref signatures are kept on disk, so the hash must
+    // not drift between builds.
+    assert_eq!(fnv1a(b""), 0x811c9dc5);
+    assert_eq!(fnv1a(b"a"), 0xe40c292c);
 }

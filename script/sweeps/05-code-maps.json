@@ -93,5 +93,20 @@
   "key": "shellomancy.codeMaps.openInInventorium",
   "standard": "Open in Inventorium",
   "shellomancer": "Visit the city"
+ },
+ {
+  "key": "shellomancy.codeMaps.autoRemapLabel",
+  "standard": "Map again when main moves",
+  "shellomancer": "Redraw when main moves"
+ },
+ {
+  "key": "shellomancy.codeMaps.autoRemapDescription",
+  "standard": "When a mapped repo's default branch moves (a merge or pull) or a new version is tagged, map it again, and send it if uploads are on. At most once an hour per folder; commits on other branches never trigger it.",
+  "shellomancer": "When the default branch moves or a new version gets tagged, the map is redrawn (and sent, if sending is on). Once an hour at most per folder. Commits on side branches are beneath its notice."
+ },
+ {
+  "key": "shellomancy.codeMaps.watching",
+  "standard": "watching {{branch}} and tags",
+  "shellomancer": "keeping an eye on {{branch}} and the tags"
  }
 ]
