@@ -85,7 +85,6 @@ impl MadnessAccount {
     }
 
     /// The signed-in API key, for integrations to send as a bearer token.
-    #[allow(dead_code)]
     pub fn api_key(&self) -> Option<&str> {
         self.api_key.as_deref()
     }

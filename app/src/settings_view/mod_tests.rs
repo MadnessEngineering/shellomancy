@@ -106,7 +106,7 @@ fn subpage_display_names_are_correct() {
     );
     assert_eq!(
         SettingsSection::CodeIndexing.to_string(),
-        "Indexing and projects"
+        madness_themes::t("shellomancy.settings.nav.codeMaps")
     );
     assert_eq!(
         SettingsSection::EditorAndCodeReview.to_string(),
@@ -163,6 +163,7 @@ const SECTIONS_WITH_RENAMED_DISPLAY_LABELS: &[SettingsSection] = &[
     SettingsSection::WarpDrive,
     SettingsSection::WarpAgent,
     SettingsSection::Warpify,
+    SettingsSection::CodeIndexing,
 ];
 
 #[test]

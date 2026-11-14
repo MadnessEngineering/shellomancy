@@ -44,6 +44,8 @@ mod interval_timer;
 mod linear;
 #[cfg(feature = "local_fs")]
 mod local_control;
+#[cfg(not(target_family = "wasm"))]
+mod code_maps;
 mod madness_account;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod login_item;
@@ -1642,6 +1644,9 @@ pub(crate) fn initialize_app(
     // Shellomancy: the Madness Interactive account, restored from secure storage
     // (registered above) without touching the network.
     ctx.add_singleton_model(madness_account::MadnessAccount::new);
+    // Shellomancy: Code Maps (cartogomancy); reads its index from disk, no network.
+    #[cfg(not(target_family = "wasm"))]
+    ctx.add_singleton_model(code_maps::CodeMaps::new);
 
     ctx.add_singleton_model(|_ctx| GPUState::new());
 

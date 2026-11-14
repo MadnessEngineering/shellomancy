@@ -14,6 +14,7 @@ use lsp::{LspManagerModel, LspManagerModelEvent, LspServerModel, LspState};
 use pathfinder_color::ColorU;
 #[cfg(not(target_family = "wasm"))]
 use remote_server::codebase_index_proto::{RemoteCodebaseIndexState, RemoteCodebaseIndexStatus};
+use warp_core::channel::{Channel, ChannelState};
 use warp_core::features::FeatureFlag;
 use warp_core::settings::ToggleableSetting as _;
 use warp_core::ui::theme::{AnsiColorIdentifier, Fill as ThemeFill};
@@ -36,6 +37,8 @@ use warpui::{
     ViewHandle, WindowId, id,
 };
 
+#[cfg(not(target_family = "wasm"))]
+use super::code_maps_section::{CodeMapsMouseStates, render_code_maps};
 use super::settings_page::{
     MatchData, PageType, SettingsPageMeta, SettingsPageViewHandle, SettingsWidget,
     TOGGLE_BUTTON_RIGHT_PADDING, render_body_item, render_separator,
@@ -51,9 +54,15 @@ use crate::appearance::Appearance;
 use crate::code::buffer_location::LocalOrRemotePath;
 use crate::code::lsp_telemetry::{LspControlActionType, LspEnablementSource, LspTelemetryEvent};
 #[cfg(not(target_family = "wasm"))]
+use crate::code_maps::{CodeMaps, CodeMapsEvent};
+#[cfg(not(target_family = "wasm"))]
+use crate::madness_account::MadnessAccount;
+#[cfg(not(target_family = "wasm"))]
 use crate::remote_server::codebase_index_model::{
     RemoteCodebaseIndexModel, RemoteCodebaseIndexModelEvent, RemoteCodebaseIndexSettingsEntry,
 };
+#[cfg(not(target_family = "wasm"))]
+use crate::settings::code_maps::CodeMapsSettings;
 use crate::settings::{AISettings, CodeSettings};
 use crate::ui_components::avatar::{Avatar, AvatarContent, StatusElementTypes};
 use crate::ui_components::buttons::icon_button;
@@ -88,6 +97,22 @@ const REMOTE_CODEBASE_INDEX_LIMIT_REACHED_FAILURE: &str =
     "maximum number of codebase indexes has been reached";
 
 const PAGE_TITLE: &str = "Codebase Indexing";
+
+/// Shellomancy: Code Maps (cartogomancy) stands in for Warp's codebase
+/// indexing, which needs Warp's servers.
+fn code_maps_active(app: &AppContext) -> bool {
+    #[cfg(not(target_family = "wasm"))]
+    {
+        ChannelState::channel() == Channel::Oss
+            && app.has_singleton_model::<CodeMaps>()
+            && app.has_singleton_model::<MadnessAccount>()
+    }
+    #[cfg(target_family = "wasm")]
+    {
+        let _ = app;
+        false
+    }
+}
 
 #[cfg(not(target_family = "wasm"))]
 fn remote_codebase_index_limit_reached(status: &RemoteCodebaseIndexStatus) -> bool {
@@ -201,6 +226,8 @@ pub struct CodeIndexingPageView {
     /// whether to show "Available for download" vs "Installed" and whether the
     /// "+" button should trigger install or just enable.
     suggested_server_statuses: HashMap<(PathBuf, LSPServerType), LspRepoStatus>,
+    #[cfg(not(target_family = "wasm"))]
+    code_maps_mouse: CodeMapsMouseStates,
 }
 
 impl CodeIndexingPageView {
@@ -339,6 +366,24 @@ impl CodeIndexingPageView {
 
         let workspace_count = PersistedWorkspace::as_ref(ctx).workspaces().count();
 
+        #[cfg(not(target_family = "wasm"))]
+        let code_maps_mouse = {
+            let mut mouse = CodeMapsMouseStates::default();
+            if code_maps_active(ctx) {
+                mouse.resize(ctx);
+                ctx.subscribe_to_model(&CodeMaps::handle(ctx), |me, _, event, ctx| match event {
+                    CodeMapsEvent::Changed => {
+                        me.code_maps_mouse.resize(ctx);
+                        ctx.notify();
+                    }
+                });
+                ctx.subscribe_to_model(&MadnessAccount::handle(ctx), |_, _, _, ctx| {
+                    ctx.notify();
+                });
+            }
+            mouse
+        };
+
         Self {
             page: Self::build_page(ctx),
             window_id: ctx.window_id(),
@@ -359,6 +404,8 @@ impl CodeIndexingPageView {
                 .map(|_| Default::default())
                 .collect(),
             suggested_server_statuses: HashMap::new(),
+            #[cfg(not(target_family = "wasm"))]
+            code_maps_mouse,
         }
     }
 
@@ -377,7 +424,12 @@ impl CodeIndexingPageView {
                 manual_add_directory_button,
             },
         };
-        PageType::new_monolith(widget, Some(PAGE_TITLE), true)
+        let title = if code_maps_active(ctx) {
+            madness_themes::t("shellomancy.codeMaps.pageTitle")
+        } else {
+            PAGE_TITLE
+        };
+        PageType::new_monolith(widget, Some(title), true)
     }
 
     /// Resize `open_project_rules_mouse_states` to match the current workspace count.
@@ -415,6 +467,33 @@ impl CodeIndexingPageView {
                 }
             },
             file_picker_config,
+        );
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl CodeIndexingPageView {
+    fn open_code_maps_picker(&mut self, ctx: &mut ViewContext<Self>) {
+        let window_id = ctx.window_id();
+        ctx.open_file_picker(
+            move |result, ctx| match result {
+                Ok(paths) => {
+                    if let Some(directory_path) = paths.first() {
+                        let path = PathBuf::from(directory_path);
+                        CodeMaps::handle(ctx).update(ctx, |maps, ctx| maps.map(path, ctx));
+                    }
+                }
+                Err(err) => {
+                    ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
+                        toast_stack.add_ephemeral_toast(
+                            DismissibleToast::error(format!("{err}")),
+                            window_id,
+                            ctx,
+                        );
+                    });
+                }
+            },
+            FilePickerConfiguration::new().folders_only(),
         );
     }
 }
@@ -480,6 +559,12 @@ pub enum CodeIndexingPageAction {
         workspace_path: PathBuf,
         server_type: LSPServerType,
     },
+    /// Shellomancy: Code Maps.
+    CodeMapsAddFolder,
+    CodeMapsMapNow(PathBuf),
+    CodeMapsForget(PathBuf),
+    CodeMapsToggleUpload,
+    CodeMapsOpenUrl(String),
 }
 
 impl TypedActionView for CodeIndexingPageView {
@@ -701,6 +786,32 @@ impl TypedActionView for CodeIndexingPageView {
                 });
                 ctx.notify();
             }
+            #[cfg(not(target_family = "wasm"))]
+            CodeIndexingPageAction::CodeMapsAddFolder => self.open_code_maps_picker(ctx),
+            #[cfg(not(target_family = "wasm"))]
+            CodeIndexingPageAction::CodeMapsMapNow(path) => {
+                let path = path.clone();
+                CodeMaps::handle(ctx).update(ctx, |maps, ctx| maps.map(path, ctx));
+            }
+            #[cfg(not(target_family = "wasm"))]
+            CodeIndexingPageAction::CodeMapsForget(path) => {
+                CodeMaps::handle(ctx).update(ctx, |maps, ctx| maps.forget(path, ctx));
+            }
+            #[cfg(not(target_family = "wasm"))]
+            CodeIndexingPageAction::CodeMapsToggleUpload => {
+                CodeMapsSettings::handle(ctx).update(ctx, |settings, ctx| {
+                    if let Err(err) = settings.upload_enabled.toggle_and_save_value(ctx) {
+                        log::warn!("Failed to toggle code map uploads: {err:?}");
+                    }
+                });
+                ctx.notify();
+            }
+            CodeIndexingPageAction::CodeMapsOpenUrl(url) => ctx.open_url(url),
+            #[cfg(target_family = "wasm")]
+            CodeIndexingPageAction::CodeMapsAddFolder
+            | CodeIndexingPageAction::CodeMapsMapNow(_)
+            | CodeIndexingPageAction::CodeMapsForget(_)
+            | CodeIndexingPageAction::CodeMapsToggleUpload => {}
         }
     }
 }
@@ -2182,7 +2293,7 @@ impl SettingsWidget for CodeIndexingPageWidget {
     type View = CodeIndexingPageView;
 
     fn search_terms(&self) -> &str {
-        "codebase index indexing repository code context embedding auto-index lsp language server"
+        "codebase index indexing repository code context embedding auto-index lsp language server code maps cartogomancy swarmdesk inventorium"
     }
 
     fn render(
@@ -2191,11 +2302,49 @@ impl SettingsWidget for CodeIndexingPageWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
+        let mut content = Flex::column();
+
+        if code_maps_active(app) {
+            #[cfg(not(target_family = "wasm"))]
+            content.add_child(render_code_maps(&view.code_maps_mouse, appearance, app));
+        } else {
+            self.render_indexing_toggles(view, appearance, app, &mut content);
+        }
+
+        // Initialized / indexed folders section
+        let mouse_states = InitializedFoldersMouseStates {
+            codebase_manual_resync: view.codebase_manual_resync_mouse_states.clone(),
+            codebase_delete: view.codebase_delete_mouse_states.clone(),
+            #[cfg(not(target_family = "wasm"))]
+            remote_codebase_manual_resync: view.remote_codebase_manual_resync_mouse_states.clone(),
+            #[cfg(not(target_family = "wasm"))]
+            remote_codebase_delete: view.remote_codebase_delete_mouse_states.clone(),
+            lsp_rows: view.lsp_row_mouse_states.clone(),
+            open_project_rules: view.open_project_rules_mouse_states.clone(),
+        };
+        content.add_child(self.inner.render_initialized_folders(
+            mouse_states,
+            &view.suggested_server_statuses,
+            appearance,
+            app,
+        ));
+
+        content.finish()
+    }
+}
+
+impl CodeIndexingPageWidget {
+    /// Warp's codebase indexing toggles; Shellomancy shows Code Maps instead.
+    fn render_indexing_toggles(
+        &self,
+        view: &CodeIndexingPageView,
+        appearance: &Appearance,
+        app: &AppContext,
+        content: &mut Flex,
+    ) {
         let ui_builder = appearance.ui_builder();
         let global_ai_enabled = AISettings::as_ref(app).is_any_ai_enabled(app);
         let codebase_context_enabled = UserWorkspaces::as_ref(app).is_codebase_context_enabled(app);
-
-        let mut content = Flex::column();
 
         // Codebase indexing toggle using render_body_item for consistent styling
         let switch = ui_builder
@@ -2267,26 +2416,6 @@ impl SettingsWidget for CodeIndexingPageWidget {
                 );
             }
         }
-
-        // Initialized / indexed folders section
-        let mouse_states = InitializedFoldersMouseStates {
-            codebase_manual_resync: view.codebase_manual_resync_mouse_states.clone(),
-            codebase_delete: view.codebase_delete_mouse_states.clone(),
-            #[cfg(not(target_family = "wasm"))]
-            remote_codebase_manual_resync: view.remote_codebase_manual_resync_mouse_states.clone(),
-            #[cfg(not(target_family = "wasm"))]
-            remote_codebase_delete: view.remote_codebase_delete_mouse_states.clone(),
-            lsp_rows: view.lsp_row_mouse_states.clone(),
-            open_project_rules: view.open_project_rules_mouse_states.clone(),
-        };
-        content.add_child(self.inner.render_initialized_folders(
-            mouse_states,
-            &view.suggested_server_statuses,
-            appearance,
-            app,
-        ));
-
-        content.finish()
     }
 }
 

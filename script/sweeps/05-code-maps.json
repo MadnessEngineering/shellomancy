@@ -1,0 +1,97 @@
+[
+ {
+  "key": "shellomancy.settings.nav.codeMaps",
+  "standard": "Code maps and projects",
+  "shellomancer": "Cartogomancy"
+ },
+ {
+  "key": "shellomancy.codeMaps.pageTitle",
+  "standard": "Code Maps",
+  "shellomancer": "Cartogomancy"
+ },
+ {
+  "key": "shellomancy.codeMaps.description",
+  "standard": "Map a folder with cartogomancy to see its classes, complexity hotspots and unused exports. Maps are saved in ~/.mad/shellomancy/maps/ and, when you're signed in, sent to Inventorium so SwarmDesk can build the code city.",
+  "shellomancer": "Cartogomancy reads a folder and draws what it finds: the classes, the complexity waiting to bite someone, the exports nobody imports. Maps are kept in ~/.mad/shellomancy/maps/. While you're bound to madnessinteractive.cc, SwarmDesk gets a copy and builds the city."
+ },
+ {
+  "key": "shellomancy.codeMaps.mapFolder",
+  "standard": "Map a folder",
+  "shellomancer": "Map a folder"
+ },
+ {
+  "key": "shellomancy.codeMaps.mapNow",
+  "standard": "Map now",
+  "shellomancer": "Map now"
+ },
+ {
+  "key": "shellomancy.codeMaps.forget",
+  "standard": "Remove",
+  "shellomancer": "Forget"
+ },
+ {
+  "key": "shellomancy.codeMaps.mapping",
+  "standard": "Mapping…",
+  "shellomancer": "Charting…"
+ },
+ {
+  "key": "shellomancy.codeMaps.empty",
+  "standard": "No folders mapped yet.",
+  "shellomancer": "No maps yet. The territory remains unexplored, which it is fine with."
+ },
+ {
+  "key": "shellomancy.codeMaps.uploadLabel",
+  "standard": "Send maps to Inventorium",
+  "shellomancer": "Send maps to SwarmDesk"
+ },
+ {
+  "key": "shellomancy.codeMaps.uploadDescription",
+  "standard": "Upload each new map to madnessinteractive.cc. Every upload is kept as a new version you can compare.",
+  "shellomancer": "Every new map goes to madnessinteractive.cc as a new version, so you can see what changed and who to blame."
+ },
+ {
+  "key": "shellomancy.codeMaps.uploadSignedOut",
+  "standard": "Sign in on the Account page to send maps.",
+  "shellomancer": "Bind your account on the Account page and the maps will follow."
+ },
+ {
+  "key": "shellomancy.codeMaps.summary",
+  "standard": "{{classes}} classes in {{packages}} packages · {{critical}} critical and {{high}} high complexity · {{unused}} unused exports",
+  "shellomancer": "{{classes}} classes in {{packages}} packages · {{critical}} critical and {{high}} high threats · {{unused}} exports nobody imports"
+ },
+ {
+  "key": "shellomancy.codeMaps.mappedAt",
+  "standard": "Mapped {{when}}",
+  "shellomancer": "Charted {{when}}"
+ },
+ {
+  "key": "shellomancy.codeMaps.uploaded",
+  "standard": "sent to Inventorium as version {{version}}",
+  "shellomancer": "SwarmDesk holds version {{version}}"
+ },
+ {
+  "key": "shellomancy.codeMaps.keptLocal",
+  "standard": "kept local",
+  "shellomancer": "kept local"
+ },
+ {
+  "key": "shellomancy.codeMaps.uploadFailed",
+  "standard": "upload failed: {{error}}",
+  "shellomancer": "the upload fizzled: {{error}}"
+ },
+ {
+  "key": "shellomancy.codeMaps.failed",
+  "standard": "Mapping failed: {{error}}",
+  "shellomancer": "The map fizzled: {{error}}"
+ },
+ {
+  "key": "shellomancy.codeMaps.notFound",
+  "standard": "Neither cartogomancy nor npx is on your PATH. Install it with: npm install -g @madnessengineering/cartogomancy",
+  "shellomancer": "Neither cartogomancy nor npx is anywhere on your PATH. Summon it with: npm install -g @madnessengineering/cartogomancy"
+ },
+ {
+  "key": "shellomancy.codeMaps.openInInventorium",
+  "standard": "Open in Inventorium",
+  "shellomancer": "Visit the city"
+ }
+]

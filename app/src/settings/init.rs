@@ -12,6 +12,7 @@ use super::app_icon::AppIconSettings;
 use super::app_installation_detection::UserAppInstallDetectionSettings;
 use super::cloud_preferences::CloudPreferencesSettings;
 use super::initializer::SettingsInitializer;
+use super::code_maps::CodeMapsSettings;
 use super::madness_voice::MadnessVoiceSettings;
 use super::native_preference::NativePreferenceSettings;
 use super::{
@@ -92,6 +93,7 @@ pub fn register_all_settings(ctx: &mut AppContext) {
     UserAppInstallDetectionSettings::register(ctx);
     AppIconSettings::register(ctx);
     MadnessVoiceSettings::register(ctx);
+    CodeMapsSettings::register(ctx);
     AppEditorSettings::register(ctx);
     InputSettings::register(ctx);
     WarpifySettings::register(ctx);

@@ -88,6 +88,8 @@ mod billing_and_usage_page_v2;
 mod cli_agents_page;
 mod code_editor_review_page;
 mod code_indexing_page;
+#[cfg(not(target_family = "wasm"))]
+mod code_maps_section;
 pub(crate) mod custom_inference_modal;
 mod custom_router_view;
 mod delete_environment_confirmation_dialog;
@@ -382,7 +384,9 @@ impl Display for SettingsSection {
             SettingsSection::AgentMCPServers => write!(f, "MCP servers"),
             SettingsSection::Knowledge => write!(f, "Knowledge"),
             SettingsSection::ThirdPartyCLIAgents => write!(f, "Third party CLI agents"),
-            SettingsSection::CodeIndexing => write!(f, "Indexing and projects"),
+            SettingsSection::CodeIndexing => {
+                f.write_str(madness_themes::t("shellomancy.settings.nav.codeMaps"))
+            }
             SettingsSection::EditorAndCodeReview => write!(f, "Editor and Code Review"),
             SettingsSection::CloudEnvironments => write!(f, "Environments"),
             SettingsSection::WarpCloudAgentAPIKeys => write!(f, "API keys"),
