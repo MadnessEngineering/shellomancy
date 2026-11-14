@@ -287,7 +287,9 @@ impl SettingsImportView {
                 background: Some(appearance.theme().outline().into()),
                 ..Default::default()
             })
-            .with_centered_text_label("Reset to Warp defaults".to_owned())
+            .with_centered_text_label(
+                madness_themes::t("shellomancy.settingsImport.reset").to_owned(),
+            )
             .build()
             .on_click(move |ctx, _, _| {
                 ctx.dispatch_typed_action(SettingsImportAction::ResetButtonClicked);

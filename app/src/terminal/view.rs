@@ -10728,7 +10728,7 @@ impl TerminalView {
             .notifications_error_banner
             .error
             .as_ref()
-            .map(|e| e.notifications_error_banner_title())
+            .map(notification_error_title)
             .unwrap_or("Error sending notification");
 
         let a11y_content = AccessibilityContent::new(
@@ -25245,7 +25245,7 @@ impl TerminalView {
                 .notifications_error_banner
                 .error
                 .as_ref()
-                .map(|e| e.notifications_error_banner_title())
+                .map(notification_error_title)
                 .unwrap_or("Error sending notification");
 
             inline_banners.insert(
@@ -30399,3 +30399,16 @@ mod tests;
 #[cfg(test)]
 #[path = "view/shell_replacement_tests.rs"]
 mod shell_replacement_tests;
+
+/// Shellomancy: the notification banner's title, in the active voice.
+fn notification_error_title(error: &NotificationSendError) -> &'static str {
+    match error {
+        NotificationSendError::PermissionsDenied
+        | NotificationSendError::PermissionsNotYetGranted => {
+            madness_themes::t("shellomancy.notifications.noPermission")
+        }
+        NotificationSendError::Other { .. } => {
+            madness_themes::t("shellomancy.notifications.failed")
+        }
+    }
+}

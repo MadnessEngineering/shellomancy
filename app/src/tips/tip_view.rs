@@ -126,14 +126,13 @@ impl TipsView {
         let tip_items = vec![
             TipItem::new(
                 "Command Palette".to_string(),
-                "Easily discover everything you can do in Warp without your hands leaving the keyboard.".to_string(),
+                madness_themes::t("shellomancy.tips.palette").to_string(),
                 TipAction::CommandPalette,
                 ctx,
             ),
             TipItem::new(
                 "Split Pane".to_string(),
-                "Split tabs into multiple panes to make your ideal layout."
-                    .to_string(),
+                "Split tabs into multiple panes to make your ideal layout.".to_string(),
                 TipAction::SplitPane,
                 ctx,
             ),
@@ -151,7 +150,7 @@ impl TipsView {
             ),
             TipItem::new(
                 "Theme Picker".to_string(),
-                "Make Warp your own by choosing a built-in theme. Or create your own.".to_string(),
+                madness_themes::t("shellomancy.tips.themes").to_string(),
                 TipAction::ThemePicker,
                 ctx,
             ),

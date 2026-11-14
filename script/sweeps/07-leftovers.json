@@ -1,0 +1,32 @@
+[
+ {
+  "key": "shellomancy.notifications.noPermission",
+  "standard": "Shellomancy tried to notify you about the last block but doesn't have permission.",
+  "shellomancer": "A spell finished and Shellomancy tried to tell you, but macOS hasn't granted it the right to speak."
+ },
+ {
+  "key": "shellomancy.notifications.failed",
+  "standard": "Shellomancy tried to notify you about the last block, but something went wrong.",
+  "shellomancer": "A spell finished and Shellomancy tried to tell you, but the message fizzled."
+ },
+ {
+  "key": "shellomancy.tips.palette",
+  "standard": "Discover everything Shellomancy can do without your hands leaving the keyboard.",
+  "shellomancer": "Conjure finds everything Shellomancy can do, and your hands never leave the keyboard.",
+  "replace": [{"file": "app/src/tips/tip_view.rs", "literal": "Easily discover everything you can do in Warp without your hands leaving the keyboard.", "count": 1,
+    "code": "madness_themes::t(\"shellomancy.tips.palette\")"}]
+ },
+ {
+  "key": "shellomancy.tips.themes",
+  "standard": "Make Shellomancy your own by choosing a built-in theme. Or create your own.",
+  "shellomancer": "Pick a palette and Shellomancy wears it. Or mix your own; nobody here will stop you.",
+  "replace": [{"file": "app/src/tips/tip_view.rs", "literal": "Make Warp your own by choosing a built-in theme. Or create your own.", "count": 1,
+    "code": "madness_themes::t(\"shellomancy.tips.themes\")"}]
+ },
+ {
+  "key": "shellomancy.settingsImport.reset",
+  "standard": "Reset to defaults",
+  "shellomancer": "Reset to defaults",
+  "replace": [{"file": "app/src/settings/import/view.rs", "literal": "Reset to Warp defaults", "count": 1}]
+ }
+]

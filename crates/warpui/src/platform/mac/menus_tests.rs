@@ -25,7 +25,7 @@ use warpui_core::actions::StandardAction;
 use warpui_core::keymap::Keystroke;
 use warpui_core::platform::menu::{MenuItem, MenuItemPropertyChanges};
 
-use super::{apply_changes, make_menu_item};
+use super::{apply_changes, bundle_name, make_menu_item};
 
 /// How many outer pool cycles for the retain → autorelease test.
 const MENU_ITEM_OUTER: usize = 40;
@@ -91,4 +91,16 @@ fn apply_changes_local_pool_memory_behavior() {
         // Balance the manual retain above.
         let _: () = msg_send![item, release];
     }
+}
+
+#[test]
+fn standard_items_are_named_after_the_app_bundle() {
+    use std::path::Path;
+    assert_eq!(
+        bundle_name(Path::new(
+            "/Applications/Shellomancy.app/Contents/MacOS/warp-oss"
+        )),
+        Some("Shellomancy".to_owned())
+    );
+    assert_eq!(bundle_name(Path::new("/repo/target/debug/warp-oss")), None);
 }

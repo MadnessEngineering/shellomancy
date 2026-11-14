@@ -186,6 +186,23 @@ impl KeyEquivalent {
     }
 }
 
+/// The app's name as macOS shows it: the running `.app` bundle's name, else
+/// "Warp" (e.g. a bare binary from `cargo run`).
+fn app_display_name() -> String {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| bundle_name(&exe))
+        .unwrap_or_else(|| "Warp".to_owned())
+}
+
+/// The name of the `.app` bundle `exe` lives in, if any.
+fn bundle_name(exe: &std::path::Path) -> Option<String> {
+    exe.ancestors()
+        .find(|dir| dir.extension().is_some_and(|ext| ext == "app"))
+        .and_then(|bundle| bundle.file_stem())
+        .map(|name| name.to_string_lossy().into_owned())
+}
+
 // Get properties from a standard action.
 fn resolve_standard_action(action: StandardAction) -> StandardMenuItemProperties {
     let cmd = NSEventModifierFlags::Command;
@@ -354,9 +371,17 @@ unsafe fn make_menu_item(menu_item: MenuItem) -> id {
             MenuItem::Standard(standard_action) => {
                 let mtm = MainThreadMarker::new_unchecked();
                 let properties = resolve_standard_action(standard_action);
+                // Name Quit and Hide after the app bundle being run (Shellomancy
+                // for the fork), as macOS apps do.
+                let named_title = match standard_action {
+                    StandardAction::Quit => Some(format!("Quit {}", app_display_name())),
+                    StandardAction::Hide => Some(format!("Hide {}", app_display_name())),
+                    _ => None,
+                }
+                .map(|title| NSString::from_str(&title));
                 let nsmenu_item = NSMenuItem::initWithTitle_action_keyEquivalent(
                     mtm.alloc(),
-                    properties.title,
+                    named_title.as_deref().unwrap_or(properties.title),
                     Some(properties.action),
                     properties.shortcut,
                 );

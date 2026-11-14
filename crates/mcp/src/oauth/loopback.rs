@@ -125,11 +125,14 @@ impl LoopbackOAuthReceiver {
         };
 
         let (status, message) = if result.is_ok() {
-            ("200 OK", "Authentication complete. You can return to Warp.")
+            (
+                "200 OK",
+                "Authentication complete. You can close this tab and return to your terminal.",
+            )
         } else {
             (
                 "400 Bad Request",
-                "Authentication failed. Return to Warp for details.",
+                "Authentication failed. Return to your terminal for details.",
             )
         };
         let response = format!(
