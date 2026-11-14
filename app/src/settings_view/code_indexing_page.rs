@@ -410,8 +410,15 @@ impl CodeIndexingPageView {
     }
 
     fn build_page(ctx: &mut ViewContext<Self>) -> PageType<Self> {
+        // Shellomancy: Warp's indexer needs Warp's servers, so the button adds a
+        // project folder instead (language servers, project rules).
+        let add_label = if code_maps_active(ctx) {
+            madness_themes::t("shellomancy.codeMaps.addProjectFolder")
+        } else {
+            "Index new folder"
+        };
         let manual_add_directory_button = ctx.add_typed_action_view(|_| {
-            ActionButton::new("Index new folder", SecondaryTheme)
+            ActionButton::new(add_label, SecondaryTheme)
                 .with_icon(Icon::FindAll)
                 .on_click(|ctx| {
                     ctx.dispatch_typed_action(CodeIndexingPageAction::ManualAddDirectory);
@@ -444,6 +451,7 @@ impl CodeIndexingPageView {
     fn open_directory_picker(&mut self, ctx: &mut ViewContext<Self>) {
         let file_picker_config = FilePickerConfiguration::new().folders_only();
         let window_id = ctx.window_id();
+        let add_as_project = code_maps_active(ctx);
 
         ctx.open_file_picker(
             move |result, ctx| match result {
@@ -451,6 +459,12 @@ impl CodeIndexingPageView {
                     if let Some(directory_path) = paths.first() {
                         let path = PathBuf::from(directory_path);
 
+                        if add_as_project {
+                            PersistedWorkspace::handle(ctx).update(ctx, |persisted, ctx| {
+                                persisted.user_added_workspace(path, ctx);
+                            });
+                            return;
+                        }
                         CodebaseIndexManager::handle(ctx).update(ctx, |manager, ctx| {
                             manager.index_directory(path, ctx);
                         });
@@ -1188,7 +1202,9 @@ impl CodePageWidget {
                     .with_cross_axis_alignment(CrossAxisAlignment::Center)
                     .with_child(
                         ui_builder
-                            .span("Initialized / indexed folders")
+                            .span(madness_themes::t(
+                                "shellomancy.codeMaps.projectFoldersTitle",
+                            ))
                             .with_style(UiComponentStyles {
                                 font_size: Some(16.0),
                                 font_weight: Some(Weight::Semibold),
@@ -1312,7 +1328,9 @@ impl CodePageWidget {
                 Container::new(
                     appearance
                         .ui_builder()
-                        .paragraph("No folders have been initialized yet.")
+                        .paragraph(madness_themes::t(
+                            "shellomancy.codeMaps.projectFoldersEmpty",
+                        ))
                         .build()
                         .finish(),
                 )

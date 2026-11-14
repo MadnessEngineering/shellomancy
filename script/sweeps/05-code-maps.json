@@ -108,5 +108,35 @@
   "key": "shellomancy.codeMaps.watching",
   "standard": "watching {{branch}} and tags",
   "shellomancer": "keeping an eye on {{branch}} and the tags"
+ },
+ {
+  "key": "shellomancy.codeMaps.projectFoldersTitle",
+  "standard": "Project folders",
+  "shellomancer": "Known territories",
+  "replace": [
+   {
+    "file": "app/src/settings_view/code_indexing_page.rs",
+    "literal": "Initialized / indexed folders",
+    "count": 1,
+    "exact": ".span(\"Initialized / indexed folders\")"
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.codeMaps.projectFoldersEmpty",
+  "standard": "No project folders yet. Add one to set up its language servers.",
+  "shellomancer": "No known territories yet. Add a folder and its language servers will be summoned.",
+  "replace": [
+   {
+    "file": "app/src/settings_view/code_indexing_page.rs",
+    "literal": "No folders have been initialized yet.",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "key": "shellomancy.codeMaps.addProjectFolder",
+  "standard": "Add a folder",
+  "shellomancer": "Add a folder"
  }
 ]
