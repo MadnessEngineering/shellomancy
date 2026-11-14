@@ -589,6 +589,7 @@ fn test_theme_chooser_does_not_suppress_tab_bar_traffic_light_padding() {
 /// automatically as account and AI availability change—without an off/on
 /// toggle.
 #[test]
+#[ignore = "Shellomancy: Drive is left out of the tools panel and Warp's login is a toast offline; see test_tools_panel_offline_has_no_warp_drive_or_login"]
 fn test_tools_panel_preferences_activate_after_signup_and_ai_enablement() {
     let _skip_anon_guard = FeatureFlag::SkipFirebaseAnonymousUser.override_enabled(true);
     let _conversation_list_guard =
@@ -5411,7 +5412,42 @@ fn test_pin_tab_on_grouped_tab_extracts_then_pins() {
 /// that tab from the tools panel live, and re-enabling Warp Drive must make it
 /// selectable again (the original report was that Warp Drive could vanish from
 /// the tools panel with no way back).
+/// Shellomancy: Drive is locked behind Warp sign-in offline, so it's never a
+/// tools-panel tab whatever its setting says, and the locked panel's Sign in
+/// shows a toast instead of Warp's login modal.
 #[test]
+fn test_tools_panel_offline_has_no_warp_drive_or_login() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        app.update(|ctx| {
+            WarpDriveSettings::handle(ctx).update(ctx, |settings, ctx| {
+                settings
+                    .enable_warp_drive
+                    .set_value(true, ctx)
+                    .expect("enable warp drive");
+            });
+        });
+        let workspace = mock_workspace(&mut app);
+        workspace.update(&mut app, |workspace, ctx| {
+            assert!(
+                !workspace
+                    .left_panel_views
+                    .contains(&ToolPanelView::WarpDrive),
+                "Drive should not be a tools-panel tab offline"
+            );
+            workspace.handle_left_panel_event(&LeftPanelEvent::SignInRequested, ctx);
+            assert!(
+                !workspace
+                    .current_workspace_state
+                    .is_require_login_modal_open,
+                "Warp's login modal should not open offline"
+            );
+        });
+    });
+}
+
+#[test]
+#[ignore = "Shellomancy: Drive is left out of the tools panel offline; see test_tools_panel_offline_has_no_warp_drive_or_login"]
 fn test_tools_panel_warp_drive_toggle_updates_available_views() {
     // Force the non-anonymous path so `is_warp_drive_enabled` follows the
     // `enable_warp_drive` setting rather than the auth state.

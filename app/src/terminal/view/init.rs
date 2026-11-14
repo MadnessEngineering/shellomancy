@@ -566,6 +566,10 @@ pub fn init(app: &mut AppContext) {
             "Share selected block",
             TerminalAction::OpenShareModal,
         )
+        // Shellomancy: block sharing goes through Warp's servers.
+        .with_enabled(|| {
+            warp_core::channel::ChannelState::channel() != warp_core::channel::Channel::Oss
+        })
         .with_custom_action(CustomAction::CreateBlockPermalink)
         .with_context_predicate(
             id!("Terminal") & eq!("TerminalView_BlockSelectionCardinality", "One"),

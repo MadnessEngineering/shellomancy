@@ -10059,10 +10059,17 @@ impl Workspace {
             }
         }
 
+        // Shellomancy: Warp's cloud entries (changelog, Slack, sign-up, plans,
+        // referrals) lead nowhere offline.
+        let oss = ChannelState::channel() == Channel::Oss;
+        if FeatureFlag::Changelog.is_enabled() {
+            items.push(
+                MenuItemFields::new("What's new")
+                    .with_on_select_action(WorkspaceAction::ViewLatestChangelog)
+                    .into_item(),
+            );
+        }
         items.extend([
-            MenuItemFields::new("What's new")
-                .with_on_select_action(WorkspaceAction::ViewLatestChangelog)
-                .into_item(),
             MenuItemFields::new("Settings")
                 .with_on_select_action(WorkspaceAction::ShowSettings)
                 .into_item(),
@@ -10085,12 +10092,17 @@ impl Workspace {
                 .into_item(),
         );
 
-        items.extend([
-            MenuItemFields::new("Join our Slack community")
-                .with_on_select_action(WorkspaceAction::JoinSlack)
-                .into_item(),
-            MenuItem::Separator,
-        ]);
+        if !oss {
+            items.push(
+                MenuItemFields::new("Join our Slack community")
+                    .with_on_select_action(WorkspaceAction::JoinSlack)
+                    .into_item(),
+            );
+        }
+        if oss {
+            return items;
+        }
+        items.push(MenuItem::Separator);
 
         if self.auth_state.is_anonymous_or_logged_out() {
             items.push(
@@ -15043,6 +15055,19 @@ impl Workspace {
     }
 
     fn open_require_login_modal(&mut self, variant: AuthViewVariant, ctx: &mut ViewContext<Self>) {
+        // Shellomancy: every path to Warp's login (Sign up, the Drive panel's
+        // Sign in, ...) ends here; say it's Warp-cloud-only instead.
+        if ChannelState::channel() == Channel::Oss {
+            self.toast_stack.update(ctx, |toast_stack, ctx| {
+                toast_stack.add_ephemeral_toast(
+                    DismissibleToast::default(
+                        madness_themes::t("shellomancy.account.cloudOnlyFeature").to_string(),
+                    ),
+                    ctx,
+                );
+            });
+            return;
+        }
         self.require_login_modal.update(ctx, |modal, ctx| {
             modal.set_variant(ctx, variant);
         });
@@ -24220,7 +24245,11 @@ impl Workspace {
                 entry_focus: GlobalSearchEntryFocus::Results,
             });
         }
-        if *WarpDriveSettings::as_ref(ctx).enable_warp_drive {
+        // Shellomancy: Drive is locked behind Warp sign-in offline; it comes
+        // back as the Mana Bar once it lives on Omnispindle.
+        if *WarpDriveSettings::as_ref(ctx).enable_warp_drive
+            && ChannelState::channel() != Channel::Oss
+        {
             views.push(ToolPanelView::WarpDrive);
         }
         views

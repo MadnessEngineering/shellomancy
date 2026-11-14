@@ -59,6 +59,12 @@ const EXPORT_DEFAULT_SETTINGS_CSV_MENU_ITEM_NAME: &str =
 const SETTINGS_CSV_FILE_NAME: &str = "warp_default_settings.csv";
 const MAX_RECENT_REPOS_IN_MENU: usize = 10;
 
+/// Shellomancy: Warp's cloud menu items (Drive, sharing, referrals, Warp's
+/// privacy policy, Slack, log out) lead nowhere offline, so they're left out.
+fn is_shellomancy() -> bool {
+    crate::channel::ChannelState::channel() == crate::channel::Channel::Oss
+}
+
 /// Creates the root app menu bar
 pub fn menu_bar(ctx: &mut AppContext) -> MenuBar {
     let mut menus = vec![
@@ -74,11 +80,10 @@ pub fn menu_bar(ctx: &mut AppContext) -> MenuBar {
     if FeatureFlag::AgentMode.is_enabled() {
         menus.push(make_new_ai_menu(ctx));
     }
-    menus.extend([
-        make_new_drive_menu(ctx),
-        make_new_window_menu(),
-        make_new_help_menu(),
-    ]);
+    if !is_shellomancy() {
+        menus.push(make_new_drive_menu(ctx));
+    }
+    menus.extend([make_new_window_menu(), make_new_help_menu()]);
     MenuBar::new(menus)
 }
 
@@ -156,11 +161,13 @@ fn make_new_app_menu(ctx: &AppContext) -> Menu {
         ))
     }
 
-    menu_items.extend([
-        MenuItem::Separator,
-        updateable_custom_item_without_checkmark(CustomAction::ReferAFriend, ctx),
-        MenuItem::Separator,
-    ]);
+    menu_items.push(MenuItem::Separator);
+    if !is_shellomancy() {
+        menu_items.extend([
+            updateable_custom_item_without_checkmark(CustomAction::ReferAFriend, ctx),
+            MenuItem::Separator,
+        ]);
+    }
 
     let preferences_menu_items = vec![
         updateable_custom_item_without_checkmark(CustomAction::ShowSettings, ctx),
@@ -192,11 +199,13 @@ fn make_new_app_menu(ctx: &AppContext) -> Menu {
         menu_items.push(MenuItem::Services);
     }
 
-    menu_items.push(MenuItem::Separator);
-    menu_items.push(link_menu_item(
-        "Privacy Policy...",
-        links::PRIVACY_POLICY_URL.into(),
-    ));
+    if !is_shellomancy() {
+        menu_items.push(MenuItem::Separator);
+        menu_items.push(link_menu_item(
+            "Privacy Policy...",
+            links::PRIVACY_POLICY_URL.into(),
+        ));
+    }
 
     let debug_menu_items = debug_menu_items();
     if !debug_menu_items.is_empty() {
@@ -234,21 +243,23 @@ fn make_new_app_menu(ctx: &AppContext) -> Menu {
         None,
     )));
     menu_items.push(MenuItem::Separator);
-    menu_items.push(MenuItem::Custom(CustomMenuItem::new(
-        "Log out",
-        auth::maybe_log_out,
-        move |_, ctx| {
-            let is_anonymous = AuthStateProvider::handle(ctx)
-                .as_ref(ctx)
-                .get()
-                .is_anonymous_or_logged_out();
-            MenuItemPropertyChanges {
-                disabled: Some(is_anonymous),
-                ..Default::default()
-            }
-        },
-        None,
-    )));
+    if !is_shellomancy() {
+        menu_items.push(MenuItem::Custom(CustomMenuItem::new(
+            "Log out",
+            auth::maybe_log_out,
+            move |_, ctx| {
+                let is_anonymous = AuthStateProvider::handle(ctx)
+                    .as_ref(ctx)
+                    .get()
+                    .is_anonymous_or_logged_out();
+                MenuItemPropertyChanges {
+                    disabled: Some(is_anonymous),
+                    ..Default::default()
+                }
+            },
+            None,
+        )));
+    }
     menu_items.push(MenuItem::Standard(StandardAction::Quit));
     Menu::new(madness_themes::t("shellomancy.menu.app"), menu_items)
 }
@@ -379,15 +390,20 @@ fn make_new_edit_menu(ctx: &AppContext) -> Menu {
 }
 
 fn make_new_view_menu(ctx: &AppContext) -> Menu {
-    let mut items = vec![
-        updateable_custom_item_without_checkmark(CustomAction::ToggleWarpDrive, ctx),
-        MenuItem::Separator,
+    let mut items = vec![];
+    if !is_shellomancy() {
+        items.extend([
+            updateable_custom_item_without_checkmark(CustomAction::ToggleWarpDrive, ctx),
+            MenuItem::Separator,
+        ]);
+    }
+    items.extend([
         updateable_custom_item_without_checkmark(CustomAction::CommandPalette, ctx),
         updateable_custom_item_without_checkmark(CustomAction::NavigationPalette, ctx),
         updateable_custom_item_without_checkmark(CustomAction::LaunchConfigPalette, ctx),
         updateable_custom_item_without_checkmark(CustomAction::FilesPalette, ctx),
         updateable_custom_item_without_checkmark(CustomAction::ToggleProjectExplorer, ctx),
-    ];
+    ]);
     // Shellomancy: only offer the menu item when its binding is registered.
     if FeatureFlag::AgentViewConversationListView.is_enabled() {
         items.push(updateable_custom_item_without_checkmark(
@@ -578,9 +594,13 @@ fn make_new_blocks_menu(ctx: &AppContext) -> Menu {
         ctx,
     ));
     items.push(MenuItem::Separator);
+    if !is_shellomancy() {
+        items.extend([
+            updateable_custom_item_without_checkmark(CustomAction::CreateBlockPermalink, ctx),
+            non_updateable_custom_item(CustomAction::ViewSharedBlocks, ctx),
+        ]);
+    }
     items.extend([
-        updateable_custom_item_without_checkmark(CustomAction::CreateBlockPermalink, ctx),
-        non_updateable_custom_item(CustomAction::ViewSharedBlocks, ctx),
         updateable_custom_item_without_checkmark(CustomAction::ToggleBookmarkBlock, ctx),
         updateable_custom_item_without_checkmark(CustomAction::FindWithinBlock, ctx),
         MenuItem::Separator,
@@ -950,21 +970,24 @@ fn feedback_menu_item() -> MenuItem {
 }
 
 fn make_new_help_menu() -> Menu {
-    Menu::new(
-        "Help",
-        vec![
-            feedback_menu_item(),
-            link_menu_item(
-                madness_themes::t("shellomancy.menu.documentation"),
-                links::USER_DOCS_URL.into(),
-            ),
-            link_menu_item(
-                madness_themes::t("shellomancy.menu.issues"),
-                links::GITHUB_ISSUES_URL.into(),
-            ),
-            link_menu_item("Join our Slack community...", links::SLACK_URL.into()),
-        ],
-    )
+    let mut items = vec![
+        feedback_menu_item(),
+        link_menu_item(
+            madness_themes::t("shellomancy.menu.documentation"),
+            links::USER_DOCS_URL.into(),
+        ),
+        link_menu_item(
+            madness_themes::t("shellomancy.menu.issues"),
+            links::GITHUB_ISSUES_URL.into(),
+        ),
+    ];
+    if !is_shellomancy() {
+        items.push(link_menu_item(
+            "Join our Slack community...",
+            links::SLACK_URL.into(),
+        ));
+    }
+    Menu::new("Help", items)
 }
 
 fn make_launch_config_menu_items(ctx: &mut AppContext) -> Vec<MenuItem> {

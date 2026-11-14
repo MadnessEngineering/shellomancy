@@ -322,7 +322,10 @@ impl SettingsPageMeta for CLIAgentsPageView {
     }
 
     fn should_render(&self, _ctx: &AppContext) -> bool {
+        // Shellomancy: the coding agent toolbar (Claude Code, Codex, ...) works
+        // without Warp's agent, so its settings stay reachable.
         FeatureFlag::AgentMode.is_enabled()
+            || warp_core::channel::ChannelState::channel() == warp_core::channel::Channel::Oss
     }
 
     fn update_filter(&mut self, query: &str, ctx: &mut ViewContext<Self>) -> MatchData {

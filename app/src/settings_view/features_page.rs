@@ -2774,8 +2774,12 @@ impl FeaturesPageView {
     }
 
     fn build_page(ctx: &mut ViewContext<Self>) -> PageType<Self> {
-        let mut general_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> =
-            vec![Box::new(DefaultSessionModeWidget::default())];
+        let mut general_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = Vec::new();
+        // Shellomancy: the session-mode picker is disabled without Warp's AI
+        // (and offers Agent / Cloud Agent), so it's left out with Agent Mode off.
+        if FeatureFlag::AgentMode.is_enabled() {
+            general_widgets.push(Box::new(DefaultSessionModeWidget::default()));
+        }
 
         let native_preference_settings = NativePreferenceSettings::as_ref(ctx);
         if native_preference_settings
@@ -2821,6 +2825,7 @@ impl FeaturesPageView {
         if changelog_settings
             .show_changelog_after_update
             .is_supported_on_current_platform()
+            && FeatureFlag::Changelog.is_enabled()
         {
             general_widgets.push(Box::new(ShowChangelogWidget::default()));
         }

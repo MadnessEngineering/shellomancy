@@ -83,7 +83,8 @@ fn maybe_add_settings_sync_toggle_binding<T: Action + Clone>(
     let mut lock = SETTINGS_SYNC_BINDINGS_ADDED
         .lock()
         .expect("settings sync bindings lock poisoned");
-    if !*lock {
+    // Shellomancy: settings sync goes through Warp's servers.
+    if !*lock && ChannelState::channel() != warp_core::channel::Channel::Oss {
         *lock = true;
         toggle_binding_pairs.push(
             ToggleSettingActionPair::new(
@@ -1072,7 +1073,10 @@ impl VersionInfoWidget {
         }
 
         let (status_content, call_to_action_content) =
-            if ContextFlag::PromptForVersionUpdates.is_enabled() {
+            // Shellomancy: there's no update server; Autoupdate is off offline.
+            if ContextFlag::PromptForVersionUpdates.is_enabled()
+                && FeatureFlag::Autoupdate.is_enabled()
+            {
                 let ansi_red: ColorU = appearance.theme().terminal_colors().bright.red.into();
                 match autoupdate::get_update_state(app) {
                     AutoupdateStage::NoUpdateAvailable => (

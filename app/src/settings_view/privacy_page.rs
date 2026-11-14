@@ -228,8 +228,12 @@ impl PrivacyPageView {
         if ContextFlag::NetworkLogConsole.is_enabled() {
             widgets.push(Box::new(NetworkLogWidget::default()));
         }
-        widgets.push(Box::new(DataManagementWidget::default()));
-        widgets.push(Box::new(PrivacyPolicyWidget::default()));
+        // Shellomancy: Warp's account data management and privacy policy
+        // concern Warp's servers, which this build never contacts.
+        if ChannelState::channel() != crate::channel::Channel::Oss {
+            widgets.push(Box::new(DataManagementWidget::default()));
+            widgets.push(Box::new(PrivacyPolicyWidget::default()));
+        }
         PageType::new_uncategorized(widgets, Some(PageTitle::new("Privacy")))
     }
 
@@ -1972,7 +1976,8 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
             )),
             context,
             flags::TELEMETRY_FLAG,
-        ),
+        )
+        .with_enabled(ChannelState::is_telemetry_available),
         ToggleSettingActionPair::new(
             "crash reporting",
             builder(SettingsAction::PrivacyPageToggle(
@@ -1980,7 +1985,8 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
             )),
             context,
             flags::CRASH_REPORTING_FLAG,
-        ),
+        )
+        .with_enabled(ChannelState::is_crash_reporting_available),
     ];
 
     toggle_binding_pairs.push(ToggleSettingActionPair::new(

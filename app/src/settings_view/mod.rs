@@ -2078,6 +2078,11 @@ impl SettingsView {
         if self.settings_page(section).is_none() {
             return;
         }
+        // Shellomancy: menu items, links and palette entries can still name a
+        // hidden page; don't open it as a blank pane.
+        if is_hidden_in_offline_build(section) {
+            return;
+        }
         let previous_section = self.current_settings_page;
 
         ctx.enable_key_bindings_dispatching();

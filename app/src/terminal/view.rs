@@ -17879,20 +17879,23 @@ impl TerminalView {
                 }
 
                 items.push(MenuItem::Separator);
-                items.push(
-                    MenuItemFields::new(share_block_label)
-                        .with_on_select_action(TerminalAction::ContextMenu(
-                            ContextMenuAction::OpenShareBlockModal {
-                                block_index: tail_block_index,
-                            },
-                        ))
-                        .with_key_shortcut_label(keybinding_name_to_display_string(
-                            "terminal:open_share_block_modal",
-                            ctx,
-                        ))
-                        .with_disabled(is_share_disabled)
-                        .into_item(),
-                );
+                // Shellomancy: block sharing goes through Warp's servers.
+                if warp_core::channel::ChannelState::channel() != warp_core::channel::Channel::Oss {
+                    items.push(
+                        MenuItemFields::new(share_block_label)
+                            .with_on_select_action(TerminalAction::ContextMenu(
+                                ContextMenuAction::OpenShareBlockModal {
+                                    block_index: tail_block_index,
+                                },
+                            ))
+                            .with_key_shortcut_label(keybinding_name_to_display_string(
+                                "terminal:open_share_block_modal",
+                                ctx,
+                            ))
+                            .with_disabled(is_share_disabled)
+                            .into_item(),
+                    );
+                }
 
                 if FeatureFlag::CreatingSharedSessions.is_enabled()
                     && ContextFlag::CreateSharedSession.is_enabled()
