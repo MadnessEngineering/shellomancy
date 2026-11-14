@@ -46,6 +46,8 @@ mod linear;
 mod local_control;
 #[cfg(not(target_family = "wasm"))]
 mod code_maps;
+#[cfg(not(target_family = "wasm"))]
+mod spell_todo;
 mod madness_account;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod login_item;

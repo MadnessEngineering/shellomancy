@@ -1,0 +1,27 @@
+[
+ {
+  "key": "shellomancy.spell.makeTodo",
+  "standard": "Make a todo",
+  "shellomancer": "Make it a todo"
+ },
+ {
+  "key": "shellomancy.spell.todoCreated",
+  "standard": "Todo added to {{project}}: {{description}}",
+  "shellomancer": "Omnispindle has it, filed under {{project}}: {{description}}"
+ },
+ {
+  "key": "shellomancy.spell.todoFailed",
+  "standard": "Couldn't make a todo: {{error}}",
+  "shellomancer": "The todo fizzled: {{error}}"
+ },
+ {
+  "key": "shellomancy.spell.signInFirst",
+  "standard": "Sign in on the Account page to send spells to Omnispindle.",
+  "shellomancer": "Bind your account on the Account page first. Omnispindle doesn't take spells from strangers."
+ },
+ {
+  "key": "shellomancy.spell.openTodo",
+  "standard": "Open",
+  "shellomancer": "Open"
+ }
+]

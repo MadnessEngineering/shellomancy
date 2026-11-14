@@ -1399,6 +1399,10 @@ pub enum ContextMenuAction {
     OpenShareBlockModal {
         block_index: BlockIndex,
     },
+    /// Shellomancy: send the block to Omnispindle as a todo.
+    MakeTodo {
+        block_index: BlockIndex,
+    },
     FindWithinBlock,
     ToggleBookmark,
     ScrollToBottomOfBlock,
@@ -1534,6 +1538,7 @@ impl fmt::Debug for ContextMenuAction {
             OpenShareBlockModal { block_index } => {
                 write!(f, "OpenShareModal {{ block_index: {block_index} }}")
             }
+            MakeTodo { block_index } => write!(f, "MakeTodo {{ block_index: {block_index} }}"),
             FindWithinBlock => f.write_str("FindWithinBlock"),
             ScrollToBottomOfBlock => f.write_str("ScrollToBottomOfBlock"),
             ScrollToTopOfBlock => f.write_str("ScrollToTopOfBlock"),
@@ -17895,6 +17900,18 @@ impl TerminalView {
                             .with_disabled(is_share_disabled)
                             .into_item(),
                     );
+                } else {
+                    // Shellomancy: in Share's place, send the spell to Omnispindle.
+                    items.push(
+                        MenuItemFields::new(madness_themes::t("shellomancy.spell.makeTodo"))
+                            .with_on_select_action(TerminalAction::ContextMenu(
+                                ContextMenuAction::MakeTodo {
+                                    block_index: tail_block_index,
+                                },
+                            ))
+                            .with_disabled(!is_single_selection)
+                            .into_item(),
+                    );
                 }
 
                 if FeatureFlag::CreatingSharedSessions.is_enabled()
@@ -22308,6 +22325,70 @@ impl TerminalView {
         }
     }
 
+    /// Shellomancy: sends the block to Omnispindle as a todo with the signed-in
+    /// Madness account, and says how it went in a toast.
+    fn context_menu_make_todo(&mut self, block_index: BlockIndex, ctx: &mut ViewContext<Self>) {
+        self.close_context_menu(ctx, true);
+        #[cfg(not(target_family = "wasm"))]
+        {
+            use crate::madness_account::MadnessAccount;
+            use crate::spell_todo::{Spell, TODO_URL_ROOT, create_todo};
+            use crate::view_components::ToastLink;
+
+            let key = ctx
+                .has_singleton_model::<MadnessAccount>()
+                .then(|| MadnessAccount::as_ref(ctx).api_key().map(str::to_owned))
+                .flatten();
+            let Some(key) = key else {
+                self.show_error_toast(
+                    madness_themes::t("shellomancy.spell.signInFirst").to_owned(),
+                    ctx,
+                );
+                return;
+            };
+            let spell = {
+                let model = self.model.lock();
+                let Some(block) = model.block_list().block_at(block_index) else {
+                    return;
+                };
+                Spell {
+                    command: block.command_to_string(),
+                    output: block.output_to_string_force_full_grid_contents(),
+                    cwd: block.pwd().cloned(),
+                    git_branch: block.git_branch_name().cloned(),
+                    exit_code: block.is_done().then(|| block.exit_code().value()),
+                }
+            };
+            let window_id = ctx.window_id();
+            let _ = ctx.spawn(
+                async move { create_todo(&key, spell).await },
+                move |_me, result, ctx| {
+                    ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
+                        let toast = match result {
+                            Ok(todo) => DismissibleToast::success(madness_themes::tf(
+                                "shellomancy.spell.todoCreated",
+                                &[
+                                    ("project", &todo.project),
+                                    ("description", &todo.description),
+                                ],
+                            ))
+                            .with_link(
+                                ToastLink::new(
+                                    madness_themes::t("shellomancy.spell.openTodo").to_owned(),
+                                )
+                                .with_href(format!("{TODO_URL_ROOT}/{}", todo.id)),
+                            ),
+                            Err(message) => DismissibleToast::error(message),
+                        };
+                        toast_stack.add_ephemeral_toast(toast, window_id, ctx);
+                    });
+                },
+            );
+        }
+        #[cfg(target_family = "wasm")]
+        let _ = block_index;
+    }
+
     fn context_menu_copy_blocks(&mut self, ctx: &mut ViewContext<Self>) {
         self.copy_blocks(BlockEntity::CommandAndOutput, ctx);
     }
@@ -26117,6 +26198,7 @@ impl TerminalView {
             OpenShareBlockModal { block_index } => {
                 self.context_menu_open_share_block_modal(*block_index, ctx)
             }
+            MakeTodo { block_index } => self.context_menu_make_todo(*block_index, ctx),
             FindWithinBlock => self.find_within_block(ctx),
             ScrollToBottomOfBlock => self.scroll_to_bottom_of_bottommost_selected_block(ctx),
             ScrollToTopOfBlock => self.scroll_to_top_of_topmost_selected_block(ctx),
