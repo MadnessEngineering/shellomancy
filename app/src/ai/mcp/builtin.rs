@@ -74,6 +74,24 @@ const PREVIEW_URLS_MCP: BuiltinMcpServer = BuiltinMcpServer {
     template_uuid: Uuid::from_u128(0xb6b375a8_1ba5_4a51_a407_22563d4f7e82),
 };
 
+/// Shellomancy: stable installation UUID for the built-in Omnispindle server.
+pub const OMNISPINDLE_MCP_INSTALLATION_UUID: Uuid =
+    Uuid::from_u128(0x6f6d6e69_7370_696e_646c_650000000001);
+
+/// Shellomancy: the server name Omnispindle's tools are grouped under.
+pub const OMNISPINDLE_MCP_SERVER_NAME: &str = "omnispindle";
+
+/// Shellomancy: Omnispindle on madnessinteractive.cc, attached while a Madness
+/// account is signed in and authenticated with its `omni_` key.
+const OMNISPINDLE_MCP: BuiltinMcpServer = BuiltinMcpServer {
+    name: OMNISPINDLE_MCP_SERVER_NAME,
+    path: "/mcp/",
+    description: "Omnispindle on madnessinteractive.cc: your todos, lessons and quests, \
+                  through your Madness account.",
+    installation_uuid: OMNISPINDLE_MCP_INSTALLATION_UUID,
+    template_uuid: Uuid::from_u128(0x6f6d6e69_7370_696e_646c_650000000002),
+};
+
 impl BuiltinMcpServer {
     /// Joins the endpoint path onto a server root URL.
     fn url(&self, server_root: &str) -> String {
@@ -133,6 +151,17 @@ pub fn preview_urls_mcp_installation(
         &ChannelState::server_root_url(),
         bearer_token,
         ambient_headers,
+    )
+}
+
+/// Shellomancy: the built-in Omnispindle server at `{MADNESS_API_ROOT}/mcp/`,
+/// pre-authenticated with the Madness account's API key.
+pub fn omnispindle_mcp_installation(api_key: &str) -> TemplatableMCPServerInstallation {
+    builtin_mcp_installation(
+        &OMNISPINDLE_MCP,
+        crate::madness_account::MADNESS_API_ROOT,
+        api_key,
+        &[],
     )
 }
 

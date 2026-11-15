@@ -172,3 +172,24 @@ fn preview_urls_installation_resolves_to_a_preauthenticated_http_server() {
         }
     );
 }
+
+#[test]
+fn omnispindle_installation_points_at_madnessinteractive_with_the_omni_key() {
+    let installation = omnispindle_mcp_installation("omni_test");
+    assert_eq!(installation.uuid(), OMNISPINDLE_MCP_INSTALLATION_UUID);
+    assert!(installation.template_variables().is_empty());
+
+    let resolved = resolve_json(&installation);
+    let mut servers =
+        MCPServer::from_user_json(&resolved).expect("built-in template must parse as MCP config");
+    let server = servers.pop().expect("one server");
+    assert_eq!(server.name, OMNISPINDLE_MCP_SERVER_NAME);
+    match server.transport_type {
+        TransportType::ServerSentEvents(sse) => {
+            assert_eq!(sse.url, "https://madnessinteractive.cc/api/mcp/");
+            assert_eq!(sse.headers.len(), 1);
+            assert_eq!(sse.headers[0].value, "Bearer omni_test");
+        }
+        TransportType::CLIServer(_) => panic!("expected an HTTP transport"),
+    }
+}

@@ -107,6 +107,10 @@ pub struct TemplatableMCPServerManager {
     /// spawned, so the field would be dead code there.
     #[cfg(not(target_family = "wasm"))]
     builtin_server_token: Option<String>,
+    /// Shellomancy: the Madness API key the built-in Omnispindle server was
+    /// spawned with, so it's respawned only when the key changes.
+    #[cfg(not(target_family = "wasm"))]
+    omnispindle_token: Option<String>,
     /// Log-file handles for spawned server instances, keyed by installation
     /// UUID. `LogManager` reserves one log path per template UUID and rejects
     /// re-registration while an unclosed logger holds it, so shutdown paths

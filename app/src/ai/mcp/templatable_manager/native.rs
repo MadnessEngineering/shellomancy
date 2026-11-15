@@ -46,6 +46,7 @@ use crate::cloud_object::{
     CloudObjectUuidLookup as _, GenericStringObjectFormat, JsonObjectType, Space,
 };
 use crate::drive::CloudObjectTypeAndId;
+use crate::madness_account::MadnessAccount;
 use crate::persistence::{
     ModelEvent, database_file_path_for_current_scope, establish_ro_connection,
 };
@@ -442,6 +443,7 @@ impl TemplatableMCPServerManager {
             cli_spawned_server_uuids: Default::default(),
             builtin_server_uuids: Default::default(),
             builtin_server_token: Default::default(),
+            omnispindle_token: Default::default(),
             server_loggers: Default::default(),
         };
 
@@ -473,6 +475,15 @@ impl TemplatableMCPServerManager {
         // (fresh logins are handled by the AuthManager subscription above).
         if !cfg!(test) {
             me.sync_builtin_servers(false, ctx);
+        }
+
+        // Shellomancy: Omnispindle follows the Madness account (signed in with
+        // an omni_ key), not Warp's login.
+        if !cfg!(test) && ctx.has_singleton_model::<MadnessAccount>() {
+            ctx.subscribe_to_model(&MadnessAccount::handle(ctx), |me, _, _, ctx| {
+                me.sync_omnispindle_server(ctx);
+            });
+            me.sync_omnispindle_server(ctx);
         }
 
         // Migrate legacy MCPs to be templatables on app start. Uses UpdateManager
@@ -865,6 +876,40 @@ impl TemplatableMCPServerManager {
         // clients, which have no active ambient task. CLI/cloud agent runs attach their
         // own run-scoped installation instead (see AgentDriver::builtin_factory_mcp_for_run).
         self.spawn_ephemeral_server(builtin::factory_mcp_installation(&token, &[]), ctx);
+    }
+
+    /// Shellomancy: attaches the built-in Omnispindle server while a Madness
+    /// account is signed in, respawns it when the key changes, and detaches it
+    /// on sign-out. The key only lives in the in-memory installation, never in
+    /// an MCP config file.
+    pub fn sync_omnispindle_server(&mut self, ctx: &mut ModelContext<Self>) {
+        let installation_uuid = builtin::OMNISPINDLE_MCP_INSTALLATION_UUID;
+        let key = (ChannelState::channel() == warp_core::channel::Channel::Oss
+            && AppExecutionMode::as_ref(ctx).can_autostart_mcp_servers()
+            && ctx.has_singleton_model::<MadnessAccount>())
+        .then(|| MadnessAccount::as_ref(ctx).api_key().map(str::to_owned))
+        .flatten();
+        let is_active = self.is_server_active_or_pending(installation_uuid);
+
+        let Some(key) = key else {
+            if is_active && self.builtin_server_uuids.contains(&installation_uuid) {
+                log::info!("Shutting down the built-in Omnispindle MCP server (signed out)");
+                self.shutdown_server(installation_uuid, ctx);
+            }
+            self.builtin_server_uuids.remove(&installation_uuid);
+            self.omnispindle_token = None;
+            return;
+        };
+        if is_active && self.omnispindle_token.as_deref() == Some(key.as_str()) {
+            return;
+        }
+        if is_active {
+            self.shutdown_server(installation_uuid, ctx);
+        }
+        log::info!("Spawning the built-in Omnispindle MCP server");
+        self.builtin_server_uuids.insert(installation_uuid);
+        self.spawn_ephemeral_server(builtin::omnispindle_mcp_installation(&key), ctx);
+        self.omnispindle_token = Some(key);
     }
 
     /// Spawns a new MCP server from a given installation UUID.

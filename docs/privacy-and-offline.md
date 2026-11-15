@@ -23,12 +23,15 @@ To undo the offline mode (for example, to log in to Warp), change `server_config
 
 ## What can still use the network
 
-These are user actions, not Warp services:
+None of these are Warp services. Each follows from something you did or a setting you control:
 
 - **Language servers**: enabling one may download it from GitHub, npm or nodejs.org.
 - **Your shell, prompt and plugins**: whatever they do on their own.
 - **Links you click**: they open in your browser.
-- **Signing in to your Madness Interactive account** (Settings › Account): pasting an Omnispindle API key sends one request, `GET https://madnessinteractive.cc/api/auth/user-info`, to check it. The key is then kept in the Keychain. A saved sign-in is restored at startup without a request, and nothing is sent while signed out.
+- **Signing in to your Madness Interactive account** (Settings › Account): pasting an Omnispindle API key sends one request, `GET https://madnessinteractive.cc/api/auth/user-info`, to check it. The key is then kept in the Keychain. A saved sign-in is restored at startup without a request, and nothing below is sent while signed out.
+- **Omnispindle MCP server** (while signed in): Shellomancy attaches Omnispindle as a built-in MCP server at `https://madnessinteractive.cc/api/mcp/`, authenticated with your key, and keeps that session open while you're signed in. Signing out detaches it. The key is only held in memory for this, never written to an MCP config file.
+- **Code Maps** (Settings › Cartogomancy): mapping a folder runs `cartogomancy` locally (or `npx`, which may download it from npm). While signed in with "Send maps" on, the map (class names, file paths, complexity and git churn, not file contents) is uploaded to `https://madnessinteractive.cc/api/uml-data/upload`. With "Redraw when main moves" on, this also happens on its own when a mapped repo's default branch or tags change, at most once an hour per folder.
+- **Make a todo / Record a lesson** (block right-click): sends the block's command, folder, branch, exit code and the last 4,000 characters of output to `https://madnessinteractive.cc/api/todos` or `/api/lessons`. Secrets are redacted from the command and output first.
 
 ## Local listeners
 
