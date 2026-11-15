@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Build Shellomancy and install it as the one Shellomancy.app.
+#
+#   script/install_local            # debug build (fast, incremental)
+#   script/install_local --open     # ...and launch it
+#   script/install_local --skip-build   # install a build made by script/bundle
+#
+# Every bundle build leaves a Shellomancy.app under target/ (osx/, dmg/, per
+# profile), all with the same bundle id, and macOS opens whichever one Launch
+# Services prefers -- often a stale one. This copies the fresh build to
+# /Applications/Shellomancy.app (override with SHELLOMANCY_INSTALL_DIR), then
+# deletes every Shellomancy.app under target/ and makes Launch Services forget
+# every registered copy except the installed one. The `shellomancy` command
+# symlink, if installed, is pointed at the installed app's wrapper.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DEST_DIR="${SHELLOMANCY_INSTALL_DIR:-/Applications}"
+DEST="$DEST_DIR/Shellomancy.app"
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+CLI_LINK=/usr/local/bin/shellomancy
+
+OPEN=false
+BUILD=true
+for arg in "$@"; do
+  case "$arg" in
+    --open) OPEN=true ;;
+    --skip-build) BUILD=false ;;
+    *) echo "install_local: unknown option $arg" >&2; exit 2 ;;
+  esac
+done
+
+if [[ "$(uname -s)" != Darwin ]]; then
+  echo "install_local: macOS only" >&2
+  exit 1
+fi
+
+# Replacing the bundle under a running app breaks it (resources load lazily).
+if pgrep -f "/Shellomancy.app/Contents/MacOS/warp-oss" >/dev/null; then
+  echo "install_local: Shellomancy is running. Quit it (Cmd-Q) and run this again." >&2
+  exit 1
+fi
+
+case "$(uname -m)" in
+  arm64) TARGET=aarch64-apple-darwin ;;
+  x86_64) TARGET=x86_64-apple-darwin ;;
+  *) echo "install_local: unsupported arch $(uname -m)" >&2; exit 1 ;;
+esac
+BUILT="$REPO/target/$TARGET/debug/bundle/osx/Shellomancy.app"
+
+if $BUILD; then
+  # No cargo-about locally, so skip the third-party licenses file.
+  NO_LICENSES=1 "$REPO/script/bundle" --channel oss --debug --nouniversal --selfsign
+fi
+if [[ ! -x "$BUILT/Contents/MacOS/warp-oss" ]]; then
+  echo "install_local: no build at $BUILT" >&2
+  exit 1
+fi
+
+echo "Installing $DEST"
+rm -rf "$DEST"
+ditto "$BUILT" "$DEST"
+
+# Forget every other registered copy (including ones already deleted), then
+# delete the build copies so nothing stale is left to open.
+"$LSREGISTER" -dump 2>/dev/null \
+  | sed -n 's/^path: *\(.*\/Shellomancy\.app\)\( (0x[0-9a-f]*)\)\{0,1\}$/\1/p' \
+  | sort -u \
+  | while IFS= read -r app; do
+      if [[ "$app" != "$DEST" ]]; then
+        echo "Forgetting $app"
+        "$LSREGISTER" -u "$app" 2>/dev/null || true
+      fi
+    done
+find "$REPO/target" -maxdepth 6 -type d -name Shellomancy.app -prune -print \
+  | while IFS= read -r app; do
+      echo "Removing $app"
+      rm -rf "$app"
+    done
+"$LSREGISTER" -f "$DEST"
+
+# Keep an installed `shellomancy` command pointing at this copy.
+if [[ -L "$CLI_LINK" ]]; then
+  WRAPPER="$DEST/Contents/Resources/bin/shellomancy"
+  if [[ "$(readlink "$CLI_LINK")" != "$WRAPPER" ]]; then
+    if ln -sfn "$WRAPPER" "$CLI_LINK" 2>/dev/null; then
+      echo "Pointed $CLI_LINK at $WRAPPER"
+    else
+      echo "Could not update $CLI_LINK; reinstall it from Settings > Scripting." >&2
+    fi
+  fi
+fi
+
+echo "Installed $DEST"
+if $OPEN; then
+  open "$DEST"
+fi

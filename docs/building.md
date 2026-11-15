@@ -45,6 +45,15 @@ Differences from upstream `script/run`: it always builds the `oss` channel (upst
 
 Measured on the first run (2026-10-31): `./script/run --dont-open` took 332 s, 4 m 52 s of it in cargo, but most dependencies were already built by earlier `cargo check` runs, so a truly clean build will take longer. `target/` reached 36 GB. `cargo bundle` also writes a DMG to `target/debug/bundle/dmg/`. The only warning was the missing adaptive `AppIcon.icon` (see known-issues).
 
+## Install it (the copy you actually use)
+
+```sh
+./script/install_local          # build, then install /Applications/Shellomancy.app
+./script/install_local --open   # ...and launch it
+```
+
+Every bundle build leaves a `Shellomancy.app` under `target/` (`osx/` and `dmg/`, per profile), all with the same bundle id. macOS opens whichever one Launch Services prefers, which is often a stale one. On 2026-11-14 that was a half-finished release build from the night before. `install_local` builds the debug bundle, copies it to `/Applications/Shellomancy.app` (override the folder with `SHELLOMANCY_INSTALL_DIR`), deletes every `Shellomancy.app` under `target/`, and makes Launch Services forget every other registered copy. If the `shellomancy` command is installed, its symlink is pointed at the installed app. It refuses to run while Shellomancy is open, because replacing a running app's bundle breaks it. `--skip-build` installs a build made earlier with `script/bundle`.
+
 ## Faster loops
 
 Type-check without Metal (the empty-shader escape hatch is upstream's):
