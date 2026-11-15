@@ -20,6 +20,8 @@ use warpui_extras::secure_storage;
 pub const MADNESS_API_ROOT: &str = "https://madnessinteractive.cc/api";
 /// Where to mint an API key.
 pub const MADNESS_KEYS_URL: &str = "https://madnessinteractive.cc/dashboard";
+/// Where a todo is opened on the site.
+pub const TODO_URL_ROOT: &str = "https://madnessinteractive.cc/todo";
 const API_KEY_PREFIX: &str = "omni_";
 const SECURE_STORAGE_KEY: &str = "MadnessAccount";
 
@@ -156,6 +158,17 @@ impl MadnessAccount {
         ctx.emit(MadnessAccountEvent::StateChanged);
         ctx.notify();
     }
+}
+
+/// Why an Inventorium request failed, from the reply's message if it has one.
+pub fn error_reason(status: u16, reply: &serde_json::Value) -> String {
+    reply["message"]
+        .as_str()
+        .or_else(|| reply["details"].as_str())
+        .or_else(|| reply["error"].as_str())
+        .filter(|message| !message.is_empty())
+        .map(|message| format!("{message} (HTTP {status})"))
+        .unwrap_or_else(|| format!("HTTP {status}"))
 }
 
 fn looks_like_api_key(key: &str) -> bool {

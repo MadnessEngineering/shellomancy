@@ -11,10 +11,9 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use crate::madness_account::MADNESS_API_ROOT;
+use crate::madness_account::{MADNESS_API_ROOT, error_reason};
 
-/// Where a created todo is opened.
-pub const TODO_URL_ROOT: &str = "https://madnessinteractive.cc/todo";
+pub use crate::madness_account::TODO_URL_ROOT;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// How much of the output's tail to send.
 const OUTPUT_TAIL_CHARS: usize = 4000;
@@ -199,17 +198,6 @@ fn created_from_reply(status: u16, reply: &Value, body: &Value) -> Result<Create
             &[("error", &error_reason(status, reply))],
         )),
     }
-}
-
-/// Why a request failed, from the reply's message if it has one.
-fn error_reason(status: u16, reply: &Value) -> String {
-    reply["message"]
-        .as_str()
-        .or_else(|| reply["details"].as_str())
-        .or_else(|| reply["error"].as_str())
-        .filter(|message| !message.is_empty())
-        .map(|message| format!("{message} (HTTP {status})"))
-        .unwrap_or_else(|| format!("HTTP {status}"))
 }
 
 /// The lowercase name of the git repo `cwd` is in, else of `cwd` itself.

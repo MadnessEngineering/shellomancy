@@ -49,6 +49,7 @@ mod code_maps;
 #[cfg(not(target_family = "wasm"))]
 mod spell_todo;
 mod madness_account;
+mod mana_bar;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod login_item;
 mod menu;
@@ -1646,6 +1647,9 @@ pub(crate) fn initialize_app(
     // Shellomancy: the Madness Interactive account, restored from secure storage
     // (registered above) without touching the network.
     ctx.add_singleton_model(madness_account::MadnessAccount::new);
+    // Shellomancy: the Mana Bar (Omnispindle in the tools panel); fetches only
+    // when a panel asks.
+    ctx.add_singleton_model(mana_bar::ManaBar::new);
     // Shellomancy: Code Maps (cartogomancy); reads its index from disk, no network.
     #[cfg(not(target_family = "wasm"))]
     ctx.add_singleton_model(code_maps::CodeMaps::new);
