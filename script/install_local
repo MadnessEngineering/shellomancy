@@ -49,8 +49,9 @@ esac
 BUILT="$REPO/target/$TARGET/debug/bundle/osx/Shellomancy.app"
 
 if $BUILD; then
+  # script/bundle uses repo-relative paths, so build from the repo root.
   # No cargo-about locally, so skip the third-party licenses file.
-  NO_LICENSES=1 "$REPO/script/bundle" --channel oss --debug --nouniversal --selfsign
+  (cd "$REPO" && NO_LICENSES=1 ./script/bundle --channel oss --debug --nouniversal --selfsign)
 fi
 if [[ ! -x "$BUILT/Contents/MacOS/warp-oss" ]]; then
   echo "install_local: no build at $BUILT" >&2
