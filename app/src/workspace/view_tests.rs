@@ -5435,6 +5435,12 @@ fn test_tools_panel_offline_has_no_warp_drive_or_login() {
                     .contains(&ToolPanelView::WarpDrive),
                 "Drive should not be a tools-panel tab offline"
             );
+            assert!(
+                workspace
+                    .left_panel_views
+                    .contains(&ToolPanelView::ManaBar),
+                "the Mana Bar should take Drive's slot offline"
+            );
             workspace.handle_left_panel_event(&LeftPanelEvent::SignInRequested, ctx);
             assert!(
                 !workspace
@@ -5444,6 +5450,46 @@ fn test_tools_panel_offline_has_no_warp_drive_or_login() {
             );
         });
     });
+}
+
+/// Shellomancy: the Mana Bar is never locked behind Warp sign-in. Signed out
+/// of the Madness account (no account model at all here) it renders its own
+/// signed-out state rather than Warp's locked-panel prompt.
+#[test]
+fn test_tools_panel_mana_bar_opens_and_renders_signed_out() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        let workspace = mock_workspace(&mut app);
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.left_panel_view.update(ctx, |left_panel, ctx| {
+                left_panel.handle_action_with_force_open(&LeftPanelAction::ManaBar, false, ctx);
+                assert_eq!(left_panel.active_view(), ToolPanelView::ManaBar);
+                assert_eq!(
+                    left_panel.active_view_availability(ctx),
+                    left_panel::ToolPanelAvailability::Available
+                );
+                drop(left_panel.render(ctx));
+            });
+        });
+    });
+}
+
+#[test]
+fn test_tools_panel_saved_drive_tab_restores_as_mana_bar() {
+    let offered = [ToolPanelView::ProjectExplorer, ToolPanelView::ManaBar];
+
+    assert_eq!(
+        restorable_left_panel_view(ToolPanelView::WarpDrive, &offered),
+        ToolPanelView::ManaBar
+    );
+    assert_eq!(
+        restorable_left_panel_view(ToolPanelView::ConversationListView, &offered),
+        ToolPanelView::ProjectExplorer
+    );
+    assert_eq!(
+        restorable_left_panel_view(ToolPanelView::ManaBar, &offered),
+        ToolPanelView::ManaBar
+    );
 }
 
 #[test]

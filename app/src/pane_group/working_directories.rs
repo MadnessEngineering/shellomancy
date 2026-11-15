@@ -348,6 +348,11 @@ impl WorkingDirectoriesModel {
             })
     }
 
+    /// The repository root of the focused terminal in a pane group, if any.
+    pub fn focused_repo(&self, pane_group_id: EntityId) -> Option<LocalOrRemotePath> {
+        self.focused_repo.get(&pane_group_id).cloned().flatten()
+    }
+
     /// Get the unique repository roots for a specific pane group in insertion order (oldest first).
     fn least_recent_repositories_for_pane_group(
         &self,
@@ -995,6 +1000,11 @@ impl WorkingDirectoriesModel {
         _pane_group_id: EntityId,
     ) -> Option<impl Iterator<Item = WorkingDirectory> + '_> {
         Option::<std::iter::Empty<WorkingDirectory>>::None
+    }
+
+    /// The repository root of the focused terminal in a pane group, if any.
+    pub fn focused_repo(&self, _pane_group_id: EntityId) -> Option<LocalOrRemotePath> {
+        None
     }
 
     /// Get the unique repository roots for a specific pane group in most to least recently added order.

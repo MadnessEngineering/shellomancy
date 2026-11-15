@@ -106,3 +106,23 @@ fn test_code_pane_snapshot_with_multiple_tabs() {
     assert_eq!(tabs[2].path, None);
     assert!(matches!(source, Some(CodeSource::Link { .. })));
 }
+
+#[test]
+fn left_panel_tabs_round_trip_through_saved_state() {
+    for tab in [
+        LeftPanelDisplayedTab::FileTree,
+        LeftPanelDisplayedTab::WarpDrive,
+        LeftPanelDisplayedTab::ManaBar,
+    ] {
+        let saved = serde_json::to_string(&tab).unwrap();
+        assert_eq!(
+            serde_json::from_str::<LeftPanelDisplayedTab>(&saved).unwrap(),
+            tab
+        );
+    }
+    // State saved before the Mana Bar existed still loads.
+    assert_eq!(
+        serde_json::from_str::<LeftPanelDisplayedTab>("\"WarpDrive\"").unwrap(),
+        LeftPanelDisplayedTab::WarpDrive
+    );
+}

@@ -63,11 +63,13 @@ use crate::workspace::view::conversation_list::view::{
 use crate::workspace::view::global_search::view::{
     Event as GlobalSearchViewEvent, GlobalSearchEntryFocus, GlobalSearchView,
 };
+use crate::workspace::view::mana_bar_view::ManaBarView;
 use crate::workspace::view::{
     LEFT_PANEL_AGENT_CONVERSATIONS_BINDING_NAME, LEFT_PANEL_GLOBAL_SEARCH_BINDING_NAME,
-    LEFT_PANEL_PROJECT_EXPLORER_BINDING_NAME, LEFT_PANEL_WARP_DRIVE_BINDING_NAME,
-    OPEN_GLOBAL_SEARCH_BINDING_NAME, TOGGLE_CONVERSATION_LIST_VIEW_BINDING_NAME,
-    TOGGLE_PROJECT_EXPLORER_BINDING_NAME, TOGGLE_WARP_DRIVE_BINDING_NAME,
+    LEFT_PANEL_MANA_BAR_BINDING_NAME, LEFT_PANEL_PROJECT_EXPLORER_BINDING_NAME,
+    LEFT_PANEL_WARP_DRIVE_BINDING_NAME, OPEN_GLOBAL_SEARCH_BINDING_NAME,
+    TOGGLE_CONVERSATION_LIST_VIEW_BINDING_NAME, TOGGLE_PROJECT_EXPLORER_BINDING_NAME,
+    TOGGLE_WARP_DRIVE_BINDING_NAME,
 };
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
@@ -77,15 +79,20 @@ struct MouseStateHandles {
     conversation_list_view_button: MouseStateHandle,
     global_search_button: MouseStateHandle,
     warp_drive_button: MouseStateHandle,
+    mana_bar_button: MouseStateHandle,
     sign_in_button: MouseStateHandle,
 }
 
 #[derive(Clone, Debug)]
 pub enum LeftPanelAction {
     ProjectExplorer,
-    GlobalSearch { entry_focus: GlobalSearchEntryFocus },
+    GlobalSearch {
+        entry_focus: GlobalSearchEntryFocus,
+    },
     WarpDrive,
     ConversationListView,
+    /// Shellomancy: Omnispindle's todos, quests and lessons.
+    ManaBar,
     SignIn,
 }
 
@@ -99,9 +106,11 @@ pub(crate) enum ToolPanelAvailability {
 impl ToolPanelView {
     fn availability(self, app: &AppContext) -> ToolPanelAvailability {
         match self {
-            ToolPanelView::ProjectExplorer | ToolPanelView::GlobalSearch { .. } => {
-                ToolPanelAvailability::Available
-            }
+            // The Mana Bar shows its own signed-out state (the Madness
+            // account, not Warp's), so it's never locked.
+            ToolPanelView::ProjectExplorer
+            | ToolPanelView::GlobalSearch { .. }
+            | ToolPanelView::ManaBar => ToolPanelAvailability::Available,
             ToolPanelView::WarpDrive => {
                 if WarpDriveSettings::is_warp_drive_available(app) {
                     ToolPanelAvailability::Available
@@ -148,9 +157,13 @@ pub enum LeftPanelEvent {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ToolPanelView {
     ProjectExplorer,
-    GlobalSearch { entry_focus: GlobalSearchEntryFocus },
+    GlobalSearch {
+        entry_focus: GlobalSearchEntryFocus,
+    },
     WarpDrive,
     ConversationListView,
+    /// Shellomancy: Omnispindle in Drive's slot.
+    ManaBar,
 }
 
 /// Encapsulates the active view state to enforce that all mutations go through
@@ -191,6 +204,7 @@ mod active_view_state {
         }
 
         left_panel.update_active_file_tree_subscription_state(ctx);
+        left_panel.update_mana_bar_visibility(ctx);
     }
 }
 
@@ -218,6 +232,7 @@ pub struct LeftPanelView {
     close_button_mouse_state: MouseStateHandle,
     warp_drive_view: ViewHandle<DrivePanel>,
     conversation_list_view: ViewHandle<ConversationListView>,
+    mana_bar_view: ViewHandle<ManaBarView>,
     active_view: active_view_state::ActiveViewState,
     toolbelt_buttons: Vec<ToolbeltButtonConfig>,
     active_pane_group: Option<WeakViewHandle<PaneGroup>>,
@@ -270,11 +285,14 @@ impl LeftPanelView {
             (
                 ToolPanelView::ProjectExplorer
                 | ToolPanelView::GlobalSearch { .. }
-                | ToolPanelView::WarpDrive,
+                | ToolPanelView::WarpDrive
+                | ToolPanelView::ManaBar,
                 ToolPanelAvailability::RequiresAi,
             )
             | (
-                ToolPanelView::ProjectExplorer | ToolPanelView::GlobalSearch { .. },
+                ToolPanelView::ProjectExplorer
+                | ToolPanelView::GlobalSearch { .. }
+                | ToolPanelView::ManaBar,
                 ToolPanelAvailability::RequiresAccount,
             )
             | (_, ToolPanelAvailability::Available) => {
@@ -353,6 +371,7 @@ impl LeftPanelView {
         };
         let warp_drive_view = ctx.add_typed_action_view(DrivePanel::new);
         let conversation_list_view = ctx.add_typed_action_view(ConversationListView::new);
+        let mana_bar_view = ctx.add_typed_action_view(ManaBarView::new);
 
         ctx.subscribe_to_view(&warp_drive_view, |_me, _, event, ctx| {
             ctx.emit(LeftPanelEvent::WarpDrive(event.clone()));
@@ -458,7 +477,22 @@ impl LeftPanelView {
                         view.auto_expand_to_most_recent_directory(ctx);
                     }
                 });
+                me.update_mana_bar_project(ctx);
                 ctx.notify();
+            }
+        });
+
+        // Shellomancy: a focus change or `cd` into another repo moves the Mana
+        // Bar to that repo's project.
+        ctx.subscribe_to_model(&working_directories_model, |me, _, event, ctx| {
+            if let WorkingDirectoriesEvent::FocusedRepoChanged { pane_group_id, .. } = event
+                && me
+                    .active_pane_group
+                    .as_ref()
+                    .and_then(|pane_group| pane_group.upgrade(ctx))
+                    .is_some_and(|pane_group| pane_group.id() == *pane_group_id)
+            {
+                me.update_mana_bar_project(ctx);
             }
         });
 
@@ -468,6 +502,7 @@ impl LeftPanelView {
             close_button_mouse_state: Default::default(),
             warp_drive_view,
             conversation_list_view,
+            mana_bar_view,
             active_view: active_view_state::new(active_view),
             toolbelt_buttons,
             active_pane_group: None,
@@ -589,6 +624,19 @@ impl LeftPanelView {
                     active_icon: None,
                     tooltip_text: "Warp Drive".to_string(),
                     action: LeftPanelAction::WarpDrive,
+                    render_with_active_state: false,
+                    tooltip_keybinding: toolbelt_tooltip_keybinding(&tooltip_keybinding_names, ctx),
+                    tooltip_keybinding_names,
+                }
+            }
+            ToolPanelView::ManaBar => {
+                let tooltip_keybinding_names = vec![LEFT_PANEL_MANA_BAR_BINDING_NAME];
+
+                ToolbeltButtonConfig {
+                    icon: Icon::Lightning,
+                    active_icon: None,
+                    tooltip_text: madness_themes::t("shellomancy.manaBar.title").to_owned(),
+                    action: LeftPanelAction::ManaBar,
                     render_with_active_state: false,
                     tooltip_keybinding: toolbelt_tooltip_keybinding(&tooltip_keybinding_names, ctx),
                     tooltip_keybinding_names,
@@ -809,6 +857,7 @@ impl LeftPanelView {
         });
 
         self.on_left_panel_visibility_changed(left_panel_open, ctx);
+        self.update_mana_bar_project(ctx);
 
         ctx.notify();
     }
@@ -871,6 +920,11 @@ impl LeftPanelView {
             }
             ToolPanelView::ConversationListView => {
                 self.conversation_list_view.update(ctx, |view, ctx| {
+                    view.on_left_panel_focused(ctx);
+                });
+            }
+            ToolPanelView::ManaBar => {
+                self.mana_bar_view.update(ctx, |view, ctx| {
                     view.on_left_panel_focused(ctx);
                 });
             }
@@ -1040,6 +1094,7 @@ impl LeftPanelView {
                 LeftPanelAction::ConversationListView => {
                     self.active_view.get() == ToolPanelView::ConversationListView
                 }
+                LeftPanelAction::ManaBar => self.active_view.get() == ToolPanelView::ManaBar,
                 LeftPanelAction::SignIn => false,
             };
         }
@@ -1186,6 +1241,9 @@ impl LeftPanelView {
                     send_telemetry_from_ctx!(TelemetryEvent::ConversationListViewOpened, ctx);
                 }
             }
+            LeftPanelAction::ManaBar => {
+                active_view_state::set(self, ToolPanelView::ManaBar, ctx);
+            }
             LeftPanelAction::SignIn => {
                 ctx.emit(LeftPanelEvent::SignInRequested);
             }
@@ -1198,6 +1256,48 @@ impl LeftPanelView {
         }
 
         self.update_active_file_tree_subscription_state(ctx);
+        let mana_bar_visible = is_now_open && self.active_view.get() == ToolPanelView::ManaBar;
+        self.mana_bar_view.update(ctx, |view, ctx| {
+            view.set_visible(mana_bar_visible, ctx);
+        });
+    }
+
+    /// Shellomancy: the Mana Bar fetches and polls only while it's the shown tab
+    /// of an open panel.
+    fn update_mana_bar_visibility(&self, ctx: &mut ViewContext<Self>) {
+        let is_panel_open = self
+            .active_pane_group
+            .as_ref()
+            .and_then(|pane_group| pane_group.upgrade(ctx))
+            .is_some_and(|pane_group| pane_group.as_ref(ctx).left_panel_open);
+        let visible = is_panel_open && self.active_view.get() == ToolPanelView::ManaBar;
+        self.mana_bar_view
+            .update(ctx, |view, ctx| view.set_visible(visible, ctx));
+    }
+
+    /// Shellomancy: tells the Mana Bar which project the focused terminal is
+    /// in: its repo's folder name, else its working folder's.
+    fn update_mana_bar_project(&self, ctx: &mut ViewContext<Self>) {
+        let Some(pane_group) = self
+            .active_pane_group
+            .as_ref()
+            .and_then(|pane_group| pane_group.upgrade(ctx))
+        else {
+            return;
+        };
+        let repo = self
+            .working_directories_model
+            .as_ref(ctx)
+            .focused_repo(pane_group.id());
+        let cwd = pane_group.as_ref(ctx).active_session_path(ctx);
+        let project = crate::mana_bar::api::project_name(
+            repo.as_ref().and_then(|repo| repo.file_name()),
+            cwd.as_ref()
+                .and_then(|cwd| cwd.file_name())
+                .and_then(|name| name.to_str()),
+        );
+        self.mana_bar_view
+            .update(ctx, |view, ctx| view.set_project(project, ctx));
     }
 
     fn deactivate_file_tree_view_for_pane_group(
@@ -1294,6 +1394,7 @@ impl View for LeftPanelView {
                 }
                 ToolPanelView::WarpDrive => ctx.focus(&self.warp_drive_view),
                 ToolPanelView::ConversationListView => ctx.focus(&self.conversation_list_view),
+                ToolPanelView::ManaBar => ctx.focus(&self.mana_bar_view),
             }
         }
     }
@@ -1308,6 +1409,7 @@ impl View for LeftPanelView {
                 .clone(),
             self.mouse_state_handles.global_search_button.clone(),
             self.mouse_state_handles.warp_drive_button.clone(),
+            self.mouse_state_handles.mana_bar_button.clone(),
         ];
 
         // If there is only one button in the toolbelt row,
@@ -1371,6 +1473,9 @@ impl View for LeftPanelView {
                 ToolPanelView::ConversationListView => {
                     Shrinkable::new(1.0, ChildView::new(&self.conversation_list_view).finish())
                         .finish()
+                }
+                ToolPanelView::ManaBar => {
+                    Shrinkable::new(1.0, ChildView::new(&self.mana_bar_view).finish()).finish()
                 }
             }
         };

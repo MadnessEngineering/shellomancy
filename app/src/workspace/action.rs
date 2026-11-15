@@ -386,6 +386,8 @@ pub enum WorkspaceAction {
     ToggleWarpDrive,
     /// Unconditionally opens Warp Drive.
     OpenWarpDrive,
+    /// Shellomancy: toggles the Mana Bar tab of the tools panel.
+    ToggleManaBar,
     /// Toggles the right panel. This happens as an explicit action from the user.
     ToggleRightPanel,
     /// Opens the code review panel (right panel) without toggling. If already open,
@@ -1098,6 +1100,7 @@ impl WorkspaceAction {
             | ToggleLeftPanel
             | ToggleWarpDrive
             | OpenWarpDrive
+            | ToggleManaBar
             | ClosePanel
             | ToggleRightPanel
             | OpenCodeReviewPanel(..)

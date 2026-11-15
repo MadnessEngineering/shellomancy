@@ -12,6 +12,7 @@ pub(crate) mod free_ai_removal_modal;
 pub mod global_search;
 pub(crate) mod launch_modal;
 pub(crate) mod left_panel;
+pub(crate) mod mana_bar_view;
 pub(crate) mod onboarding;
 pub(crate) mod openwarp_launch_modal;
 pub(crate) mod orchestration_launch_modal;
@@ -706,6 +707,8 @@ pub(crate) const LEFT_PANEL_GLOBAL_SEARCH_BINDING_NAME: &str = "workspace:left_p
 pub(crate) const LEFT_PANEL_WARP_DRIVE_BINDING_NAME: &str = "workspace:left_panel_warp_drive";
 pub(crate) const LEFT_PANEL_AGENT_CONVERSATIONS_BINDING_NAME: &str =
     "workspace:left_panel_agent_conversations";
+/// Shellomancy: the Mana Bar tab of the tools panel.
+pub(crate) const LEFT_PANEL_MANA_BAR_BINDING_NAME: &str = "workspace:left_panel_mana_bar";
 
 const KEYBINDINGS_TO_CACHE: [&str; 4] = [
     ASK_AI_ASSISTANT_KEYBINDING_NAME,
@@ -4384,6 +4387,7 @@ impl Workspace {
             handle.set_size(left_panel_snapshot.width as f32);
         }
 
+        let left_panel_views = self.left_panel_views.clone();
         self.left_panel_view.update(ctx, |lp, ctx| {
             // Restore which panel tab was active
             let active_view = match left_panel_snapshot.left_panel_displayed_tab {
@@ -4393,7 +4397,9 @@ impl Workspace {
                 },
                 LeftPanelDisplayedTab::WarpDrive => ToolPanelView::WarpDrive,
                 LeftPanelDisplayedTab::ConversationListView => ToolPanelView::ConversationListView,
+                LeftPanelDisplayedTab::ManaBar => ToolPanelView::ManaBar,
             };
+            let active_view = restorable_left_panel_view(active_view, &left_panel_views);
             lp.restore_active_view_from_snapshot(active_view, ctx);
             lp.set_active_pane_group(pane_group.clone(), &self.working_directories_model, ctx);
         });
@@ -20931,6 +20937,7 @@ impl Workspace {
                         ToolPanelView::GlobalSearch { .. } => "Global search",
                         ToolPanelView::WarpDrive => "Warp Drive",
                         ToolPanelView::ConversationListView => "Agent conversations",
+                        ToolPanelView::ManaBar => madness_themes::t("shellomancy.manaBar.title"),
                     }
                 } else {
                     "Tools panel"
@@ -20985,6 +20992,7 @@ impl Workspace {
                 ToolPanelView::GlobalSearch { .. } => "Global search",
                 ToolPanelView::WarpDrive => "Warp Drive",
                 ToolPanelView::ConversationListView => "Agent conversations",
+                ToolPanelView::ManaBar => madness_themes::t("shellomancy.manaBar.title"),
             }
         } else {
             "Tools panel"
@@ -24245,11 +24253,11 @@ impl Workspace {
                 entry_focus: GlobalSearchEntryFocus::Results,
             });
         }
-        // Shellomancy: Drive is locked behind Warp sign-in offline; it comes
-        // back as the Mana Bar once it lives on Omnispindle.
-        if *WarpDriveSettings::as_ref(ctx).enable_warp_drive
-            && ChannelState::channel() != Channel::Oss
-        {
+        // Shellomancy: Drive is locked behind Warp sign-in offline; the Mana
+        // Bar (Omnispindle) takes its slot.
+        if ChannelState::channel() == Channel::Oss {
+            views.push(ToolPanelView::ManaBar);
+        } else if *WarpDriveSettings::as_ref(ctx).enable_warp_drive {
             views.push(ToolPanelView::WarpDrive);
         }
         views
@@ -26658,6 +26666,13 @@ impl TypedActionView for Workspace {
                     );
                 }
             }
+            ToggleManaBar => {
+                if self.left_panel_views.contains(&ToolPanelView::ManaBar) {
+                    let is_showing =
+                        self.left_panel_view.as_ref(ctx).active_view() == ToolPanelView::ManaBar;
+                    self.toggle_left_panel_view(&LeftPanelAction::ManaBar, is_showing, ctx);
+                }
+            }
             ToggleConversationListView => {
                 if FeatureFlag::AgentViewConversationListView.is_enabled() {
                     let is_showing = self.left_panel_view.as_ref(ctx).active_view()
@@ -26991,6 +27006,9 @@ impl View for Workspace {
 
         if WarpDriveSettings::is_warp_drive_enabled(app) {
             context.set.insert(flags::ENABLE_WARP_DRIVE);
+        }
+        if self.left_panel_views.contains(&ToolPanelView::ManaBar) {
+            context.set.insert(flags::SHOW_MANA_BAR);
         }
 
         if AISettings::as_ref(app).is_conversation_history_enabled(app) {
@@ -30172,5 +30190,23 @@ fn set_opencode_warp_plugin(new_entry: &str) -> String {
             Err(e) => format!("Failed to write opencode.json: {e}"),
         },
         Err(e) => format!("Failed to serialize opencode.json: {e}"),
+    }
+}
+
+/// Shellomancy: the tab to restore a saved tools panel to. A saved tab that's
+/// no longer offered falls back: Drive's to the Mana Bar that took its slot,
+/// anything else to the first tab there is.
+fn restorable_left_panel_view(saved: ToolPanelView, offered: &[ToolPanelView]) -> ToolPanelView {
+    let is_offered = |view: ToolPanelView| {
+        offered
+            .iter()
+            .any(|offered| std::mem::discriminant(offered) == std::mem::discriminant(&view))
+    };
+    if is_offered(saved) {
+        saved
+    } else if saved == ToolPanelView::WarpDrive && is_offered(ToolPanelView::ManaBar) {
+        ToolPanelView::ManaBar
+    } else {
+        offered.first().copied().unwrap_or(saved)
     }
 }
