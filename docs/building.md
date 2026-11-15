@@ -87,4 +87,12 @@ This uses the `release-lto` profile and the `release_bundle` feature. `release_b
 
 ## Signing and the Keychain
 
-Without an Apple Development certificate the app is ad-hoc signed. Each rebuild changes the signature, so macOS may ask again for Keychain access to Shellomancy's items (its local-control setting lives there). Expected, not verified.
+Without an Apple Development certificate the app is ad-hoc signed. Each rebuild changes the signature, so macOS asks again for Keychain access to each Shellomancy item it reads at startup: `MadnessAccount` (your sign-in) and `FileBasedMcpCredentials`. Two prompts every launch of a new build (seen 2026-11-15).
+
+Fix it once:
+
+```sh
+./script/setup_local_signing
+```
+
+This creates a self-signed code-signing identity, "Shellomancy Local Signing", in your login keychain. When no Apple Development certificate exists, `script/macos/bundle --selfsign` (and so `install_local`) signs with it instead of ad hoc, so every build has the same signature. Answer the first Keychain prompts after that with **Always Allow** and they stay answered across rebuilds. The first signing also asks once for codesign to use the new key; answer that with Always Allow too. To undo, delete the identity in Keychain Access.

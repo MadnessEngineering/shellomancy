@@ -923,8 +923,16 @@ fi
 
 if [[ $SELFSIGN = true ]]; then
   SIGNING_CERT="$(security find-identity -p codesigning -v | grep "Apple Development" | awk '{print $2}' | head -1)"
-  if [[ -z "$SIGNING_CERT" ]]; then
+  # Shellomancy: a self-signed identity from script/setup_local_signing keeps
+  # one signature across rebuilds, so Keychain "Always Allow" sticks. It isn't
+  # trusted, so it's not in the -v (valid only) list.
+  LOCAL_SIGNING_NAME="Shellomancy Local Signing"
+  if [[ -z "$SIGNING_CERT" ]] && security find-identity -p codesigning | grep -q "\"$LOCAL_SIGNING_NAME\""; then
+    echo "Signing with \"$LOCAL_SIGNING_NAME\""
+    SIGNING_CERT="$LOCAL_SIGNING_NAME"
+  elif [[ -z "$SIGNING_CERT" ]]; then
     echo "No Apple Development cert found, falling back to ad-hoc signing."
+    echo "(script/setup_local_signing makes a stable local identity.)"
     SIGNING_CERT="-"
   else
     echo "Found Apple Development certificate"
