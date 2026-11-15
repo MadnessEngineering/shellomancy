@@ -99,3 +99,39 @@ fn replies_are_read() {
     let err = created_from_reply(500, &Value::Null, &body).unwrap_err();
     assert!(err.contains("HTTP 500"), "{err}");
 }
+
+#[test]
+fn lessons_record_what_ran_and_where() {
+    let mut s = spell("cargo test -p warp", Some(101));
+    s.output = "test result: FAILED".to_owned();
+    let body = lesson_body(&s);
+    assert_eq!(body["topic"], "`cargo test -p warp` failed (exit 101)");
+    assert_eq!(body["language"], "rust");
+    assert_eq!(body["tags"], json!(["shellomancy", "spell", "app"]));
+    let lesson = body["lesson_learned"].as_str().unwrap();
+    assert!(
+        lesson.starts_with("Ran in /nowhere/shellomancy-test/app on main, exit 101."),
+        "{lesson}"
+    );
+    assert!(lesson.contains("$ cargo test -p warp\ntest result: FAILED\n```"));
+}
+
+#[test]
+fn lessons_redact_secrets_too() {
+    let key = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
+    let mut s = spell(
+        &format!("curl -H 'Authorization: token {key}' api"),
+        Some(0),
+    );
+    s.output = key.to_owned();
+    assert!(!lesson_body(&s).to_string().contains(key));
+}
+
+#[test]
+fn lesson_language_follows_the_tool() {
+    assert_eq!(language_for("npm run build"), "javascript");
+    assert_eq!(language_for("RUST_LOG=debug cargo run"), "rust");
+    assert_eq!(language_for("/usr/bin/python3 -m pytest"), "python");
+    assert_eq!(language_for("ls -la"), "bash");
+    assert_eq!(language_for(""), "bash");
+}

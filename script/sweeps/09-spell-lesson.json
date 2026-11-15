@@ -1,0 +1,17 @@
+[
+ {
+  "key": "shellomancy.spell.recordLesson",
+  "standard": "Record a lesson",
+  "shellomancer": "Write it down as a lesson"
+ },
+ {
+  "key": "shellomancy.spell.lessonCreated",
+  "standard": "Lesson recorded: {{topic}}",
+  "shellomancer": "Written into the lessons: {{topic}}"
+ },
+ {
+  "key": "shellomancy.spell.lessonFailed",
+  "standard": "Couldn't record a lesson: {{error}}",
+  "shellomancer": "The lesson fizzled: {{error}}"
+ }
+]
