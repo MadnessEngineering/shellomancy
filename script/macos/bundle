@@ -218,6 +218,7 @@ FEATURES="release_bundle,cocoa_sentry,extern_plist"
 REGISTER_SERVICES=true
 DEBUG=false
 ARTIFACT="app"
+MAKE_DMG=true
 CODESIGN=true
 SELFSIGN=false
 OPEN_AFTER_BUNDLE=false
@@ -242,6 +243,13 @@ while (( "$#" )); do
     --skip-build)
       echo "Skipping binary build step."
       BUILD_BINARY=false
+      shift
+      ;;
+    # Shellomancy: skip the DMG (and the create-dmg dependency), e.g. for
+    # script/install_local, which only needs the .app.
+    --nodmg)
+      echo "Skipping the DMG."
+      MAKE_DMG=false
       shift
       ;;
     # Skip code signing process
@@ -958,7 +966,7 @@ fi
 ## Step 4: Create DMG ##
 ########################
 
-if [[ "$ARTIFACT" = app ]]; then
+if [[ "$ARTIFACT" = app && $MAKE_DMG = true ]]; then
   function create_warp_dmg() {
     echo "Creating $DMG_DIR/$DMG_NAME..."
     rm "$DMG_DIR/$DMG_NAME" || true
@@ -1052,7 +1060,9 @@ fi
 if [[ "$ARTIFACT" = app ]]; then
   echo "Copying dmg and app to $OUT_DIR"
   cp -R "$BUNDLE_DIR/$WARP_APP_NAME.app" "$OUT_DIR"
-  cp "$DMG_DIR/$DMG_NAME" "$OUT_DIR/$FINAL_DMG_NAME"
+  if [[ $MAKE_DMG = true ]]; then
+    cp "$DMG_DIR/$DMG_NAME" "$OUT_DIR/$FINAL_DMG_NAME"
+  fi
 fi
 
 # If this is being run within a GitHub action, set an output variable with the
