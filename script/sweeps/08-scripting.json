@@ -1,0 +1,15 @@
+[
+ {
+  "key": "shellomancy.settings.scripting.controlAccess",
+  "standard": "Scripting access",
+  "shellomancer": "Who may pull the strings",
+  "replace": [
+   {
+    "file": "app/src/settings_view/scripting_page.rs",
+    "literal": "warpctrl CLI",
+    "count": 1,
+    "code": "madness_themes::t(\"shellomancy.settings.scripting.controlAccess\")"
+   }
+  ]
+ }
+]
