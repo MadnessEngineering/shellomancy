@@ -23,6 +23,7 @@ mod linux;
 mod local_control;
 pub mod macros;
 pub mod code_maps;
+pub mod madness_sync;
 pub mod madness_voice;
 pub mod manager;
 pub mod native_preference;

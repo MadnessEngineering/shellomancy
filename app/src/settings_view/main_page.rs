@@ -44,8 +44,10 @@ use crate::auth::{AuthStateProvider, UserUid};
 use crate::autoupdate::{self, AutoupdateStage, AutoupdateState};
 use crate::editor::{EditorView, Event as EditorEvent, SingleLineEditorOptions, TextOptions};
 use crate::madness_account::{MADNESS_KEYS_URL, MadnessAccount, MadnessAccountState};
+use crate::madness_sync::{SettingsSync, SyncStatus};
 use crate::server::ids::ServerId;
 use crate::settings::cloud_preferences::CloudPreferencesSettings;
+use crate::settings::madness_sync::MadnessSyncSettings;
 use crate::workspace::WorkspaceAction;
 use crate::workspaces::update_manager::TeamUpdateManager;
 use crate::workspaces::user_workspaces::UserWorkspaces;
@@ -133,6 +135,9 @@ pub enum MainPageAction {
     /// Shellomancy: sign in to madnessinteractive.cc with the pasted key.
     MadnessSignIn,
     MadnessSignOut,
+    /// Shellomancy: settings sync through the Madness account.
+    ToggleMadnessSettingsSync,
+    MadnessSyncNow,
     #[cfg(not(target_family = "wasm"))]
     RefreshIapCredentials,
 }
@@ -251,6 +256,17 @@ impl TypedActionView for MainSettingsPageView {
             MainPageAction::MadnessSignOut => {
                 MadnessAccount::handle(ctx).update(ctx, |account, ctx| account.sign_out(ctx));
             }
+            MainPageAction::ToggleMadnessSettingsSync => {
+                MadnessSyncSettings::handle(ctx).update(ctx, |settings, ctx| {
+                    report_if_error!(settings.enabled.toggle_and_save_value(ctx));
+                });
+                ctx.notify();
+            }
+            MainPageAction::MadnessSyncNow => {
+                if ctx.has_singleton_model::<SettingsSync>() {
+                    SettingsSync::handle(ctx).update(ctx, |sync, ctx| sync.sync_now(ctx));
+                }
+            }
             #[cfg(not(target_family = "wasm"))]
             MainPageAction::RefreshIapCredentials => {
                 IapManager::handle(ctx).update(ctx, |manager, ctx| manager.start_refresh(ctx));
@@ -325,7 +341,14 @@ impl MainSettingsPageView {
                 }
                 ctx.notify();
             });
+            if ctx.has_singleton_model::<SettingsSync>() {
+                ctx.subscribe_to_model(&SettingsSync::handle(ctx), |_, _, _, ctx| ctx.notify());
+            }
+            ctx.subscribe_to_model(&MadnessSyncSettings::handle(ctx), |_, _, _, ctx| {
+                ctx.notify()
+            });
             widgets.push(Box::new(MadnessAccountWidget::default()));
+            widgets.push(Box::new(MadnessSettingsSyncWidget::default()));
             widgets.push(Box::new(DividerWidget {}));
         } else {
             widgets.push(Box::new(AccountWidget::default()));
@@ -879,6 +902,139 @@ impl SettingsWidget for MadnessAccountWidget {
             .finish(),
         );
         column.finish()
+    }
+}
+
+/// Shellomancy: turn settings sync on or off, see how it's going, sync now.
+#[derive(Default)]
+struct MadnessSettingsSyncWidget {
+    switch_state: SwitchStateHandle,
+    sync_now_button: MouseStateHandle,
+}
+
+impl SettingsWidget for MadnessSettingsSyncWidget {
+    type View = MainSettingsPageView;
+
+    fn search_terms(&self) -> &str {
+        "settings sync theme voice machines inventorium madness account"
+    }
+
+    fn render(
+        &self,
+        _view: &Self::View,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        let theme = appearance.theme();
+        let ui = appearance.ui_builder();
+        let signed_in = matches!(
+            MadnessAccount::as_ref(app).state(),
+            MadnessAccountState::SignedIn { .. }
+        );
+        let enabled = *MadnessSyncSettings::as_ref(app).enabled.value();
+        let switch = ui
+            .switch(self.switch_state.clone())
+            .check(enabled && signed_in);
+        let switch = if signed_in {
+            switch
+                .build()
+                .on_click(|ctx, _, _| {
+                    ctx.dispatch_typed_action(MainPageAction::ToggleMadnessSettingsSync);
+                })
+                .finish()
+        } else {
+            switch.disable().build().finish()
+        };
+        let mut column = Flex::column().with_child(render_body_item::<MainPageAction>(
+            madness_themes::t("shellomancy.settings.sync.toggle").to_owned(),
+            None,
+            LocalOnlyIconState::Hidden,
+            if signed_in {
+                ToggleState::Enabled
+            } else {
+                ToggleState::Disabled
+            },
+            appearance,
+            switch,
+            Some(madness_themes::t("shellomancy.settings.sync.description").to_owned()),
+        ));
+
+        let status = if !signed_in {
+            madness_themes::t("shellomancy.settings.sync.signedOut").to_owned()
+        } else if ctx_has_sync(app) {
+            sync_status_text(SettingsSync::as_ref(app).status(), enabled)
+        } else {
+            String::new()
+        };
+        let mut row = Flex::row()
+            .with_main_axis_size(MainAxisSize::Max)
+            .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_child(
+                Shrinkable::new(
+                    1.,
+                    ui.wrappable_text(status, true)
+                        .with_style(UiComponentStyles {
+                            font_color: Some(theme.sub_text_color(theme.background()).into_solid()),
+                            ..Default::default()
+                        })
+                        .build()
+                        .finish(),
+                )
+                .finish(),
+            );
+        if signed_in && enabled {
+            row.add_child(
+                ui.button(ButtonVariant::Secondary, self.sync_now_button.clone())
+                    .with_text_label(
+                        madness_themes::t("shellomancy.settings.sync.syncNow").to_owned(),
+                    )
+                    .build()
+                    .on_click(|ctx, _, _| {
+                        ctx.dispatch_typed_action(MainPageAction::MadnessSyncNow);
+                    })
+                    .finish(),
+            );
+        }
+        column.add_child(Container::new(row.finish()).with_margin_top(4.).finish());
+        Container::new(column.finish())
+            .with_margin_top(16.)
+            .finish()
+    }
+}
+
+fn ctx_has_sync(app: &AppContext) -> bool {
+    app.has_singleton_model::<SettingsSync>()
+}
+
+/// The status line under the sync toggle.
+fn sync_status_text(status: &SyncStatus, enabled: bool) -> String {
+    match status {
+        SyncStatus::Idle if !enabled => {
+            madness_themes::t("shellomancy.settings.sync.statusIdle").to_owned()
+        }
+        SyncStatus::Idle | SyncStatus::Syncing => {
+            madness_themes::t("shellomancy.settings.sync.statusSyncing").to_owned()
+        }
+        SyncStatus::Synced(at) => {
+            let when = chrono::DateTime::from_timestamp(*at, 0)
+                .map(|at| at.with_timezone(&chrono::Local).format("%H:%M").to_string())
+                .unwrap_or_default();
+            madness_themes::tf("shellomancy.settings.sync.statusSynced", &[("when", &when)])
+        }
+        SyncStatus::Pending => {
+            madness_themes::t("shellomancy.settings.sync.statusPending").to_owned()
+        }
+        SyncStatus::Offline => {
+            madness_themes::t("shellomancy.settings.sync.statusOffline").to_owned()
+        }
+        SyncStatus::Refused(error) => madness_themes::tf(
+            "shellomancy.settings.sync.statusRefused",
+            &[("error", error)],
+        ),
+        SyncStatus::Failed(error) => {
+            madness_themes::tf("shellomancy.settings.sync.statusError", &[("error", error)])
+        }
     }
 }
 

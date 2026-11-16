@@ -1,0 +1,19 @@
+[
+ {"key": "shellomancy.settings.sync.toggle", "standard": "Sync settings", "shellomancer": "Keep every machine in step"},
+ {"key": "shellomancy.settings.sync.description", "standard": "Keep your theme and voice the same on every machine signed in to this account. Off until you turn it on.", "shellomancer": "Your theme and voice follow you to every machine bound to this account. Nothing moves until you say so."},
+ {"key": "shellomancy.settings.sync.syncNow", "standard": "Sync now", "shellomancer": "Sync now"},
+ {"key": "shellomancy.settings.sync.statusIdle", "standard": "Not syncing.", "shellomancer": "Not syncing."},
+ {"key": "shellomancy.settings.sync.statusSyncing", "standard": "Syncing…", "shellomancer": "Comparing notes…"},
+ {"key": "shellomancy.settings.sync.statusSynced", "standard": "Synced at {{when}}.", "shellomancer": "In step as of {{when}}."},
+ {"key": "shellomancy.settings.sync.statusPending", "standard": "Waiting to send a change…", "shellomancer": "A change is waiting to go out…"},
+ {"key": "shellomancy.settings.sync.statusOffline", "standard": "Couldn't reach madnessinteractive.cc; will try again.", "shellomancer": "madnessinteractive.cc isn't answering; trying again later."},
+ {"key": "shellomancy.settings.sync.statusRefused", "standard": "madnessinteractive.cc doesn't accept settings sync from this key yet: {{error}}", "shellomancer": "madnessinteractive.cc won't take settings from this key yet: {{error}}"},
+ {"key": "shellomancy.settings.sync.statusError", "standard": "Sync failed: {{error}}", "shellomancer": "The sync fizzled: {{error}}"},
+ {"key": "shellomancy.settings.sync.signedOut", "standard": "Sign in above to sync your settings.", "shellomancer": "Bind your account above and your settings can travel."},
+ {"key": "shellomancy.settings.theme.followInventorium", "standard": "Follow Inventorium's colour scheme", "shellomancer": "Wear Inventorium's colours"},
+ {"key": "shellomancy.settings.theme.followNote", "standard": "Use the colour scheme picked on madnessinteractive.cc. Picking a theme here turns this off.", "shellomancer": "Take whatever colours madnessinteractive.cc is wearing. Pick a theme here and this lets go."},
+ {"key": "shellomancy.settings.theme.followUnavailable", "standard": "Sign in on the Account page to follow madnessinteractive.cc.", "shellomancer": "Bind your account on the Account page first."},
+ {"key": "shellomancy.settings.voice.followInventorium", "standard": "Follow Inventorium's voice", "shellomancer": "Speak as Inventorium speaks"},
+ {"key": "shellomancy.settings.voice.followNote", "standard": "Use the voice picked on madnessinteractive.cc. Picking a voice here turns this off.", "shellomancer": "Borrow whatever voice madnessinteractive.cc is using. Pick one here and this lets go."},
+ {"key": "shellomancy.settings.voice.pendingRestart", "standard": "Restart to switch to {{voice}}.", "shellomancer": "Restart and {{voice}} takes over."}
+]

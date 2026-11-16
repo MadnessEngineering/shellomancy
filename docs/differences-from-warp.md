@@ -36,6 +36,7 @@ Regenerate the brand assets with [`script/shellomancy_brand`](../script/shelloma
 | Forced off: crash reporting and handoff checkpoints (turned on by release bundles) | `e47e390b` | unit tests |
 | Telemetry is never sent (no destination, and an early return in the send path) | `65831e03` | `cargo check` |
 | The loopback install-detection server that `*.warp.dev` pages query is not started | `6a4cb483` | `cargo check` |
+| Warp's cloud settings sync stays hidden; Madness settings sync (`app/src/madness_sync`) syncs the theme and voice through your Madness account instead, off by default | settings sync commit | unit tests |
 
 Details: [privacy-and-offline.md](privacy-and-offline.md).
 

@@ -31,6 +31,7 @@ pub fn initialize_settings_for_tests_with_mode(
     use crate::search::command_search::settings::CommandSearchSettings;
     use crate::settings::app_icon::AppIconSettings;
     use crate::settings::code_maps::CodeMapsSettings;
+    use crate::settings::madness_sync::MadnessSyncSettings;
     use crate::settings::madness_voice::MadnessVoiceSettings;
     use crate::settings::manager::SettingsManager;
     use crate::settings::{
@@ -79,6 +80,7 @@ pub fn initialize_settings_for_tests_with_mode(
     AppIconSettings::register(app);
     MadnessVoiceSettings::register(app);
     CodeMapsSettings::register(app);
+    MadnessSyncSettings::register(app);
     EmacsBindingsSettings::register(app);
 
     #[cfg(feature = "local_fs")]

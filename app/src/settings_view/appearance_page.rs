@@ -54,9 +54,11 @@ use crate::editor::{
 };
 use crate::features::FeatureFlag;
 use crate::gpu_state::{GPUState, GPUStateEvent};
+use crate::madness_account::{MadnessAccount, MadnessAccountState};
 use crate::prompt::editor_modal::OpenSource as PromptEditorOpenSource;
 use crate::server::telemetry::{InputUXChangeOrigin, TelemetryEvent};
 use crate::settings::app_icon::{AppIcon, AppIconSettings, ShowDockIconState};
+use crate::settings::madness_sync::MadnessSyncSettings;
 use crate::settings::madness_voice::{MadnessVoice, MadnessVoiceSettings};
 use crate::settings::{
     AIFontName, AISettings, AppEditorSettings, CodeSettings, CursorBlink, CursorBlinkEnabled,
@@ -478,6 +480,9 @@ pub enum AppearancePageAction {
     ToggleShowDockIcon,
     /// Shellomancy: a MadnessThemes voice id.
     SetMadnessVoice(&'static str),
+    /// Shellomancy: follow madnessinteractive.cc's colour scheme / voice.
+    ToggleFollowInventoriumPalette,
+    ToggleFollowInventoriumVoice,
     SetCursorType(CursorDisplayType),
     SetWorkspaceDecorationVisibility(WorkspaceDecorationVisibility),
     ToggleWorkspaceDecorationVisibility,
@@ -670,6 +675,18 @@ impl TypedActionView for AppearanceSettingsPageView {
             SetAppIcon(new_icon) => self.set_app_icon(*new_icon, ctx),
             ToggleShowDockIcon => self.toggle_show_dock_icon(ctx),
             SetMadnessVoice(id) => self.set_madness_voice(id, ctx),
+            ToggleFollowInventoriumPalette => {
+                MadnessSyncSettings::handle(ctx).update(ctx, |settings, ctx| {
+                    report_if_error!(settings.follow_palette.toggle_and_save_value(ctx));
+                });
+                ctx.notify();
+            }
+            ToggleFollowInventoriumVoice => {
+                MadnessSyncSettings::handle(ctx).update(ctx, |settings, ctx| {
+                    report_if_error!(settings.follow_voice.toggle_and_save_value(ctx));
+                });
+                ctx.notify();
+            }
             SetCursorType(cursor_display_type) => self.set_cursor_type(*cursor_display_type, ctx),
             OpacitySliderDragged(val) => self.set_opacity(*val, false, ctx),
             BlurSliderDragged(val) => self.set_blur(*val, false, ctx),
@@ -1312,6 +1329,19 @@ impl AppearanceSettingsPageView {
         let header_toolbar_inline_editor =
             ctx.add_typed_action_view(HeaderToolbarInlineEditor::new);
 
+        // Shellomancy: settings sync can change the voice and the follow
+        // toggles from elsewhere; keep the dropdown and toggles current.
+        ctx.subscribe_to_model(&MadnessVoiceSettings::handle(ctx), |me, _, _, ctx| {
+            me.reselect_madness_voice(ctx);
+            ctx.notify();
+        });
+        ctx.subscribe_to_model(&MadnessSyncSettings::handle(ctx), |_, _, _, ctx| {
+            ctx.notify()
+        });
+        if ctx.has_singleton_model::<MadnessAccount>() {
+            ctx.subscribe_to_model(&MadnessAccount::handle(ctx), |_, _, _, ctx| ctx.notify());
+        }
+
         AppearanceSettingsPageView {
             page: Self::build_page(ctx),
             window_id: ctx.window_id(),
@@ -1359,17 +1389,24 @@ impl AppearanceSettingsPageView {
     }
 
     fn build_page(ctx: &mut ViewContext<Self>) -> PageType<Self> {
-        let mut categories = vec![Category::new(
-            "Themes",
-            vec![
-                Box::new(CreateCustomThemeWidget::default()),
-                Box::new(ThemeSelectWidget::default()),
-            ],
-        )];
+        let shellomancy = ChannelState::channel() == Channel::Oss;
+        let mut theme_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
+            Box::new(CreateCustomThemeWidget::default()),
+            Box::new(ThemeSelectWidget::default()),
+        ];
+        let mut voice_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> =
+            vec![Box::new(MadnessVoiceWidget)];
+        // Shellomancy: follow the colour scheme / voice picked on
+        // madnessinteractive.cc.
+        if shellomancy {
+            theme_widgets.push(Box::new(FollowInventoriumPaletteWidget::default()));
+            voice_widgets.push(Box::new(FollowInventoriumVoiceWidget::default()));
+        }
+        let mut categories = vec![Category::new("Themes", theme_widgets)];
 
         categories.push(Category::new(
             madness_themes::t("shellomancy.settings.voice.category"),
-            vec![Box::new(MadnessVoiceWidget)],
+            voice_widgets,
         ));
 
         if AppIconSettings::as_ref(ctx).is_supported_on_current_platform() {
@@ -2443,6 +2480,19 @@ impl AppearanceSettingsPageView {
         })
     }
 
+    /// Points the voice dropdown at the voice setting (sync may change it).
+    fn reselect_madness_voice(&self, ctx: &mut ViewContext<Self>) {
+        let current = MadnessVoiceSettings::as_ref(ctx).voice.value().clone();
+        if let Some(index) = madness_themes::voices()
+            .iter()
+            .position(|voice| voice.id == current)
+        {
+            self.madness_voice_dropdown.update(ctx, |dropdown, ctx| {
+                dropdown.set_selected_by_index(index, ctx)
+            });
+        }
+    }
+
     fn set_madness_voice(&mut self, id: &'static str, ctx: &mut ViewContext<Self>) {
         MadnessVoiceSettings::handle(ctx).update(ctx, |settings, ctx| {
             report_if_error!(settings.voice.set_value(id.to_owned(), ctx));
@@ -3113,6 +3163,130 @@ impl SettingsWidget for MadnessVoiceWidget {
             ),
             None,
             &view.madness_voice_dropdown,
+        )
+    }
+}
+
+/// Shellomancy: whether the account is signed in, for the follow toggles.
+fn madness_signed_in(app: &AppContext) -> bool {
+    app.has_singleton_model::<MadnessAccount>()
+        && matches!(
+            MadnessAccount::as_ref(app).state(),
+            MadnessAccountState::SignedIn { .. }
+        )
+}
+
+/// A follow toggle: enabled only while signed in.
+fn render_follow_toggle(
+    label: &'static str,
+    note: String,
+    checked: bool,
+    switch_state: SwitchStateHandle,
+    action: AppearancePageAction,
+    appearance: &Appearance,
+    app: &AppContext,
+) -> Box<dyn Element> {
+    let signed_in = madness_signed_in(app);
+    let switch = appearance
+        .ui_builder()
+        .switch(switch_state)
+        .check(checked && signed_in);
+    let switch = if signed_in {
+        switch
+            .build()
+            .on_click(move |ctx, _, _| ctx.dispatch_typed_action(action.clone()))
+            .finish()
+    } else {
+        switch.disable().build().finish()
+    };
+    let note = if signed_in {
+        note
+    } else {
+        madness_themes::t("shellomancy.settings.theme.followUnavailable").to_owned()
+    };
+    render_body_item::<AppearancePageAction>(
+        label.to_owned(),
+        None,
+        LocalOnlyIconState::Hidden,
+        if signed_in {
+            ToggleState::Enabled
+        } else {
+            ToggleState::Disabled
+        },
+        appearance,
+        switch,
+        Some(note),
+    )
+}
+
+/// Shellomancy: take the colour scheme picked on madnessinteractive.cc.
+#[derive(Default)]
+struct FollowInventoriumPaletteWidget {
+    switch_state: SwitchStateHandle,
+}
+
+impl SettingsWidget for FollowInventoriumPaletteWidget {
+    type View = AppearanceSettingsPageView;
+
+    fn search_terms(&self) -> &str {
+        "theme follow inventorium madness interactive colour color scheme palette sync"
+    }
+
+    fn render(
+        &self,
+        _view: &Self::View,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        render_follow_toggle(
+            madness_themes::t("shellomancy.settings.theme.followInventorium"),
+            madness_themes::t("shellomancy.settings.theme.followNote").to_owned(),
+            *MadnessSyncSettings::as_ref(app).follow_palette.value(),
+            self.switch_state.clone(),
+            AppearancePageAction::ToggleFollowInventoriumPalette,
+            appearance,
+            app,
+        )
+    }
+}
+
+/// Shellomancy: take the voice picked on madnessinteractive.cc.
+#[derive(Default)]
+struct FollowInventoriumVoiceWidget {
+    switch_state: SwitchStateHandle,
+}
+
+impl SettingsWidget for FollowInventoriumVoiceWidget {
+    type View = AppearanceSettingsPageView;
+
+    fn search_terms(&self) -> &str {
+        "voice follow inventorium madness interactive text wording sync"
+    }
+
+    fn render(
+        &self,
+        _view: &Self::View,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        let mut note = madness_themes::t("shellomancy.settings.voice.followNote").to_owned();
+        if let Some(voice) = crate::madness_sync::voice_pending_restart(app) {
+            note = format!(
+                "{note} {}",
+                madness_themes::tf(
+                    "shellomancy.settings.voice.pendingRestart",
+                    &[("voice", &voice)]
+                )
+            );
+        }
+        render_follow_toggle(
+            madness_themes::t("shellomancy.settings.voice.followInventorium"),
+            note,
+            *MadnessSyncSettings::as_ref(app).follow_voice.value(),
+            self.switch_state.clone(),
+            AppearancePageAction::ToggleFollowInventoriumVoice,
+            appearance,
+            app,
         )
     }
 }
