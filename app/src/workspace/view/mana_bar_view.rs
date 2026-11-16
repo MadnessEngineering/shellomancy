@@ -30,7 +30,7 @@ use crate::editor::{
     PropagateHorizontalNavigationKeys, SingleLineEditorOptions, TextOptions,
 };
 use crate::mana_bar::api::{self, DASHBOARD_URL};
-use crate::mana_bar::{Fetch, ManaBar, ManaBarEvent, ProjectKey};
+use crate::mana_bar::{Fetch, List, ManaBar, ManaBarEvent, ProjectKey};
 use crate::settings_view::SettingsSection;
 use crate::ui_components::buttons::icon_button;
 use crate::view_components::DismissibleToast;
@@ -40,11 +40,92 @@ use crate::workspace::{ToastStack, WorkspaceAction};
 const POLL_INTERVAL: Duration = Duration::from_secs(60);
 const SCROLLBAR_WIDTH: ScrollbarWidth = ScrollbarWidth::Auto;
 const SECTION_GAP: f32 = 16.;
+/// Cards rendered per tab before "Show more"; rendering hundreds of cards
+/// every frame is what made the panel lag.
+const PAGE_SIZE: usize = 30;
 /// Tag chips shown per card; the rest are on the site.
 const MAX_TAGS: usize = 5;
 
+/// Which list the panel shows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ManaBarTab {
+    #[default]
+    Todos,
+    Quests,
+    Scrolls,
+    Log,
+}
+
+impl ManaBarTab {
+    const ALL: [ManaBarTab; 4] = [
+        ManaBarTab::Todos,
+        ManaBarTab::Quests,
+        ManaBarTab::Scrolls,
+        ManaBarTab::Log,
+    ];
+
+    /// The list this tab shows.
+    fn list(self) -> List {
+        match self {
+            ManaBarTab::Todos => List::Todos,
+            ManaBarTab::Quests => List::Quests,
+            ManaBarTab::Scrolls => List::Lessons,
+            ManaBarTab::Log => List::Activity,
+        }
+    }
+
+    fn voice_key(self) -> &'static str {
+        match self {
+            ManaBarTab::Todos => "shellomancy.manaBar.tabTodos",
+            ManaBarTab::Quests => "shellomancy.manaBar.tabQuests",
+            ManaBarTab::Scrolls => "shellomancy.manaBar.tabScrolls",
+            ManaBarTab::Log => "shellomancy.manaBar.tabLog",
+        }
+    }
+}
+
+/// Which log entries the Log tab shows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LogFilter {
+    #[default]
+    All,
+    Created,
+    Updated,
+    Completed,
+}
+
+impl LogFilter {
+    const ALL: [LogFilter; 4] = [
+        LogFilter::All,
+        LogFilter::Created,
+        LogFilter::Updated,
+        LogFilter::Completed,
+    ];
+
+    fn voice_key(self) -> &'static str {
+        match self {
+            LogFilter::All => "shellomancy.manaBar.logAll",
+            LogFilter::Created => "shellomancy.manaBar.logCreated",
+            LogFilter::Updated => "shellomancy.manaBar.logUpdated",
+            LogFilter::Completed => "shellomancy.manaBar.logCompleted",
+        }
+    }
+
+    fn matches(self, operation: &str) -> bool {
+        match self {
+            LogFilter::All => true,
+            LogFilter::Created => operation == "create",
+            LogFilter::Updated => operation == "update",
+            LogFilter::Completed => operation == "complete",
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum ManaBarAction {
+    SelectTab(ManaBarTab),
+    ShowMore,
+    SetLogFilter(LogFilter),
     Refresh,
     ToggleAllProjects,
     OpenTodo(String),
@@ -59,12 +140,19 @@ struct HeaderMouseStates {
     scope: MouseStateHandle,
     account: MouseStateHandle,
     site: MouseStateHandle,
+    tabs: [MouseStateHandle; 4],
+    show_more: MouseStateHandle,
+    log_filters: [MouseStateHandle; 4],
 }
 
 pub struct ManaBarView {
     /// The focused terminal's project, if it's in one.
     project: Option<String>,
     all_projects: bool,
+    tab: ManaBarTab,
+    log_filter: LogFilter,
+    /// How many cards the current tab shows; grows with "Show more".
+    shown: usize,
     lesson_filter: ViewHandle<EditorView>,
     lesson_query: String,
     expanded_lesson: Option<String>,
@@ -119,6 +207,9 @@ impl ManaBarView {
         Self {
             project: None,
             all_projects: false,
+            tab: ManaBarTab::default(),
+            log_filter: LogFilter::default(),
+            shown: PAGE_SIZE,
             lesson_filter,
             lesson_query: String::new(),
             expanded_lesson: None,
@@ -137,6 +228,7 @@ impl ManaBarView {
             return;
         }
         self.project = project;
+        self.shown = PAGE_SIZE;
         if self.visible {
             self.ensure_loaded(ctx);
         }
@@ -172,16 +264,16 @@ impl ManaBarView {
         if !ctx.has_singleton_model::<ManaBar>() {
             return;
         }
-        let key = self.project_key();
-        ManaBar::handle(ctx).update(ctx, |mana_bar, ctx| mana_bar.ensure_loaded(&key, ctx));
+        let (list, key) = (self.tab.list(), self.project_key());
+        ManaBar::handle(ctx).update(ctx, |mana_bar, ctx| mana_bar.ensure_loaded(list, &key, ctx));
     }
 
     fn refresh(&mut self, ctx: &mut ViewContext<Self>) {
         if !ctx.has_singleton_model::<ManaBar>() {
             return;
         }
-        let key = self.project_key();
-        ManaBar::handle(ctx).update(ctx, |mana_bar, ctx| mana_bar.refresh(&key, ctx));
+        let (list, key) = (self.tab.list(), self.project_key());
+        ManaBar::handle(ctx).update(ctx, |mana_bar, ctx| mana_bar.refresh(list, &key, ctx));
     }
 
     fn schedule_poll(&mut self, ctx: &mut ViewContext<Self>) {
@@ -216,7 +308,14 @@ impl ManaBarView {
             .into_iter()
             .flatten()
             .map(|lesson| format!("lesson:{}", lesson.id));
-        let keys: Vec<String> = todos.chain(quests).chain(lessons).collect();
+        let log = mana_bar
+            .activity(&self.project_key())
+            .and_then(Fetch::data)
+            .into_iter()
+            .flatten()
+            .enumerate()
+            .map(|(index, _)| format!("log:{index}"));
+        let keys: Vec<String> = todos.chain(quests).chain(lessons).chain(log).collect();
         for key in keys {
             self.row_mouse.entry(key).or_default();
         }
@@ -281,9 +380,25 @@ impl TypedActionView for ManaBarView {
 
     fn handle_action(&mut self, action: &Self::Action, ctx: &mut ViewContext<Self>) {
         match action {
+            ManaBarAction::SelectTab(tab) => {
+                self.tab = *tab;
+                self.shown = PAGE_SIZE;
+                self.ensure_loaded(ctx);
+                ctx.notify();
+            }
+            ManaBarAction::SetLogFilter(filter) => {
+                self.log_filter = *filter;
+                self.shown = PAGE_SIZE;
+                ctx.notify();
+            }
+            ManaBarAction::ShowMore => {
+                self.shown += PAGE_SIZE;
+                ctx.notify();
+            }
             ManaBarAction::Refresh => self.refresh(ctx),
             ManaBarAction::ToggleAllProjects => {
                 self.all_projects = !self.all_projects;
+                self.shown = PAGE_SIZE;
                 self.ensure_loaded(ctx);
                 self.sync_row_mouse_states(ctx);
                 ctx.notify();
@@ -317,9 +432,12 @@ impl View for ManaBarView {
         let key = self.project_key();
 
         let mut body = Flex::column().with_main_axis_size(MainAxisSize::Min);
-        body.add_child(self.render_todos(mana_bar.todos(&key), appearance));
-        body.add_child(self.render_quests(mana_bar.quests(&key), appearance));
-        body.add_child(self.render_lessons(mana_bar.lessons(), appearance));
+        body.add_child(match self.tab {
+            ManaBarTab::Todos => self.render_todos(mana_bar.todos(&key), appearance),
+            ManaBarTab::Quests => self.render_quests(mana_bar.quests(&key), appearance),
+            ManaBarTab::Scrolls => self.render_lessons(mana_bar.lessons(), appearance),
+            ManaBarTab::Log => self.render_log(mana_bar.activity(&key), appearance),
+        });
 
         let theme = appearance.theme();
         let scrollable = ClippedScrollable::vertical(
@@ -338,6 +456,7 @@ impl View for ManaBarView {
         Flex::column()
             .with_main_axis_size(MainAxisSize::Max)
             .with_child(self.render_header(appearance))
+            .with_child(self.render_tabs(mana_bar, &key, appearance))
             .with_child(Shrinkable::new(1.0, scrollable).finish())
             .finish()
     }
@@ -414,6 +533,182 @@ impl ManaBarView {
             .with_horizontal_padding(12.)
             .with_vertical_padding(6.)
             .finish()
+    }
+
+    /// Todos · Quests · Scrolls · Log, each with its count once loaded.
+    fn render_tabs(
+        &self,
+        mana_bar: &ManaBar,
+        key: &ProjectKey,
+        appearance: &Appearance,
+    ) -> Box<dyn Element> {
+        let count = |tab: ManaBarTab| match tab {
+            ManaBarTab::Todos => mana_bar.todos(key).and_then(Fetch::data).map(Vec::len),
+            ManaBarTab::Quests => mana_bar.quests(key).and_then(Fetch::data).map(Vec::len),
+            ManaBarTab::Scrolls => mana_bar.lessons().data().map(Vec::len),
+            ManaBarTab::Log => None,
+        };
+        let mut row = Wrap::row().with_run_spacing(6.);
+        for (tab, mouse) in ManaBarTab::ALL.iter().zip(&self.header_mouse.tabs) {
+            let mut label = madness_themes::t(tab.voice_key()).to_uppercase();
+            if let Some(count) = count(*tab) {
+                label = format!("{label} {count}");
+            }
+            row.add_child(toggle_chip(
+                label,
+                *tab == self.tab,
+                mouse.clone(),
+                ManaBarAction::SelectTab(*tab),
+                appearance,
+            ));
+        }
+        Container::new(row.finish())
+            .with_horizontal_padding(12.)
+            .with_padding_bottom(6.)
+            .finish()
+    }
+
+    fn render_log(
+        &self,
+        fetch: Option<&Fetch<Vec<api::LogEntry>>>,
+        appearance: &Appearance,
+    ) -> Box<dyn Element> {
+        let ui = appearance.ui_builder();
+        let heading = match (&self.project, self.all_projects) {
+            (Some(project), false) => {
+                madness_themes::tf("shellomancy.manaBar.logHeading", &[("project", project)])
+            }
+            _ => madness_themes::t("shellomancy.manaBar.logHeadingAll").to_owned(),
+        };
+        let entries = fetch.and_then(Fetch::data);
+        let mut section = Flex::column().with_child(section_heading(heading, None, appearance));
+        let mut filters = Wrap::row().with_run_spacing(6.);
+        for (filter, mouse) in LogFilter::ALL.iter().zip(&self.header_mouse.log_filters) {
+            filters.add_child(toggle_chip(
+                madness_themes::t(filter.voice_key()).to_owned(),
+                *filter == self.log_filter,
+                mouse.clone(),
+                ManaBarAction::SetLogFilter(*filter),
+                appearance,
+            ));
+        }
+        section.add_child(
+            Container::new(filters.finish())
+                .with_margin_bottom(8.)
+                .finish(),
+        );
+        if let Some(status) = fetch_status(fetch, appearance) {
+            section.add_child(status);
+        }
+        let Some(entries) = entries else {
+            return section.finish();
+        };
+        let shown: Vec<(usize, &api::LogEntry)> = entries
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| self.log_filter.matches(&entry.operation))
+            .collect();
+        if shown.is_empty() {
+            section.add_child(muted(
+                madness_themes::t("shellomancy.manaBar.logEmpty").to_owned(),
+                appearance,
+            ));
+        }
+        let now = chrono::Utc::now().timestamp();
+        let total = shown.len();
+        for (index, entry) in shown.into_iter().take(self.shown) {
+            let color = operation_color(&entry.operation, appearance);
+            let mut pills = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
+            pills.add_child(pill(entry.operation.to_uppercase(), color, appearance));
+            if !entry.project.is_empty() {
+                pills.add_child(chip(entry.project.clone(), appearance));
+            }
+            let top = Flex::row()
+                .with_main_axis_size(MainAxisSize::Max)
+                .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
+                .with_cross_axis_alignment(CrossAxisAlignment::Center)
+                .with_child(Shrinkable::new(1., pills.finish()).finish())
+                .with_child(muted(api::age_label(entry.at, now), appearance))
+                .finish();
+            let mut lines = Flex::column().with_child(top).with_child(
+                Container::new(
+                    ui.wrappable_text(entry.description.clone(), true)
+                        .with_style(UiComponentStyles {
+                            font_size: Some(13.),
+                            ..Default::default()
+                        })
+                        .build()
+                        .finish(),
+                )
+                .with_margin_top(6.)
+                .finish(),
+            );
+            if !entry.fields.is_empty() {
+                lines.add_child(
+                    Container::new(muted(
+                        madness_themes::tf(
+                            "shellomancy.manaBar.logChanged",
+                            &[("fields", &entry.fields.join(", "))],
+                        ),
+                        appearance,
+                    ))
+                    .with_margin_top(4.)
+                    .finish(),
+                );
+            }
+            if let Some(comment) = &entry.comment {
+                lines.add_child(
+                    Container::new(
+                        ui.wrappable_text(comment.clone(), true)
+                            .with_style(UiComponentStyles {
+                                font_size: Some(12.),
+                                font_color: Some(color),
+                                ..Default::default()
+                            })
+                            .build()
+                            .finish(),
+                    )
+                    .with_margin_top(6.)
+                    .with_uniform_padding(8.)
+                    .with_background(appearance.theme().surface_2())
+                    .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
+                    .finish(),
+                );
+            }
+            section.add_child(card(
+                lines.finish(),
+                self.row_mouse(&format!("log:{index}")),
+                ManaBarAction::OpenTodo(entry.todo_id.clone()),
+                Some(color),
+                appearance,
+            ));
+        }
+        if let Some(more) = self.render_show_more(total, appearance) {
+            section.add_child(more);
+        }
+        section.finish()
+    }
+
+    /// "Show N more" under a list cut off at `self.shown`.
+    fn render_show_more(&self, total: usize, appearance: &Appearance) -> Option<Box<dyn Element>> {
+        let hidden = total.checked_sub(self.shown).filter(|hidden| *hidden > 0)?;
+        Some(
+            Container::new(toggle_chip(
+                madness_themes::tf(
+                    "shellomancy.manaBar.showMore",
+                    &[
+                        ("count", &hidden.min(PAGE_SIZE).to_string()),
+                        ("hidden", &hidden.to_string()),
+                    ],
+                ),
+                false,
+                self.header_mouse.show_more.clone(),
+                ManaBarAction::ShowMore,
+                appearance,
+            ))
+            .with_margin_top(4.)
+            .finish(),
+        )
     }
 
     fn render_signed_out(&self, appearance: &Appearance) -> Box<dyn Element> {
@@ -506,10 +801,12 @@ impl ManaBarView {
             }
             Some(todos) => {
                 let now = chrono::Utc::now().timestamp();
-                for (_, group) in api::group_by_priority(todos.clone()) {
-                    for todo in group {
-                        section.add_child(self.render_todo(&todo, now, appearance));
-                    }
+                let sorted = api::sort_todos(todos);
+                for todo in sorted.iter().take(self.shown) {
+                    section.add_child(self.render_todo(todo, now, appearance));
+                }
+                if let Some(more) = self.render_show_more(sorted.len(), appearance) {
+                    section.add_child(more);
                 }
             }
             None => {}
@@ -633,7 +930,7 @@ impl ManaBarView {
             )),
             Some(quests) => {
                 let accent = appearance.theme().accent().into_solid();
-                for quest in quests {
+                for quest in quests.iter().take(self.shown) {
                     let mut lines = Flex::column()
                         .with_child(
                             ui.wrappable_text(quest.name.clone(), true)
@@ -699,6 +996,9 @@ impl ManaBarView {
                         appearance,
                     ));
                 }
+                if let Some(more) = self.render_show_more(quests.len(), appearance) {
+                    section.add_child(more);
+                }
             }
             None => {}
         }
@@ -755,7 +1055,8 @@ impl ManaBarView {
             }
             let now = chrono::Utc::now().timestamp();
             let lesson_color = theme.terminal_colors().normal.magenta.into();
-            for lesson in shown {
+            let total = shown.len();
+            for lesson in shown.into_iter().take(self.shown) {
                 let expanded = self.expanded_lesson.as_deref() == Some(lesson.id.as_str());
                 let top = Flex::row()
                     .with_main_axis_size(MainAxisSize::Max)
@@ -832,6 +1133,9 @@ impl ManaBarView {
                     Some(lesson_color),
                     appearance,
                 ));
+            }
+            if let Some(more) = self.render_show_more(total, appearance) {
+                section.add_child(more);
             }
         }
         Container::new(section.finish())
@@ -1004,6 +1308,71 @@ fn progress_bar(pct: u64, color: ColorU, appearance: &Appearance) -> Box<dyn Ele
     Container::new(bar.finish())
         .with_corner_radius(CornerRadius::with_all(Radius::Pixels(3.)))
         .finish()
+}
+
+/// A chip that's filled with the accent colour when selected.
+fn toggle_chip(
+    label: String,
+    selected: bool,
+    mouse: MouseStateHandle,
+    action: ManaBarAction,
+    appearance: &Appearance,
+) -> Box<dyn Element> {
+    let theme = appearance.theme();
+    let accent_fill = theme.accent();
+    let text_color = if selected {
+        theme.background().into_solid()
+    } else {
+        theme.main_text_color(theme.background()).into_solid()
+    };
+    let idle = theme.surface_2();
+    let hover = theme.surface_3();
+    let border = theme.surface_3();
+    let label_element = appearance
+        .ui_builder()
+        .span(label)
+        .with_style(UiComponentStyles {
+            font_size: Some(11.),
+            font_weight: Some(Weight::Bold),
+            font_color: Some(text_color),
+            ..Default::default()
+        })
+        .build()
+        .finish();
+    Container::new(
+        Hoverable::new(mouse, move |state| {
+            let background = if selected {
+                accent_fill
+            } else if state.is_hovered() {
+                hover
+            } else {
+                idle
+            };
+            Container::new(label_element)
+                .with_horizontal_padding(10.)
+                .with_vertical_padding(4.)
+                .with_background(background)
+                .with_border(Border::all(1.).with_border_fill(border))
+                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(12.)))
+                .finish()
+        })
+        .with_cursor(Cursor::PointingHand)
+        .on_click(move |ctx, _, _| ctx.dispatch_typed_action(action.clone()))
+        .finish(),
+    )
+    .with_margin_right(6.)
+    .finish()
+}
+
+fn operation_color(operation: &str, appearance: &Appearance) -> ColorU {
+    let colors = &appearance.theme().terminal_colors().normal;
+    match operation {
+        "create" => colors.green.into(),
+        "complete" => colors.cyan.into(),
+        "delete" => colors.red.into(),
+        "restore" => colors.magenta.into(),
+        _ => colors.yellow.into(),
+    }
 }
 
 fn priority_color(priority: api::Priority, appearance: &Appearance) -> ColorU {

@@ -22,6 +22,7 @@ const PROJECT_TODO_LIMIT: u32 = 200;
 pub const ALL_TODO_LIMIT: u32 = 300;
 const QUEST_LIMIT: u32 = 50;
 const LESSON_LIMIT: u32 = 50;
+const ACTIVITY_LIMIT: u32 = 50;
 
 /// A todo's priority, in the order the panel lists them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -98,6 +99,23 @@ pub struct Lesson {
     pub created_at: i64,
 }
 
+/// One entry in the activity log: something that happened to a todo.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LogEntry {
+    /// The todo it happened to.
+    pub todo_id: String,
+    /// create, update, complete, delete, restore, ...
+    pub operation: String,
+    pub description: String,
+    pub project: String,
+    /// Unix seconds.
+    pub at: i64,
+    /// Which fields an update changed.
+    pub fields: Vec<String>,
+    /// The note left when it was completed, if any.
+    pub comment: Option<String>,
+}
+
 /// Whether a todo still needs doing. Inventorium's `exclude_completed` only
 /// drops completed/complete/done, so the rest are dropped here.
 pub fn is_active(status: &str) -> bool {
@@ -135,6 +153,19 @@ pub fn parse_todos(reply: &Value) -> Vec<Todo> {
             })
         })
         .collect()
+}
+
+/// Todos in the order the panel lists them (priority, then status, then
+/// newest first), without copying them.
+pub fn sort_todos(todos: &[Todo]) -> Vec<&Todo> {
+    let mut sorted: Vec<&Todo> = todos.iter().collect();
+    sorted.sort_by(|a, b| {
+        a.priority
+            .cmp(&b.priority)
+            .then_with(|| status_rank(&a.status).cmp(&status_rank(&b.status)))
+            .then_with(|| b.created_at.cmp(&a.created_at))
+    });
+    sorted
 }
 
 /// Todos grouped by priority (Critical first), each group ordered by status
@@ -218,6 +249,62 @@ pub fn parse_lessons(reply: &Value) -> Vec<Lesson> {
         .collect()
 }
 
+/// Reads `GET /api/todos/activity` (`{ logs: [...] }`). Entries without a
+/// todo id are dropped; everything else is read leniently, since the log has
+/// been written by several generations of Inventorium and Omnispindle.
+pub fn parse_activity(reply: &Value) -> Vec<LogEntry> {
+    reply["logs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let todo_id = text(&entry["todoId"]).or_else(|| text(&entry["todo_id"]))?;
+            let mut fields: Vec<String> = entry["changes"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|change| text(&change["field"]))
+                .collect();
+            fields.dedup();
+            Some(LogEntry {
+                todo_id,
+                operation: text(&entry["operation"]).unwrap_or_else(|| "update".to_owned()),
+                description: text(&entry["todoTitle"])
+                    .or_else(|| text(&entry["description"]))
+                    .or_else(|| text(&entry["todo_description"]))
+                    .unwrap_or_default(),
+                project: text(&entry["project"]).unwrap_or_default(),
+                at: log_timestamp(&entry["timestamp"]),
+                fields,
+                comment: [
+                    "completion_comment",
+                    "comment",
+                    "completionComment",
+                    "completion_notes",
+                ]
+                .iter()
+                .find_map(|key| text(&entry[*key]).or_else(|| text(&entry["metadata"][*key]))),
+            })
+        })
+        .collect()
+}
+
+/// A log timestamp in Unix seconds: an ISO date string (how Mongo dates come
+/// back as JSON), or a number in seconds or milliseconds.
+fn log_timestamp(value: &Value) -> i64 {
+    if let Some(text) = value.as_str() {
+        if let Ok(at) = chrono::DateTime::parse_from_rfc3339(text.trim()) {
+            return at.timestamp();
+        }
+    }
+    let seconds = timestamp(value);
+    if seconds > 10_000_000_000 {
+        seconds / 1000
+    } else {
+        seconds
+    }
+}
+
 /// The lessons whose topic, tags or body mention `query` (ignoring case);
 /// all of them for a blank query.
 pub fn filter_lessons<'a>(lessons: &'a [Lesson], query: &str) -> Vec<&'a Lesson> {
@@ -282,6 +369,16 @@ pub fn lessons_url() -> Url {
     )
 }
 
+/// `GET /api/todos/activity`, newest first, for one project (or all).
+pub fn activity_url(project: Option<&str>) -> Url {
+    let limit = ACTIVITY_LIMIT.to_string();
+    let mut params = vec![("limit", limit.as_str())];
+    if let Some(project) = project {
+        params.push(("project", project));
+    }
+    api_url("/todos/activity", &params)
+}
+
 /// `POST /api/todos/:id/complete`.
 pub fn complete_url(id: &str) -> Url {
     let mut url =
@@ -317,6 +414,12 @@ pub async fn fetch_quests(key: String, project: Option<String>) -> Result<Vec<Qu
     get_json(&key, quests_url(project.as_deref()))
         .await
         .map(|reply| parse_quests(&reply))
+}
+
+pub async fn fetch_activity(key: String, project: Option<String>) -> Result<Vec<LogEntry>, String> {
+    get_json(&key, activity_url(project.as_deref()))
+        .await
+        .map(|reply| parse_activity(&reply))
 }
 
 pub async fn fetch_lessons(key: String) -> Result<Vec<Lesson>, String> {

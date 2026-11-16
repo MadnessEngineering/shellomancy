@@ -280,3 +280,64 @@ fn every_mana_bar_string_is_in_the_voices() {
         assert_ne!(madness_themes::t(key), key, "{key} has no wording");
     }
 }
+
+#[test]
+fn activity_entries_parse_leniently() {
+    let reply = json!({"logs": [
+        {"todoId": "t1", "operation": "complete", "todoTitle": "Ship it",
+         "description": "Ship it, the long way", "project": "shellomancy",
+         "timestamp": "2026-11-15T12:00:00.000Z", "changes": [],
+         "completion_comment": "Landed in ce428e5e"},
+        {"todo_id": "t2", "description": "Edit me", "project": "inventorium",
+         "timestamp": 1_794_744_000_000_i64,
+         "changes": [{"field": "status"}, {"field": "status"}, {"field": "priority"}]},
+        {"operation": "create", "description": "no todo id"}
+    ], "total": 3});
+
+    let entries = parse_activity(&reply);
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].operation, "complete");
+    assert_eq!(entries[0].description, "Ship it");
+    assert_eq!(entries[0].at, 1_794_744_000);
+    assert_eq!(entries[0].comment.as_deref(), Some("Landed in ce428e5e"));
+    // Milliseconds become seconds; repeated fields collapse; no operation means update.
+    assert_eq!(entries[1].operation, "update");
+    assert_eq!(entries[1].at, 1_794_744_000);
+    assert_eq!(
+        entries[1].fields,
+        vec!["status".to_owned(), "priority".to_owned()]
+    );
+    assert_eq!(entries[1].comment, None);
+}
+
+#[test]
+fn activity_url_filters_by_project() {
+    let url = activity_url(Some("foo bar"));
+    assert_eq!(url.path(), "/api/todos/activity");
+    assert!(url.query().unwrap().contains("project=foo+bar"));
+    assert!(!activity_url(None).query().unwrap().contains("project"));
+}
+
+#[test]
+fn sort_todos_matches_the_grouped_order_without_copying() {
+    let todos = vec![
+        todo("low", Priority::Low, "pending", 5),
+        todo("crit-old", Priority::Critical, "pending", 1),
+        todo("crit-new", Priority::Critical, "pending", 9),
+        todo("crit-doing", Priority::Critical, "in_progress", 2),
+        todo("high", Priority::High, "pending", 3),
+    ];
+    let sorted: Vec<&str> = sort_todos(&todos)
+        .iter()
+        .map(|todo| todo.id.as_str())
+        .collect();
+    let grouped: Vec<String> = group_by_priority(todos.clone())
+        .into_iter()
+        .flat_map(|(_, group)| group.into_iter().map(|todo| todo.id))
+        .collect();
+    assert_eq!(sorted, grouped);
+    assert_eq!(
+        sorted,
+        ["crit-doing", "crit-new", "crit-old", "high", "low"]
+    );
+}

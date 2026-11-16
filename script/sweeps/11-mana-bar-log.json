@@ -1,0 +1,14 @@
+[
+ {"key": "shellomancy.manaBar.tabTodos", "standard": "Todos", "shellomancer": "Owed"},
+ {"key": "shellomancy.manaBar.tabQuests", "standard": "Quests", "shellomancer": "Quests"},
+ {"key": "shellomancy.manaBar.tabScrolls", "standard": "Lessons", "shellomancer": "Scrolls"},
+ {"key": "shellomancy.manaBar.tabLog", "standard": "Log", "shellomancer": "Chronicle"},
+ {"key": "shellomancy.manaBar.logHeading", "standard": "Activity in {{project}}", "shellomancer": "The chronicle of {{project}}"},
+ {"key": "shellomancy.manaBar.logHeadingAll", "standard": "Activity in all projects", "shellomancer": "The chronicle, every project"},
+ {"key": "shellomancy.manaBar.logAll", "standard": "All", "shellomancer": "Everything"},
+ {"key": "shellomancy.manaBar.logCreated", "standard": "Created", "shellomancer": "Begun"},
+ {"key": "shellomancy.manaBar.logUpdated", "standard": "Updated", "shellomancer": "Altered"},
+ {"key": "shellomancy.manaBar.logCompleted", "standard": "Completed", "shellomancer": "Finished"},
+ {"key": "shellomancy.manaBar.logEmpty", "standard": "No activity yet.", "shellomancer": "Nothing has happened yet. Suspicious."},
+ {"key": "shellomancy.manaBar.logChanged", "standard": "Changed: {{fields}}", "shellomancer": "Altered: {{fields}}"}
+]
