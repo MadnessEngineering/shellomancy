@@ -1398,8 +1398,9 @@ impl AppearanceSettingsPageView {
             vec![Box::new(MadnessVoiceWidget)];
         // Shellomancy: follow the colour scheme / voice picked on
         // madnessinteractive.cc.
+        // The palette's "Match Inventorium" lives inside ThemeSelectWidget, in
+        // the "Sync with OS" switch's place.
         if shellomancy {
-            theme_widgets.push(Box::new(FollowInventoriumPaletteWidget::default()));
             voice_widgets.push(Box::new(FollowInventoriumVoiceWidget::default()));
         }
         let mut categories = vec![Category::new("Themes", theme_widgets)];
@@ -2949,6 +2950,8 @@ impl SettingsWidget for CreateCustomThemeWidget {
 #[derive(Default)]
 struct ThemeSelectWidget {
     sync_os_switch_state: SwitchStateHandle,
+    /// Shellomancy: "Match Inventorium" sits where "Sync with OS" was.
+    match_inventorium_switch_state: SwitchStateHandle,
     open_theme_chooser_button_mouse_state: MouseStateHandle,
     open_theme_chooser_button_mouse_state_light: MouseStateHandle,
     open_theme_chooser_button_mouse_state_dark: MouseStateHandle,
@@ -3085,7 +3088,7 @@ impl SettingsWidget for ThemeSelectWidget {
                 .finish(),
         };
 
-        Flex::column()
+        let sync_os_row = Flex::column()
             .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
             .with_child(render_body_item::<AppearancePageAction>(
                 "Sync with OS".into(),
@@ -3125,6 +3128,37 @@ impl SettingsWidget for ThemeSelectWidget {
                     .build()
                     .finish(),
             )
+            .finish();
+
+        // Shellomancy: "Match Inventorium" takes the OS switch's place. The
+        // OS switch only stays while it's on (set before this change), so it
+        // can still be turned off.
+        let respects_os = matches!(
+            respect_system_theme(ThemeSettings::as_ref(app)),
+            RespectSystemTheme::On { .. }
+        );
+        let mut column = Flex::column().with_cross_axis_alignment(CrossAxisAlignment::Stretch);
+        if ChannelState::channel() == Channel::Oss {
+            column.add_child(
+                Container::new(render_follow_toggle(
+                    madness_themes::t("shellomancy.settings.theme.followInventorium"),
+                    madness_themes::t("shellomancy.settings.theme.followNote").to_owned(),
+                    *MadnessSyncSettings::as_ref(app).follow_palette.value(),
+                    self.match_inventorium_switch_state.clone(),
+                    AppearancePageAction::ToggleFollowInventoriumPalette,
+                    appearance,
+                    app,
+                ))
+                .with_margin_bottom(10.)
+                .finish(),
+            );
+            if respects_os {
+                column.add_child(sync_os_row);
+            }
+        } else {
+            column.add_child(sync_os_row);
+        }
+        column
             .with_child(
                 Container::new(theme_picker)
                     .with_margin_bottom(25.)
@@ -3217,37 +3251,6 @@ fn render_follow_toggle(
         switch,
         Some(note),
     )
-}
-
-/// Shellomancy: take the colour scheme picked on madnessinteractive.cc.
-#[derive(Default)]
-struct FollowInventoriumPaletteWidget {
-    switch_state: SwitchStateHandle,
-}
-
-impl SettingsWidget for FollowInventoriumPaletteWidget {
-    type View = AppearanceSettingsPageView;
-
-    fn search_terms(&self) -> &str {
-        "theme follow inventorium madness interactive colour color scheme palette sync"
-    }
-
-    fn render(
-        &self,
-        _view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        render_follow_toggle(
-            madness_themes::t("shellomancy.settings.theme.followInventorium"),
-            madness_themes::t("shellomancy.settings.theme.followNote").to_owned(),
-            *MadnessSyncSettings::as_ref(app).follow_palette.value(),
-            self.switch_state.clone(),
-            AppearancePageAction::ToggleFollowInventoriumPalette,
-            appearance,
-            app,
-        )
-    }
 }
 
 /// Shellomancy: take the voice picked on madnessinteractive.cc.
