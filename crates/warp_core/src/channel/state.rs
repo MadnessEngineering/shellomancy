@@ -98,7 +98,15 @@ impl ChannelState {
     }
 
     pub fn enable_debug_features() -> bool {
-        cfg!(debug_assertions) || matches!(Self::channel(), Channel::Local | Channel::Dev)
+        // Shellomancy: debug builds are what script/install_local installs as
+        // the everyday app, so Warp's dogfood features (memory stats under
+        // every block, debug menus) stay off on the Oss channel unless
+        // SHELLOMANCY_DEBUG is set. Tests keep upstream behaviour.
+        let debug_build = cfg!(debug_assertions)
+            && (Self::channel() != Channel::Oss
+                || cfg!(test)
+                || std::env::var_os("SHELLOMANCY_DEBUG").is_some());
+        debug_build || matches!(Self::channel(), Channel::Local | Channel::Dev)
     }
 
     pub fn override_server_root_url(url: impl Into<Cow<'static, str>>) -> Result<(), ParseError> {

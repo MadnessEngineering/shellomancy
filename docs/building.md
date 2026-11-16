@@ -54,6 +54,8 @@ Measured on the first run (2026-10-31): `./script/run --dont-open` took 332 s, 4
 
 Every bundle build leaves a `Shellomancy.app` under `target/` (`osx/` and `dmg/`, per profile), all with the same bundle id. macOS opens whichever one Launch Services prefers, which is often a stale one. On 2026-11-14 that was a half-finished release build from the night before. `install_local` builds the debug bundle, copies it to `/Applications/Shellomancy.app` (override the folder with `SHELLOMANCY_INSTALL_DIR`), deletes every `Shellomancy.app` under `target/`, and makes Launch Services forget every other registered copy. If the `shellomancy` command is installed, its symlink is pointed at the installed app. It refuses to run while Shellomancy is open, because replacing a running app's bundle breaks it. `--skip-build` installs a build made earlier with `script/bundle`.
 
+It installs a debug build, but Warp's dogfood features (memory stats under every block, debug menus) stay off on Shellomancy unless you launch with `SHELLOMANCY_DEBUG=1`, e.g. `SHELLOMANCY_DEBUG=1 open /Applications/Shellomancy.app`.
+
 ## Faster loops
 
 Type-check without Metal (the empty-shader escape hatch is upstream's):
