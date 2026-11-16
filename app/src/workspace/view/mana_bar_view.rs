@@ -9,12 +9,14 @@
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
+use pathfinder_color::ColorU;
 use warp_core::ui::Icon;
 use warpui::r#async::Timer;
 use warpui::elements::{
-    Border, ChildView, Clipped, ClippedScrollStateHandle, ClippedScrollable, Container,
-    CornerRadius, CrossAxisAlignment, Element, Fill, Flex, Hoverable, MainAxisAlignment,
-    MainAxisSize, MouseStateHandle, Padding, ParentElement, Radius, ScrollbarWidth, Shrinkable,
+    Border, ChildView, Clipped, ClippedScrollStateHandle, ClippedScrollable, ConstrainedBox,
+    Container, CornerRadius, CrossAxisAlignment, Element, Empty, Expanded, Fill, Flex, Hoverable,
+    MainAxisAlignment, MainAxisSize, MouseStateHandle, Padding, ParentElement, Radius,
+    ScrollbarWidth, Shrinkable, Wrap,
 };
 use warpui::fonts::Weight;
 use warpui::platform::Cursor;
@@ -38,6 +40,8 @@ use crate::workspace::{ToastStack, WorkspaceAction};
 const POLL_INTERVAL: Duration = Duration::from_secs(60);
 const SCROLLBAR_WIDTH: ScrollbarWidth = ScrollbarWidth::Auto;
 const SECTION_GAP: f32 = 16.;
+/// Tag chips shown per card; the rest are on the site.
+const MAX_TAGS: usize = 5;
 
 #[derive(Clone, Debug)]
 pub enum ManaBarAction {
@@ -477,7 +481,9 @@ impl ManaBarView {
             }
             _ => madness_themes::t("shellomancy.manaBar.todosHeadingAll").to_owned(),
         };
-        let mut section = Flex::column().with_child(section_heading(heading, appearance));
+        let todos = fetch.and_then(Fetch::data);
+        let mut section =
+            Flex::column().with_child(section_heading(heading, todos.map(Vec::len), appearance));
         if self.project.is_none() {
             section.add_child(muted(
                 madness_themes::t("shellomancy.manaBar.noProject").to_owned(),
@@ -487,7 +493,6 @@ impl ManaBarView {
         if let Some(status) = fetch_status(fetch, appearance) {
             section.add_child(status);
         }
-        let todos = fetch.and_then(Fetch::data);
         match todos {
             Some(todos) if todos.is_empty() => {
                 let empty = match (&self.project, self.all_projects) {
@@ -500,45 +505,39 @@ impl ManaBarView {
                 section.add_child(muted(empty, appearance));
             }
             Some(todos) => {
-                for (priority, group) in api::group_by_priority(todos.clone()) {
-                    section.add_child(
-                        Container::new(muted(
-                            madness_themes::t(priority.voice_key()).to_owned(),
-                            appearance,
-                        ))
-                        .with_margin_top(6.)
-                        .finish(),
-                    );
+                let now = chrono::Utc::now().timestamp();
+                for (_, group) in api::group_by_priority(todos.clone()) {
                     for todo in group {
-                        section.add_child(self.render_todo(&todo, appearance));
+                        section.add_child(self.render_todo(&todo, now, appearance));
                     }
                 }
             }
             None => {}
         }
-        Container::new(section.finish())
-            .with_margin_top(4.)
-            .finish()
+        section.finish()
     }
 
-    fn render_todo(&self, todo: &api::Todo, appearance: &Appearance) -> Box<dyn Element> {
+    fn render_todo(&self, todo: &api::Todo, now: i64, appearance: &Appearance) -> Box<dyn Element> {
         let ui = appearance.ui_builder();
         let theme = appearance.theme();
-        let mut label = todo.description.clone();
-        if self.all_projects || self.project.is_none() {
-            label = format!("{label} · {}", todo.project);
-        }
-        if todo.status == "in_progress" {
-            label = format!("▸ {label}");
-        }
+        let priority_color = priority_color(todo.priority, appearance);
         let id = todo.id.clone();
-        let text = ui.wrappable_text(label, true).build().finish();
-        let open = clickable_row(
-            text,
-            self.row_mouse(&format!("todo:{}", todo.id)),
-            ManaBarAction::OpenTodo(id.clone()),
+
+        // Pills, then the age and the done button on the right.
+        let mut pills = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
+        pills.add_child(pill(
+            status_label(&todo.status),
+            status_color(&todo.status, appearance),
             appearance,
-        );
+        ));
+        pills.add_child(pill(
+            madness_themes::t(todo.priority.voice_key()).to_uppercase(),
+            priority_color,
+            appearance,
+        ));
+        if self.all_projects || self.project.is_none() {
+            pills.add_child(chip(todo.project.clone(), appearance));
+        }
         let done_tooltip = ui
             .tool_tip(madness_themes::t("shellomancy.manaBar.markDone").to_owned())
             .build()
@@ -556,9 +555,9 @@ impl ManaBarView {
             .with_tooltip(move || done_tooltip)
             .with_style(UiComponentStyles {
                 font_color: Some(icon_color),
-                height: Some(20.),
-                width: Some(20.),
-                padding: Some(Coords::uniform(3.)),
+                height: Some(22.),
+                width: Some(22.),
+                padding: Some(Coords::uniform(4.)),
                 ..Default::default()
             })
             .build()
@@ -568,12 +567,48 @@ impl ManaBarView {
             .with_cursor(Cursor::PointingHand)
             .finish()
         };
-        Flex::row()
+        let top = Flex::row()
             .with_main_axis_size(MainAxisSize::Max)
+            .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
-            .with_child(Shrinkable::new(1., open).finish())
-            .with_child(done)
-            .finish()
+            .with_child(Shrinkable::new(1., pills.finish()).finish())
+            .with_child(
+                Flex::row()
+                    .with_cross_axis_alignment(CrossAxisAlignment::Center)
+                    .with_child(muted(api::age_label(todo.created_at, now), appearance))
+                    .with_child(Container::new(done).with_margin_left(4.).finish())
+                    .finish(),
+            )
+            .finish();
+
+        let mut content = Flex::column().with_child(top).with_child(
+            Container::new(
+                ui.wrappable_text(todo.description.clone(), true)
+                    .with_style(UiComponentStyles {
+                        font_size: Some(13.),
+                        font_weight: Some(Weight::Semibold),
+                        ..Default::default()
+                    })
+                    .build()
+                    .finish(),
+            )
+            .with_margin_top(6.)
+            .finish(),
+        );
+        if !todo.tags.is_empty() {
+            content.add_child(
+                Container::new(tag_row(&todo.tags, appearance))
+                    .with_margin_top(6.)
+                    .finish(),
+            );
+        }
+        card(
+            content.finish(),
+            self.row_mouse(&format!("todo:{}", todo.id)),
+            ManaBarAction::OpenTodo(todo.id.clone()),
+            Some(priority_color),
+            appearance,
+        )
     }
 
     fn render_quests(
@@ -582,59 +617,85 @@ impl ManaBarView {
         appearance: &Appearance,
     ) -> Box<dyn Element> {
         let ui = appearance.ui_builder();
+        let quests = fetch.and_then(Fetch::data);
         let mut section = Flex::column().with_child(section_heading(
             madness_themes::t("shellomancy.manaBar.questsHeading").to_owned(),
+            quests.map(Vec::len),
             appearance,
         ));
         if let Some(status) = fetch_status(fetch, appearance) {
             section.add_child(status);
         }
-        match fetch.and_then(Fetch::data) {
+        match quests {
             Some(quests) if quests.is_empty() => section.add_child(muted(
                 madness_themes::t("shellomancy.manaBar.questsEmpty").to_owned(),
                 appearance,
             )),
             Some(quests) => {
+                let accent = appearance.theme().accent().into_solid();
                 for quest in quests {
                     let mut lines = Flex::column()
                         .with_child(
                             ui.wrappable_text(quest.name.clone(), true)
                                 .with_style(UiComponentStyles {
+                                    font_size: Some(13.),
                                     font_weight: Some(Weight::Semibold),
                                     ..Default::default()
                                 })
                                 .build()
                                 .finish(),
                         )
-                        .with_child(muted(
-                            madness_themes::tf(
-                                "shellomancy.manaBar.questProgress",
-                                &[
-                                    ("done", &quest.completed.to_string()),
-                                    ("total", &quest.total.to_string()),
-                                    ("pct", &quest.pct.to_string()),
-                                ],
-                            ),
-                            appearance,
-                        ));
+                        .with_child(
+                            Container::new(progress_bar(quest.pct, accent, appearance))
+                                .with_margin_top(8.)
+                                .finish(),
+                        )
+                        .with_child(
+                            Container::new(muted(
+                                madness_themes::tf(
+                                    "shellomancy.manaBar.questProgress",
+                                    &[
+                                        ("done", &quest.completed.to_string()),
+                                        ("total", &quest.total.to_string()),
+                                        ("pct", &quest.pct.to_string()),
+                                    ],
+                                ),
+                                appearance,
+                            ))
+                            .with_margin_top(4.)
+                            .finish(),
+                        );
                     if let Some(next) = &quest.next {
-                        lines.add_child(muted(
-                            madness_themes::tf(
-                                "shellomancy.manaBar.questNext",
-                                &[("description", &next.description)],
-                            ),
-                            appearance,
-                        ));
+                        lines.add_child(
+                            Container::new(
+                                ui.wrappable_text(
+                                    madness_themes::tf(
+                                        "shellomancy.manaBar.questNext",
+                                        &[("description", &next.description)],
+                                    ),
+                                    true,
+                                )
+                                .with_style(UiComponentStyles {
+                                    font_size: Some(12.),
+                                    ..Default::default()
+                                })
+                                .build()
+                                .finish(),
+                            )
+                            .with_margin_top(6.)
+                            .finish(),
+                        );
                     }
                     let url = quest
                         .next
                         .as_ref()
                         .map(|next| api::todo_page_url(&next.todo_id))
                         .unwrap_or_else(|| DASHBOARD_URL.to_owned());
-                    section.add_child(clickable_row(
+                    section.add_child(card(
                         lines.finish(),
                         self.row_mouse(&format!("quest:{}", quest.id)),
                         ManaBarAction::OpenUrl(url),
+                        Some(accent),
                         appearance,
                     ));
                 }
@@ -656,6 +717,7 @@ impl ManaBarView {
         let mut section = Flex::column()
             .with_child(section_heading(
                 madness_themes::t("shellomancy.manaBar.lessonsHeading").to_owned(),
+                fetch.data().map(Vec::len),
                 appearance,
             ))
             .with_child(
@@ -663,12 +725,13 @@ impl ManaBarView {
                     Container::new(
                         Clipped::new(ChildView::new(&self.lesson_filter).finish()).finish(),
                     )
-                    .with_padding(Padding::uniform(5.).with_left(10.).with_right(10.))
+                    .with_padding(Padding::uniform(6.).with_left(10.).with_right(10.))
+                    .with_background(theme.surface_1())
                     .with_border(Border::all(1.).with_border_fill(theme.surface_3()))
-                    .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
+                    .with_corner_radius(CornerRadius::with_all(Radius::Pixels(6.)))
                     .finish(),
                 )
-                .with_vertical_padding(4.)
+                .with_margin_bottom(8.)
                 .finish(),
             );
         if let Some(status) = fetch_status(Some(fetch), appearance) {
@@ -690,28 +753,60 @@ impl ManaBarView {
                     appearance,
                 ));
             }
+            let now = chrono::Utc::now().timestamp();
+            let lesson_color = theme.terminal_colors().normal.magenta.into();
             for lesson in shown {
                 let expanded = self.expanded_lesson.as_deref() == Some(lesson.id.as_str());
-                let mut lines = Flex::column().with_child(
-                    ui.wrappable_text(lesson.topic.clone(), true)
-                        .build()
-                        .finish(),
+                let top = Flex::row()
+                    .with_main_axis_size(MainAxisSize::Max)
+                    .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
+                    .with_cross_axis_alignment(CrossAxisAlignment::Center)
+                    .with_child(pill(
+                        lesson.language.to_uppercase(),
+                        lesson_color,
+                        appearance,
+                    ))
+                    .with_child(muted(api::age_label(lesson.created_at, now), appearance))
+                    .finish();
+                let mut lines = Flex::column().with_child(top).with_child(
+                    Container::new(
+                        ui.wrappable_text(lesson.topic.clone(), true)
+                            .with_style(UiComponentStyles {
+                                font_size: Some(13.),
+                                font_weight: Some(Weight::Semibold),
+                                ..Default::default()
+                            })
+                            .build()
+                            .finish(),
+                    )
+                    .with_margin_top(6.)
+                    .finish(),
                 );
-                if expanded {
+                if !lesson.tags.is_empty() {
                     lines.add_child(
-                        Container::new(muted(lesson.body.clone(), appearance))
-                            .with_margin_top(4.)
+                        Container::new(tag_row(&lesson.tags, appearance))
+                            .with_margin_top(6.)
                             .finish(),
                     );
                 }
-                section.add_child(clickable_row(
-                    lines.finish(),
-                    self.row_mouse(&format!("lesson:{}", lesson.id)),
-                    ManaBarAction::ToggleLesson(lesson.id.clone()),
-                    appearance,
-                ));
                 if expanded {
-                    section.add_child(
+                    lines.add_child(
+                        Container::new(
+                            ui.wrappable_text(lesson.body.clone(), true)
+                                .with_style(UiComponentStyles {
+                                    font_size: Some(12.),
+                                    ..Default::default()
+                                })
+                                .build()
+                                .finish(),
+                        )
+                        .with_margin_top(8.)
+                        .with_uniform_padding(8.)
+                        .with_background(theme.surface_2())
+                        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
+                        .finish(),
+                    );
+                    lines.add_child(
                         Container::new(
                             ui.link(
                                 madness_themes::t("shellomancy.manaBar.openOnSite").to_owned(),
@@ -726,11 +821,17 @@ impl ManaBarView {
                             .build()
                             .finish(),
                         )
-                        .with_padding_left(8.)
-                        .with_padding_bottom(4.)
+                        .with_margin_top(6.)
                         .finish(),
                     );
                 }
+                section.add_child(card(
+                    lines.finish(),
+                    self.row_mouse(&format!("lesson:{}", lesson.id)),
+                    ManaBarAction::ToggleLesson(lesson.id.clone()),
+                    Some(lesson_color),
+                    appearance,
+                ));
             }
         }
         Container::new(section.finish())
@@ -739,21 +840,59 @@ impl ManaBarView {
     }
 }
 
-fn section_heading(text: String, appearance: &Appearance) -> Box<dyn Element> {
-    Container::new(
-        appearance
-            .ui_builder()
-            .wrappable_text(text, true)
-            .with_style(UiComponentStyles {
-                font_size: Some(13.),
-                font_weight: Some(Weight::Semibold),
-                ..Default::default()
-            })
-            .build()
+/// A section's heading in the accent colour, with a count badge once loaded.
+fn section_heading(
+    text: String,
+    count: Option<usize>,
+    appearance: &Appearance,
+) -> Box<dyn Element> {
+    let theme = appearance.theme();
+    let accent = theme.accent().into_solid();
+    let mut row = Flex::row()
+        .with_cross_axis_alignment(CrossAxisAlignment::Center)
+        .with_child(
+            Shrinkable::new(
+                1.,
+                appearance
+                    .ui_builder()
+                    .wrappable_text(text.to_uppercase(), true)
+                    .with_style(UiComponentStyles {
+                        font_size: Some(12.),
+                        font_weight: Some(Weight::Bold),
+                        font_color: Some(accent),
+                        ..Default::default()
+                    })
+                    .build()
+                    .finish(),
+            )
             .finish(),
-    )
-    .with_margin_bottom(4.)
-    .finish()
+        );
+    if let Some(count) = count {
+        row.add_child(
+            Container::new(
+                appearance
+                    .ui_builder()
+                    .span(count.to_string())
+                    .with_style(UiComponentStyles {
+                        font_size: Some(11.),
+                        font_color: Some(theme.main_text_color(theme.background()).into_solid()),
+                        ..Default::default()
+                    })
+                    .build()
+                    .finish(),
+            )
+            .with_horizontal_padding(7.)
+            .with_vertical_padding(1.)
+            .with_margin_left(8.)
+            .with_background(theme.surface_3())
+            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(9.)))
+            .finish(),
+        );
+    }
+    Container::new(row.finish())
+        .with_margin_top(8.)
+        .with_margin_bottom(8.)
+        .finish()
 }
 
 fn muted(text: String, appearance: &Appearance) -> Box<dyn Element> {
@@ -768,6 +907,129 @@ fn muted(text: String, appearance: &Appearance) -> Box<dyn Element> {
         })
         .build()
         .finish()
+}
+
+/// A small rounded label tinted with `color`, like Inventorium's status pills.
+fn pill(text: String, color: ColorU, appearance: &Appearance) -> Box<dyn Element> {
+    Container::new(
+        appearance
+            .ui_builder()
+            .span(text)
+            .with_style(UiComponentStyles {
+                font_size: Some(10.),
+                font_weight: Some(Weight::Bold),
+                font_color: Some(color),
+                ..Default::default()
+            })
+            .build()
+            .finish(),
+    )
+    .with_horizontal_padding(7.)
+    .with_vertical_padding(2.)
+    .with_margin_right(6.)
+    .with_background(Fill::Solid(ColorU::new(color.r, color.g, color.b, 40)))
+    .with_border(Border::all(1.).with_border_color(color))
+    .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
+    .finish()
+}
+
+/// A neutral chip for projects and tags.
+fn chip(text: String, appearance: &Appearance) -> Box<dyn Element> {
+    let theme = appearance.theme();
+    Container::new(
+        appearance
+            .ui_builder()
+            .span(text)
+            .with_style(UiComponentStyles {
+                font_size: Some(11.),
+                font_color: Some(theme.main_text_color(theme.background()).into_solid()),
+                ..Default::default()
+            })
+            .build()
+            .finish(),
+    )
+    .with_horizontal_padding(8.)
+    .with_vertical_padding(2.)
+    .with_margin_right(6.)
+    .with_background(theme.surface_2())
+    .with_border(Border::all(1.).with_border_fill(theme.surface_3()))
+    .with_corner_radius(CornerRadius::with_all(Radius::Pixels(10.)))
+    .finish()
+}
+
+/// Tag chips in a row that wraps.
+fn tag_row(tags: &[String], appearance: &Appearance) -> Box<dyn Element> {
+    let mut row = Wrap::row().with_run_spacing(4.);
+    for tag in tags.iter().take(MAX_TAGS) {
+        row.add_child(chip(tag.clone(), appearance));
+    }
+    row.finish()
+}
+
+/// A thin bar filled to `pct` percent.
+fn progress_bar(pct: u64, color: ColorU, appearance: &Appearance) -> Box<dyn Element> {
+    let pct = pct.min(100) as f32;
+    let track = appearance.theme().surface_3();
+    let mut bar = Flex::row().with_main_axis_size(MainAxisSize::Max);
+    if pct > 0. {
+        bar.add_child(
+            Expanded::new(
+                pct,
+                ConstrainedBox::new(
+                    Container::new(Empty::new().finish())
+                        .with_background(Fill::Solid(color))
+                        .finish(),
+                )
+                .with_height(5.)
+                .finish(),
+            )
+            .finish(),
+        );
+    }
+    if pct < 100. {
+        bar.add_child(
+            Expanded::new(
+                100. - pct,
+                ConstrainedBox::new(
+                    Container::new(Empty::new().finish())
+                        .with_background(track)
+                        .finish(),
+                )
+                .with_height(5.)
+                .finish(),
+            )
+            .finish(),
+        );
+    }
+    Container::new(bar.finish())
+        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(3.)))
+        .finish()
+}
+
+fn priority_color(priority: api::Priority, appearance: &Appearance) -> ColorU {
+    let colors = &appearance.theme().terminal_colors().normal;
+    match priority {
+        api::Priority::Critical => colors.red.into(),
+        api::Priority::High => colors.yellow.into(),
+        api::Priority::Medium => colors.blue.into(),
+        api::Priority::Low => colors.green.into(),
+    }
+}
+
+fn status_color(status: &str, appearance: &Appearance) -> ColorU {
+    let theme = appearance.theme();
+    let colors = &theme.terminal_colors().normal;
+    match status {
+        "in_progress" => colors.cyan.into(),
+        "blocked" => colors.red.into(),
+        "review" => colors.magenta.into(),
+        _ => theme.sub_text_color(theme.background()).into_solid(),
+    }
+}
+
+/// "IN PROGRESS", "PENDING", ... as the pill shows it.
+fn status_label(status: &str) -> String {
+    status.replace('_', " ").to_uppercase()
 }
 
 /// "Loading…" before the first data arrives, or the error from the last try.
@@ -798,24 +1060,38 @@ fn fetch_status<T>(fetch: Option<&Fetch<T>>, appearance: &Appearance) -> Option<
     })
 }
 
-fn clickable_row(
+/// A bordered card, tinted on hover, with an optional coloured left edge.
+fn card(
     content: Box<dyn Element>,
     mouse: MouseStateHandle,
     action: ManaBarAction,
+    edge: Option<ColorU>,
     appearance: &Appearance,
 ) -> Box<dyn Element> {
-    let hover = appearance.theme().surface_overlay_1();
-    Hoverable::new(mouse, move |state| {
-        let mut row = Container::new(content)
-            .with_vertical_padding(4.)
-            .with_horizontal_padding(4.)
-            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)));
-        if state.is_hovered() {
-            row = row.with_background(hover);
-        }
-        row.finish()
+    let theme = appearance.theme();
+    let background = theme.surface_1();
+    let hover = theme.surface_2();
+    let border = theme.surface_3();
+    let inner = Hoverable::new(mouse, move |state| {
+        Container::new(content)
+            .with_uniform_padding(10.)
+            .with_background(if state.is_hovered() {
+                hover
+            } else {
+                background
+            })
+            .with_border(Border::all(1.).with_border_fill(border))
+            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(8.)))
+            .finish()
     })
     .with_cursor(Cursor::PointingHand)
     .on_click(move |ctx, _, _| ctx.dispatch_typed_action(action.clone()))
-    .finish()
+    .finish();
+    let mut card = Container::new(inner).with_margin_bottom(8.);
+    if let Some(edge) = edge {
+        card = card
+            .with_border(Border::left(3.).with_border_color(edge))
+            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(8.)));
+    }
+    card.finish()
 }

@@ -10,6 +10,7 @@ fn todo(id: &str, priority: Priority, status: &str, created_at: i64) -> Todo {
         priority,
         status: status.to_owned(),
         created_at,
+        tags: vec![],
     }
 }
 
@@ -18,7 +19,8 @@ fn todos_parse_from_the_list_envelope() {
     let reply = json!({"todos": [{
         "id": "t1", "description": "Ship the Mana Bar", "project": "shellomancy",
         "priority": "High", "status": "in_progress", "created_at": 1763000000,
-        "metadata": {"quest_id": "q"}, "_scope": "personal"
+        "tags": ["mana-bar", "ui"], "metadata": {"quest_id": "q", "tags": ["ui", "panel"]},
+        "_scope": "personal"
     }], "total_pending": 0});
 
     assert_eq!(
@@ -30,6 +32,8 @@ fn todos_parse_from_the_list_envelope() {
             priority: Priority::High,
             status: "in_progress".to_owned(),
             created_at: 1763000000,
+            // Root tags first, then metadata tags, without repeats.
+            tags: vec!["mana-bar".to_owned(), "ui".to_owned(), "panel".to_owned()],
         }]
     );
 }
@@ -157,6 +161,8 @@ fn lessons_parse_without_their_embeddings() {
             topic: "Redact first".to_owned(),
             body: "Build titles after redacting.".to_owned(),
             tags: vec!["shellomancy".to_owned(), "spell".to_owned()],
+            language: "rust".to_owned(),
+            created_at: 0,
         }]
     );
 }
@@ -169,24 +175,32 @@ fn lesson_filter_matches_topic_body_and_tags_ignoring_case() {
             topic: "Keychain writes".to_owned(),
             body: String::new(),
             tags: vec![],
+            language: "general".to_owned(),
+            created_at: 0,
         },
         Lesson {
             id: "b".to_owned(),
             topic: "Other".to_owned(),
             body: "the KEYCHAIN again".to_owned(),
             tags: vec![],
+            language: "general".to_owned(),
+            created_at: 0,
         },
         Lesson {
             id: "c".to_owned(),
             topic: "Third".to_owned(),
             body: String::new(),
             tags: vec!["keychain".to_owned()],
+            language: "general".to_owned(),
+            created_at: 0,
         },
         Lesson {
             id: "d".to_owned(),
             topic: "Unrelated".to_owned(),
             body: String::new(),
             tags: vec![],
+            language: "general".to_owned(),
+            created_at: 0,
         },
     ];
 
@@ -200,17 +214,27 @@ fn lesson_filter_matches_topic_body_and_tags_ignoring_case() {
 }
 
 #[test]
-fn project_is_the_repo_folder_else_the_working_folder() {
+fn project_is_the_repo_folder_and_nothing_outside_a_repo() {
     assert_eq!(
-        project_name(Some("Shellomancy"), Some("app")),
+        project_name(Some("Shellomancy")),
         Some("shellomancy".to_owned())
     );
-    assert_eq!(
-        project_name(None, Some("Scratch")),
-        Some("scratch".to_owned())
-    );
-    assert_eq!(project_name(None, None), None);
-    assert_eq!(project_name(Some(" "), None), None);
+    // The home folder (or any non-repo folder) isn't a project.
+    assert_eq!(project_name(None), None);
+    assert_eq!(project_name(Some(" ")), None);
+}
+
+#[test]
+fn ages_are_short() {
+    let now = 1_800_000_000;
+    assert_eq!(age_label(0, now), "");
+    assert_eq!(age_label(now - 10, now), "now");
+    assert_eq!(age_label(now - 5 * 60, now), "5m");
+    assert_eq!(age_label(now - 3 * 3600, now), "3h");
+    assert_eq!(age_label(now - 27 * 86_400, now), "27d");
+    assert_eq!(age_label(now - 240 * 86_400, now), "8mo");
+    assert_eq!(age_label(now - 800 * 86_400, now), "2y");
+    assert_eq!(age_label(now + 100, now), "now");
 }
 
 #[test]

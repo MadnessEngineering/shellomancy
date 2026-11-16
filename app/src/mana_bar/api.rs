@@ -64,6 +64,7 @@ pub struct Todo {
     pub status: String,
     /// Unix seconds.
     pub created_at: i64,
+    pub tags: Vec<String>,
 }
 
 /// A quest and how far along it is.
@@ -91,6 +92,10 @@ pub struct Lesson {
     pub topic: String,
     pub body: String,
     pub tags: Vec<String>,
+    /// bash, rust, python, ... or "general".
+    pub language: String,
+    /// Unix seconds.
+    pub created_at: i64,
 }
 
 /// Whether a todo still needs doing. Inventorium's `exclude_completed` only
@@ -118,6 +123,15 @@ pub fn parse_todos(reply: &Value) -> Vec<Todo> {
                 priority: Priority::parse(todo["priority"].as_str().unwrap_or_default()),
                 status,
                 created_at: timestamp(&todo["created_at"]),
+                tags: tags_of(&todo["tags"])
+                    .into_iter()
+                    .chain(tags_of(&todo["metadata"]["tags"]))
+                    .fold(Vec::new(), |mut tags, tag| {
+                        if !tags.contains(&tag) {
+                            tags.push(tag);
+                        }
+                        tags
+                    }),
             })
         })
         .collect()
@@ -196,12 +210,9 @@ pub fn parse_lessons(reply: &Value) -> Vec<Lesson> {
                 id: text(&lesson["id"])?,
                 topic: text(&lesson["topic"]).unwrap_or_default(),
                 body: text(&lesson["lesson_learned"]).unwrap_or_default(),
-                tags: lesson["tags"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|tag| tag.as_str().map(str::to_owned))
-                    .collect(),
+                tags: tags_of(&lesson["tags"]),
+                language: text(&lesson["language"]).unwrap_or_else(|| "general".to_owned()),
+                created_at: timestamp(&lesson["created_at"]),
             })
         })
         .collect()
@@ -225,11 +236,11 @@ pub fn filter_lessons<'a>(lessons: &'a [Lesson], query: &str) -> Vec<&'a Lesson>
         .collect()
 }
 
-/// The Omnispindle project for a terminal: the focused repo's folder name,
-/// else the working directory's, lowercased. `None` means "no project here".
-pub fn project_name(repo_folder: Option<&str>, cwd_folder: Option<&str>) -> Option<String> {
+/// The Omnispindle project for a terminal: the focused git repo's folder
+/// name, lowercased. Outside a repo (say, the home folder) there's no project,
+/// so the panel shows every project.
+pub fn project_name(repo_folder: Option<&str>) -> Option<String> {
     repo_folder
-        .or(cwd_folder)
         .map(|name| name.trim().to_lowercase())
         .filter(|name| !name.is_empty())
 }
@@ -273,8 +284,8 @@ pub fn lessons_url() -> Url {
 
 /// `POST /api/todos/:id/complete`.
 pub fn complete_url(id: &str) -> Url {
-    let mut url = Url::parse(&format!("{MADNESS_API_ROOT}/todos"))
-        .expect("the API root is a valid URL");
+    let mut url =
+        Url::parse(&format!("{MADNESS_API_ROOT}/todos")).expect("the API root is a valid URL");
     url.path_segments_mut()
         .expect("the API root is a base URL")
         .push(id)
@@ -346,6 +357,33 @@ async fn get_json(key: &str, url: Url) -> Result<Value, String> {
         Ok(reply)
     } else {
         Err(error_reason(status, &reply))
+    }
+}
+
+/// A JSON array of tag strings, trimmed, blanks dropped.
+fn tags_of(value: &Value) -> Vec<String> {
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(text)
+        .collect()
+}
+
+/// How long ago `created_at` was, short: "now", "5m", "3h", "27d", "8mo", "2y".
+pub fn age_label(created_at: i64, now: i64) -> String {
+    if created_at <= 0 {
+        return String::new();
+    }
+    let seconds = (now - created_at).max(0);
+    let (minutes, hours, days) = (seconds / 60, seconds / 3600, seconds / 86_400);
+    match () {
+        _ if minutes < 1 => "now".to_owned(),
+        _ if hours < 1 => format!("{minutes}m"),
+        _ if days < 1 => format!("{hours}h"),
+        _ if days < 60 => format!("{days}d"),
+        _ if days < 730 => format!("{}mo", days / 30),
+        _ => format!("{}y", days / 365),
     }
 }
 

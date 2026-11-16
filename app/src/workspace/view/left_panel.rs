@@ -1289,13 +1289,8 @@ impl LeftPanelView {
             .working_directories_model
             .as_ref(ctx)
             .focused_repo(pane_group.id());
-        let cwd = pane_group.as_ref(ctx).active_session_path(ctx);
-        let project = crate::mana_bar::api::project_name(
-            repo.as_ref().and_then(|repo| repo.file_name()),
-            cwd.as_ref()
-                .and_then(|cwd| cwd.file_name())
-                .and_then(|name| name.to_str()),
-        );
+        let project =
+            crate::mana_bar::api::project_name(repo.as_ref().and_then(|repo| repo.file_name()));
         self.mana_bar_view
             .update(ctx, |view, ctx| view.set_project(project, ctx));
     }
