@@ -55,9 +55,14 @@ PLUGIN_VERSION=$(jq -r '.version' "$PLUGIN_DIR/.claude-plugin/plugin.json")
 MARKETPLACE_VERSION=$(jq -r '.plugins[] | select(.name == "shellomancy") | .version' \
     "$REPO_DIR/.claude-plugin/marketplace.json")
 NOTIFICATION_MATCHER=$(jq -r '.hooks.Notification[0].matcher' "$PLUGIN_DIR/hooks/hooks.json")
+PRE_TOOL_HOOK=$(jq -r '.hooks.PreToolUse[0].hooks[0].command' "$PLUGIN_DIR/hooks/hooks.json")
 
-assert_eq "plugin version bumped" "3.0.0" "$PLUGIN_VERSION"
+assert_eq "plugin version bumped" "3.1.0" "$PLUGIN_VERSION"
 assert_eq "marketplace version matches plugin" "$PLUGIN_VERSION" "$MARKETPLACE_VERSION"
+assert_eq "PreToolUse runs on-pre-tool-use.sh" \
+    '"${CLAUDE_PLUGIN_ROOT}/scripts/on-pre-tool-use.sh"' "$PRE_TOOL_HOOK"
+assert_eq "on-pre-tool-use.sh is executable" "yes" \
+    "$([ -x "$SCRIPT_DIR/on-pre-tool-use.sh" ] && echo yes || echo no)"
 assert_eq "notification matcher includes input-required events" \
     "idle_prompt|agent_needs_input" \
     "$NOTIFICATION_MATCHER"
@@ -174,6 +179,37 @@ PLUGIN_CURRENT_PROTOCOL_VERSION=1
 
 # Clean up
 unset WARP_CLI_AGENT_PROTOCOL_VERSION
+
+echo ""
+echo "=== tool_input_subset ==="
+
+SUBSET=$(tool_input_subset '{"tool_name":"mcp__omnispindle__update_todo","tool_input":{"todo_id":"3d94c3fc-f4b9-4b0a-9388-e20d92d55501","updates":{"status":"in_progress","description":"Agent tab titles"}}}')
+assert_json_field "omnispindle todo_id" "$SUBSET" ".todo_id" "3d94c3fc-f4b9-4b0a-9388-e20d92d55501"
+assert_json_field "omnispindle status from updates" "$SUBSET" ".status" "in_progress"
+assert_json_field "omnispindle description from updates" "$SUBSET" ".description" "Agent tab titles"
+
+SUBSET=$(tool_input_subset '{"tool_name":"mcp__omnispindle__add_todo","tool_input":{"description":"A new thing","project":"shellomancy"},"tool_response":[{"type":"text","text":"{\"id\": \"11d3421b-32b7-4c05-837e-7e466efa7ffd\"}"}]}')
+assert_json_field "add_todo result_id from the response" "$SUBSET" ".result_id" "11d3421b-32b7-4c05-837e-7e466efa7ffd"
+assert_json_field "add_todo project" "$SUBSET" ".todo_project" "shellomancy"
+
+LONG=$(printf 'x%.0s' $(seq 1 200))
+SUBSET=$(tool_input_subset "{\"tool_name\":\"mcp__omnispindle__add_todo\",\"tool_input\":{\"description\":\"$LONG\"}}")
+assert_eq "omnispindle description is cut to 120 chars + ellipsis" "121" \
+    "$(echo "$SUBSET" | jq -r '.description | length')"
+
+SUBSET=$(tool_input_subset '{"tool_name":"Bash","tool_input":{"command":"cargo test","description":"Run tests"}}')
+assert_json_field "bash command" "$SUBSET" ".command" "cargo test"
+assert_json_field "no todo fields for other tools" "$SUBSET" ".todo_id" "null"
+
+SUBSET=$(tool_input_subset '{"tool_name":"Edit","tool_input":{"file_path":"/x/view.rs","old_string":"secret"}}')
+assert_json_field "edit file_path" "$SUBSET" ".file_path" "/x/view.rs"
+assert_json_field "old_string is not sent" "$SUBSET" ".old_string" "null"
+
+assert_eq "bad input gives {}" "{}" "$(tool_input_subset 'not json')"
+
+PAYLOAD=$(build_payload '{"session_id":"s"}' "tool_start" --arg tool_name "Bash" --argjson tool_input "$(tool_input_subset '{"tool_name":"Bash","tool_input":{"command":"ls"}}')")
+assert_json_field "tool_start payload carries tool_input" "$PAYLOAD" ".tool_input.command" "ls"
+assert_json_field "tool_start event name" "$PAYLOAD" ".event" "tool_start"
 
 echo ""
 echo "=== should-use-structured.sh ==="

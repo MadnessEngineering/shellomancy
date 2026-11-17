@@ -1456,3 +1456,102 @@ fn second_ctrl_c_while_armed_reuses_the_existing_window() {
         });
     });
 }
+
+#[test]
+fn parse_tool_start_with_an_omnispindle_todo() {
+    let body = r#"{"v":1,"agent":"claude","event":"tool_start","session_id":"abc","cwd":"/tmp/proj","project":"proj","tool_name":"mcp__omnispindle__update_todo","tool_input":{"todo_id":"3d94c3fc-f4b9-4b0a-9388-e20d92d55501","status":"in_progress","description":"Agent tab titles"}}"#;
+    let notif = parse_event(Some("warp://cli-agent"), body).unwrap();
+
+    assert_eq!(notif.event, CLIAgentEventType::ToolStart);
+    let todo = notif
+        .payload
+        .todo
+        .expect("an Omnispindle call carries a todo");
+    assert_eq!(todo.action, "update_todo");
+    assert_eq!(
+        todo.todo_id.as_deref(),
+        Some("3d94c3fc-f4b9-4b0a-9388-e20d92d55501")
+    );
+    assert_eq!(todo.status.as_deref(), Some("in_progress"));
+    assert_eq!(todo.description.as_deref(), Some("Agent tab titles"));
+}
+
+#[test]
+fn old_plugin_payloads_carry_no_todo() {
+    // A 3.0 plugin sends tool_complete without tool_input.
+    let body = r#"{"v":1,"agent":"claude","event":"tool_complete","tool_name":"mcp__omnispindle__update_todo"}"#;
+    let notif = parse_event(Some("warp://cli-agent"), body).unwrap();
+    let todo = notif.payload.todo.expect("still an Omnispindle tool");
+    assert_eq!(todo.todo_id, None);
+
+    // Other tools never carry a todo, even with tool_input.
+    let body = r#"{"v":1,"agent":"claude","event":"tool_complete","tool_name":"Bash","tool_input":{"command":"ls","todo_id":"x"}}"#;
+    let notif = parse_event(Some("warp://cli-agent"), body).unwrap();
+    assert_eq!(notif.payload.todo, None);
+    assert_eq!(notif.payload.tool_input_preview.as_deref(), Some("ls"));
+}
+
+#[test]
+fn tool_events_drive_the_tab_activity_and_todo() {
+    let mut session = cli_agent_session(CLIAgentSessionStatus::InProgress, true);
+
+    let mut start = rich_event(CLIAgentEventType::ToolStart);
+    start.payload.tool_name = Some("Bash".to_owned());
+    start.payload.tool_input_preview = Some("cargo test".to_owned());
+    assert_eq!(
+        session.apply_event(&start),
+        None,
+        "tool_start never changes status"
+    );
+    assert_eq!(
+        session.session_context.current_tool,
+        Some(super::tab_text::ToolActivity {
+            name: "Bash".to_owned(),
+            target: Some("cargo test".to_owned()),
+            running: true,
+        })
+    );
+
+    let mut complete = rich_event(CLIAgentEventType::ToolComplete);
+    complete.payload.tool_name = Some("mcp__omnispindle__update_todo".to_owned());
+    complete.payload.todo = Some(super::event::TodoTouch {
+        action: "update_todo".to_owned(),
+        todo_id: Some("t1".to_owned()),
+        status: Some("in_progress".to_owned()),
+        description: Some("Agent tab titles".to_owned()),
+        result_id: None,
+    });
+    session.apply_event(&complete);
+    assert_eq!(
+        session.session_context.active_todo,
+        Some(super::tab_text::ActiveTodo {
+            id: "t1".to_owned(),
+            description: Some("Agent tab titles".to_owned()),
+            done: false,
+        })
+    );
+    assert!(
+        !session
+            .session_context
+            .current_tool
+            .as_ref()
+            .unwrap()
+            .running
+    );
+
+    // Completing it keeps it shown (as done) until the next prompt.
+    let mut done = rich_event(CLIAgentEventType::ToolComplete);
+    done.payload.todo = Some(super::event::TodoTouch {
+        action: "complete_todo".to_owned(),
+        todo_id: Some("t1".to_owned()),
+        ..Default::default()
+    });
+    session.apply_event(&done);
+    assert!(session.session_context.active_todo.as_ref().unwrap().done);
+
+    let mut prompt = rich_event(CLIAgentEventType::PromptSubmit);
+    prompt.payload.query = Some("next thing".to_owned());
+    session.apply_event(&prompt);
+    assert_eq!(session.session_context.active_todo, None);
+    assert_eq!(session.session_context.current_tool, None);
+}

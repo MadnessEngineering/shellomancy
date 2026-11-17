@@ -14,6 +14,9 @@ type EventParser = fn(&str) -> Option<CLIAgentEvent>;
 pub enum CLIAgentEventType {
     SessionStart,
     PromptSubmit,
+    /// Shellomancy: a tool is about to run (plugin 3.1+ `PreToolUse`). Only
+    /// feeds the tab's live activity line; never changes status.
+    ToolStart,
     ToolComplete,
     Stop,
     StopFailure,
@@ -44,6 +47,9 @@ pub struct CLIAgentEventPayload {
     pub summary: Option<String>,
     pub tool_name: Option<String>,
     pub tool_input_preview: Option<String>,
+    /// Shellomancy: the Omnispindle todo an `mcp__*omnispindle*__*` tool call
+    /// touched (plugin 3.1+). `None` for other tools and older plugins.
+    pub todo: Option<TodoTouch>,
     pub plugin_version: Option<String>,
     /// On Claude Code, this comes from the `StopFailure` hook (e.g. `"rate_limit"`).
     /// Not implemented for Codex.
@@ -52,6 +58,48 @@ pub struct CLIAgentEventPayload {
     /// wakes the agent again when any of them completes or fires, so a stop with pending work is
     /// a pause, not the end of the session. `None` when the plugin predates this field.
     pub pending_background_work_count: Option<u32>,
+}
+
+/// What an Omnispindle MCP call did to a todo, as the plugin reported it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TodoTouch {
+    /// The tool's action: `add_todo`, `update_todo`, `complete_todo`, ...
+    pub action: String,
+    pub todo_id: Option<String>,
+    pub description: Option<String>,
+    pub status: Option<String>,
+    /// The first todo id in the tool's response, e.g. `add_todo`'s new id.
+    pub result_id: Option<String>,
+}
+
+impl TodoTouch {
+    /// Reads the plugin's `tool_input` subset for an Omnispindle tool call;
+    /// `None` for any other tool.
+    pub fn from_tool_call(
+        tool_name: Option<&str>,
+        tool_input: Option<&serde_json::Value>,
+    ) -> Option<Self> {
+        let tool_name = tool_name?;
+        if !tool_name.starts_with("mcp__") || !tool_name.contains("omnispindle") {
+            return None;
+        }
+        let action = tool_name.rsplit("__").next().unwrap_or_default().to_owned();
+        let field = |key: &str| {
+            tool_input
+                .and_then(|input| input.get(key))
+                .and_then(|value| value.as_str())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned)
+        };
+        Some(Self {
+            action,
+            todo_id: field("todo_id"),
+            description: field("description"),
+            status: field("status"),
+            result_id: field("result_id"),
+        })
+    }
 }
 
 impl CLIAgentEventPayload {

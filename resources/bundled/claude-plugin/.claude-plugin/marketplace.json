@@ -10,7 +10,7 @@
       "name": "shellomancy",
       "description": "Shellomancy notices when Claude finishes a task, needs input, or asks permission",
       "source": "./plugins/shellomancy",
-      "version": "3.0.0",
+      "version": "3.1.0",
       "category": "productivity",
       "tags": ["notifications", "terminal", "shellomancy"]
     }

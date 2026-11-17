@@ -1,6 +1,8 @@
 use warp_core::cli_agent_protocol::CLIAgentNotification;
 
-use super::{CLIAgentEvent, CLIAgentEventPayload, CLIAgentEventSource, CLIAgentEventType};
+use super::{
+    CLIAgentEvent, CLIAgentEventPayload, CLIAgentEventSource, CLIAgentEventType, TodoTouch,
+};
 use crate::terminal::CLIAgent;
 
 /// Resolves a CLI agent from the `"agent"` string in a CLI agent event.
@@ -15,6 +17,7 @@ pub(super) fn parse(body: &str) -> Option<CLIAgentEvent> {
     let event = match raw.event.as_str() {
         "session_start" | "task_started" => CLIAgentEventType::SessionStart,
         "prompt_submit" => CLIAgentEventType::PromptSubmit,
+        "tool_start" => CLIAgentEventType::ToolStart,
         "tool_complete" => CLIAgentEventType::ToolComplete,
         "stop" | "task_complete" => CLIAgentEventType::Stop,
         "stop_failure" => CLIAgentEventType::StopFailure,
@@ -32,6 +35,7 @@ pub(super) fn parse(body: &str) -> Option<CLIAgentEvent> {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
     });
+    let todo = TodoTouch::from_tool_call(raw.tool_name.as_deref(), raw.tool_input.as_ref());
 
     let agent = raw
         .agent
@@ -58,6 +62,7 @@ pub(super) fn parse(body: &str) -> Option<CLIAgentEvent> {
             summary: raw.summary,
             tool_name: raw.tool_name,
             tool_input_preview,
+            todo,
             plugin_version: raw.plugin_version,
             error_type: raw.error_type,
             pending_background_work_count,

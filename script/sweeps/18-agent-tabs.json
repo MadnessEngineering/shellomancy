@@ -1,0 +1,18 @@
+[
+ {"key": "shellomancy.agentTab.todoShort", "standard": "todo {{id}}", "shellomancer": "todo {{id}}"},
+ {"key": "shellomancy.agentTab.running", "standard": "running {{command}}", "shellomancer": "casting {{command}}"},
+ {"key": "shellomancy.agentTab.editing", "standard": "editing {{file}}", "shellomancer": "inscribing {{file}}"},
+ {"key": "shellomancy.agentTab.reading", "standard": "reading {{file}}", "shellomancer": "reading {{file}}"},
+ {"key": "shellomancy.agentTab.searching", "standard": "searching", "shellomancer": "scrying"},
+ {"key": "shellomancy.agentTab.browsing", "standard": "browsing the web", "shellomancer": "consulting the outer world"},
+ {"key": "shellomancy.agentTab.delegating", "standard": "delegating to a subagent", "shellomancer": "sending a familiar"},
+ {"key": "shellomancy.agentTab.omnispindle", "standard": "updating Omnispindle", "shellomancer": "spinning Omnispindle"},
+ {"key": "shellomancy.agentTab.calling", "standard": "calling {{tool}}", "shellomancer": "calling on {{tool}}"},
+ {"key": "shellomancy.agentTab.using", "standard": "using {{tool}}", "shellomancer": "using {{tool}}"},
+ {"key": "shellomancy.agentTab.thinking", "standard": "thinking", "shellomancer": "thinking"},
+ {"key": "shellomancy.agentTab.permission", "standard": "needs your permission", "shellomancer": "awaits your permission"},
+ {"key": "shellomancy.agentTab.waiting", "standard": "waiting for you", "shellomancer": "waiting on you"},
+ {"key": "shellomancy.agentTab.done", "standard": "done", "shellomancer": "done"},
+ {"key": "shellomancy.agentTab.failed", "standard": "failed", "shellomancer": "fizzled"},
+ {"key": "shellomancy.agentTab.cancelled", "standard": "cancelled", "shellomancer": "cancelled"}
+]

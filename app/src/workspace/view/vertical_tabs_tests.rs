@@ -39,6 +39,7 @@ fn label(text: &str) -> VerticalTabsSummaryPrimaryLabel {
     VerticalTabsSummaryPrimaryLabel {
         text: text.to_string(),
         status: None,
+        activity: None,
     }
 }
 
@@ -1057,6 +1058,7 @@ fn primary_labels_dedupe_preserves_first_seen_status() {
         vec![VerticalTabsSummaryPrimaryLabel {
             text: "cargo test".to_string(),
             status: None,
+            activity: None,
         }]
     );
 }
@@ -1085,14 +1087,17 @@ fn primary_labels_preserve_status_through_aggregation() {
             VerticalTabsSummaryPrimaryLabel {
                 text: "Plan a refactor".to_string(),
                 status: Some(ConversationStatus::InProgress),
+                activity: None,
             },
             VerticalTabsSummaryPrimaryLabel {
                 text: "Investigate failure".to_string(),
                 status: Some(ConversationStatus::Success),
+                activity: None,
             },
             VerticalTabsSummaryPrimaryLabel {
                 text: "cargo build".to_string(),
                 status: None,
+                activity: None,
             },
         ]
     );
@@ -1104,22 +1109,27 @@ fn sort_summary_primary_labels_moves_status_first_and_preserves_order() {
         VerticalTabsSummaryPrimaryLabel {
             text: "plain terminal".to_string(),
             status: None,
+            activity: None,
         },
         VerticalTabsSummaryPrimaryLabel {
             text: "first conversation".to_string(),
             status: Some(ConversationStatus::InProgress),
+            activity: None,
         },
         VerticalTabsSummaryPrimaryLabel {
             text: "code pane".to_string(),
             status: None,
+            activity: None,
         },
         VerticalTabsSummaryPrimaryLabel {
             text: "second conversation".to_string(),
             status: Some(ConversationStatus::Success),
+            activity: None,
         },
         VerticalTabsSummaryPrimaryLabel {
             text: "last terminal".to_string(),
             status: None,
+            activity: None,
         },
     ];
 
@@ -1131,22 +1141,27 @@ fn sort_summary_primary_labels_moves_status_first_and_preserves_order() {
             VerticalTabsSummaryPrimaryLabel {
                 text: "first conversation".to_string(),
                 status: Some(ConversationStatus::InProgress),
+                activity: None,
             },
             VerticalTabsSummaryPrimaryLabel {
                 text: "second conversation".to_string(),
                 status: Some(ConversationStatus::Success),
+                activity: None,
             },
             VerticalTabsSummaryPrimaryLabel {
                 text: "plain terminal".to_string(),
                 status: None,
+                activity: None,
             },
             VerticalTabsSummaryPrimaryLabel {
                 text: "code pane".to_string(),
                 status: None,
+                activity: None,
             },
             VerticalTabsSummaryPrimaryLabel {
                 text: "last terminal".to_string(),
                 status: None,
+                activity: None,
             },
         ]
     );
@@ -1191,6 +1206,7 @@ fn summary_search_fragments_include_hidden_overflow_values() {
             VerticalTabsSummaryPrimaryLabel {
                 text: "Claude".to_string(),
                 status: Some(ConversationStatus::InProgress),
+                activity: None,
             },
             label("Warp Agent"),
             label("cargo"),

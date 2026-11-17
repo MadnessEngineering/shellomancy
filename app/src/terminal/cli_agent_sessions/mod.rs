@@ -2,6 +2,7 @@ pub mod event;
 pub mod listener;
 #[cfg(not(target_family = "wasm"))]
 pub(crate) mod plugin_manager;
+pub mod tab_text;
 
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
@@ -76,6 +77,13 @@ pub struct CLIAgentSessionContext {
     pub summary: Option<String>,
     pub query: Option<String>,
     pub response: Option<String>,
+    /// Shellomancy: the Omnispindle todo this session is working on, from
+    /// its `mcp__*omnispindle*__*` tool calls (plugin 3.1+).
+    pub active_todo: Option<tab_text::ActiveTodo>,
+    /// Shellomancy: the tool the session last started or finished (plugin
+    /// 3.1+), for the tab's activity line. Kept apart from `tool_name`, which
+    /// belongs to the permission flow.
+    pub current_tool: Option<tab_text::ToolActivity>,
 }
 
 /// State of the rich input editor for composing a prompt to send to a CLI agent.
@@ -231,8 +239,41 @@ impl CLIAgentSession {
             .clone()
             .or(self.session_context.session_id.take());
 
+        // Shellomancy: the tab's todo and activity line follow every tool call.
+        if let Some(touch) = &event.payload.todo {
+            self.session_context.active_todo =
+                tab_text::apply_todo_touch(self.session_context.active_todo.take(), touch);
+        }
+        match &event.event {
+            CLIAgentEventType::ToolStart | CLIAgentEventType::ToolComplete => {
+                if let Some(name) = event.payload.tool_name.clone().filter(|n| !n.is_empty()) {
+                    self.session_context.current_tool = Some(tab_text::ToolActivity {
+                        name,
+                        target: event.payload.tool_input_preview.clone(),
+                        running: matches!(event.event, CLIAgentEventType::ToolStart),
+                    });
+                }
+            }
+            CLIAgentEventType::PromptSubmit
+            | CLIAgentEventType::Stop
+            | CLIAgentEventType::StopFailure => {
+                self.session_context.current_tool = None;
+            }
+            _ => {}
+        }
+
         let new_status = match &event.event {
+            CLIAgentEventType::ToolStart => return None,
             CLIAgentEventType::PromptSubmit => {
+                // A finished todo stops being "the work" once a new turn starts.
+                if self
+                    .session_context
+                    .active_todo
+                    .as_ref()
+                    .is_some_and(|todo| todo.done)
+                {
+                    self.session_context.active_todo = None;
+                }
                 self.session_context.query = event.payload.query.clone();
                 self.session_context.response = None;
                 self.clear_permission_scoped_state();
@@ -576,6 +617,7 @@ impl CLIAgentSessionsModel {
             event_type,
             CLIAgentEventType::SessionStart
                 | CLIAgentEventType::PromptSubmit
+                | CLIAgentEventType::ToolStart
                 | CLIAgentEventType::ToolComplete
         ) {
             ctx.emit(CLIAgentSessionsModelEvent::SessionUpdated {

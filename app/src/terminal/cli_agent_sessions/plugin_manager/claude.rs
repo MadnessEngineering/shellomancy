@@ -23,7 +23,7 @@ const BUNDLED_MARKETPLACE_SUBDIR: &str = "bundled/claude-plugin";
 // Keep in sync with resources/bundled/claude-plugin/.claude-plugin/marketplace.json.
 // 3.0.0 continues past Warp's 2.x, so a Warp plugin still installed reads as
 // outdated and the update flow replaces it.
-const MINIMUM_PLUGIN_VERSION: &str = "3.0.0";
+const MINIMUM_PLUGIN_VERSION: &str = "3.1.0";
 
 /// Warp's notification plugin, uninstalled when ours goes in so both don't fire.
 const WARP_PLUGIN_KEY: &str = "warp@claude-code-warp";

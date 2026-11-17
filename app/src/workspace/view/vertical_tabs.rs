@@ -10,6 +10,7 @@ use pathfinder_color::ColorU;
 use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::{Vector2F, vec2f};
 use settings::Setting as _;
+use warp_core::channel::{Channel, ChannelState};
 use warp_core::context_flag::ContextFlag;
 use warp_core::telemetry::TelemetryEvent as _;
 use warp_core::ui::Icon as WarpIcon;
@@ -59,7 +60,7 @@ use crate::tab::{
     SelectedTabColor, TAB_INDICATOR_SYNCED_COLOR, TabData, reveals_tab_shortcut_hints,
     tab_activate_binding_name, tab_position_id,
 };
-use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
+use crate::terminal::cli_agent_sessions::{CLIAgentSessionsModel, tab_text};
 use crate::terminal::session_settings::SessionSettings;
 use crate::terminal::view::TerminalViewState;
 use crate::terminal::{CLIAgent, TerminalView};
@@ -944,6 +945,8 @@ struct VerticalTabsSummaryPrimaryLabel {
     /// Some when the contributing pane is a conversation with a known status. Drives the
     /// per-line status pill prefix in Summary mode.
     status: Option<ConversationStatus>,
+    /// Shellomancy: what an agent pane is doing now, shown under the label.
+    activity: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -1038,6 +1041,7 @@ fn push_normalized_unique_summary_label(
     values.push(VerticalTabsSummaryPrimaryLabel {
         text: normalized,
         status,
+        activity: None,
     });
 }
 
@@ -3834,12 +3838,20 @@ fn build_vertical_tabs_summary_data(
                     terminal_view.last_completed_command_text(),
                 );
                 let status = summary_conversation_status_for_terminal(terminal_view, app);
+                let label_count = primary_labels.len();
                 push_normalized_unique_summary_label(
                     &mut primary_labels,
                     &mut primary_seen,
                     primary_label.text(),
                     status,
                 );
+                // Shellomancy: the agent's activity line rides on its label.
+                if primary_labels.len() > label_count
+                    && let Some(label) = primary_labels.last_mut()
+                {
+                    label.activity =
+                        shellomancy_agent_tab(terminal_view, app).and_then(|tab| tab.activity);
+                }
 
                 if let Some(working_directory) = working_directory {
                     push_normalized_unique_summary_text(
@@ -4380,6 +4392,73 @@ fn preferred_agent_tab_titles(
 }
 
 fn terminal_agent_text(terminal_view: &TerminalView, app: &AppContext) -> TerminalAgentText {
+    let mut agent_text = upstream_terminal_agent_text(terminal_view, app);
+    // Shellomancy: an agent tab reads "<session name> · <the work>".
+    if let Some(tab) = shellomancy_agent_tab(terminal_view, app) {
+        agent_text.cli_agent_title = Some(tab.title.clone());
+        agent_text.cli_agent_latest_user_prompt = Some(tab.title);
+    }
+    agent_text
+}
+
+/// Shellomancy: what a CLI agent tab shows instead of Claude Code's
+/// `✳ <uuid> · <name>` terminal title.
+struct ShellomancyAgentTab {
+    /// `<session name> · <active todo or last prompt>`.
+    title: String,
+    /// What the session is doing now; `None` without rich plugin status.
+    activity: Option<String>,
+}
+
+fn shellomancy_agent_tab(
+    terminal_view: &TerminalView,
+    app: &AppContext,
+) -> Option<ShellomancyAgentTab> {
+    if ChannelState::channel() != Channel::Oss {
+        return None;
+    }
+    let session = CLIAgentSessionsModel::as_ref(app).session(terminal_view.id())?;
+    let context = &session.session_context;
+    let folder = || {
+        terminal_view
+            .display_working_directory(app)
+            .and_then(|dir| {
+                dir.trim_end_matches('/')
+                    .rsplit('/')
+                    .next()
+                    .map(str::to_owned)
+            })
+            .filter(|name| !name.is_empty())
+    };
+    let name = tab_text::clean_session_name(&terminal_view.terminal_title_from_shell())
+        .or_else(|| {
+            context
+                .project
+                .clone()
+                .filter(|project| !project.is_empty())
+        })
+        .or_else(folder)
+        .unwrap_or_else(|| session.agent.display_name().to_string());
+    let work = tab_text::work_text(
+        context.active_todo.as_ref(),
+        context.latest_user_prompt().as_deref(),
+    );
+    let activity = session.supports_rich_status().then(|| {
+        tab_text::activity_text(&tab_text::agent_activity(
+            &session.status,
+            context.current_tool.as_ref(),
+        ))
+    });
+    Some(ShellomancyAgentTab {
+        title: tab_text::agent_tab_title(&name, work.as_deref()),
+        activity,
+    })
+}
+
+fn upstream_terminal_agent_text(
+    terminal_view: &TerminalView,
+    app: &AppContext,
+) -> TerminalAgentText {
     let cli_agent_session = CLIAgentSessionsModel::as_ref(app).session(terminal_view.id());
     let is_plugin_backed = cli_agent_session.is_some_and(|session| session.listener.is_some());
     let is_ambient_agent = terminal_view.is_ambient_agent_session(app);
@@ -4660,6 +4739,19 @@ fn render_terminal_row_content(
         .with_cross_axis_alignment(CrossAxisAlignment::Start);
     content.add_child(first_line_element);
     content.add_child(Container::new(second_line).with_margin_top(2.).finish());
+    // Shellomancy: what an agent pane is doing now.
+    if let Some(activity) = shellomancy_agent_tab(terminal_view, app).and_then(|tab| tab.activity) {
+        content.add_child(
+            Container::new(render_text_line(
+                &activity,
+                sub_text_color,
+                ClipConfig::end(),
+                appearance,
+            ))
+            .with_margin_top(2.)
+            .finish(),
+        );
+    }
     content.add_child(
         Container::new(render_terminal_metadata_line(
             terminal_view,
@@ -5067,6 +5159,10 @@ fn render_summary_primary_label_line(
         (None, false) => None,
     };
 
+    let text = match &label.activity {
+        Some(activity) => render_agent_activity_under(text, activity, appearance),
+        None => text,
+    };
     let Some(prefix) = prefix else {
         return text;
     };
@@ -5076,6 +5172,31 @@ fn render_summary_primary_label_line(
         .with_spacing(4.)
         .with_child(prefix)
         .with_child(Shrinkable::new(1., text).finish())
+        .finish()
+}
+
+/// Shellomancy: an agent's activity line ("running cargo test") under its
+/// title, in the muted sub-text colour.
+fn render_agent_activity_under(
+    title: Box<dyn Element>,
+    activity: &str,
+    appearance: &Appearance,
+) -> Box<dyn Element> {
+    let theme = appearance.theme();
+    Flex::column()
+        .with_main_axis_size(MainAxisSize::Min)
+        .with_cross_axis_alignment(CrossAxisAlignment::Start)
+        .with_child(title)
+        .with_child(
+            Container::new(render_text_line(
+                activity,
+                theme.sub_text_color(theme.background()),
+                ClipConfig::end(),
+                appearance,
+            ))
+            .with_margin_top(1.)
+            .finish(),
+        )
         .finish()
 }
 
