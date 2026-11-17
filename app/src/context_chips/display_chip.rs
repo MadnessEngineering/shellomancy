@@ -632,6 +632,10 @@ pub enum DisplayChipKind {
     AgentPlanAndTodoList {
         plan_and_todo_list: ViewHandle<PlanAndTodoListView>,
     },
+    /// Shellomancy: Omnispindle / Quest chips, drawn from the Mana Bar's data.
+    Madness {
+        view: ViewHandle<crate::context_chips::madness_chip::MadnessChipView>,
+    },
     GitBranch {
         menu_open: bool,
         menu: ViewHandle<DisplayChipMenu>,
@@ -661,7 +665,8 @@ impl DisplayChipKind {
             | DisplayChipKind::Subshell
             | DisplayChipKind::VirtualEnvironment
             | DisplayChipKind::CondaEnvironment
-            | DisplayChipKind::AgentPlanAndTodoList { .. } => false,
+            | DisplayChipKind::AgentPlanAndTodoList { .. }
+            | DisplayChipKind::Madness { .. } => false,
         }
     }
 }
@@ -937,6 +942,18 @@ impl DisplayChip {
                 menu: Self::git_branch_menu(&chip_result.on_click_values, ctx),
             },
             ContextChipKind::GithubPullRequest => DisplayChipKind::GithubPullRequest,
+            ContextChipKind::Omnispindle | ContextChipKind::Quest => {
+                use crate::context_chips::madness_chip::{MadnessChip, MadnessChipView};
+                let kind = if chip_result.kind == ContextChipKind::Quest {
+                    MadnessChip::Quest
+                } else {
+                    MadnessChip::Omnispindle
+                };
+                let project = chip_result.value.as_ref().map(|value| value.to_string());
+                let view =
+                    ctx.add_typed_action_view(|ctx| MadnessChipView::new(kind, project, ctx));
+                DisplayChipKind::Madness { view }
+            }
             ContextChipKind::WorkingDirectory => {
                 let dir_path = chip_result
                     .value
@@ -1267,6 +1284,7 @@ impl DisplayChip {
             | DisplayChipKind::CondaEnvironment
             | DisplayChipKind::NodeVersion { .. }
             | DisplayChipKind::AgentPlanAndTodoList { .. }
+            | DisplayChipKind::Madness { .. }
             | DisplayChipKind::GithubPullRequest => {}
         }
         false
@@ -1368,6 +1386,7 @@ impl DisplayChip {
             DisplayChipKind::AgentPlanAndTodoList { plan_and_todo_list } => {
                 plan_and_todo_list.as_ref(app).should_render(app)
             }
+            DisplayChipKind::Madness { view } => view.as_ref(app).should_render(app),
             _ => true,
         }
     }
@@ -2032,6 +2051,7 @@ impl DisplayChip {
             DisplayChipKind::AgentPlanAndTodoList { plan_and_todo_list } => {
                 Some(ChildView::new(plan_and_todo_list).finish())
             }
+            DisplayChipKind::Madness { view } => Some(ChildView::new(view).finish()),
             DisplayChipKind::GitBranch { menu_open, menu } => {
                 Some(self.git_branch_chip(*menu_open, menu, app))
             }
@@ -2160,6 +2180,7 @@ impl TypedActionView for DisplayChip {
                 | DisplayChipKind::VirtualEnvironment
                 | DisplayChipKind::CondaEnvironment
                 | DisplayChipKind::AgentPlanAndTodoList { .. }
+                | DisplayChipKind::Madness { .. }
                 | DisplayChipKind::Text
                 | DisplayChipKind::GithubPullRequest
                 | DisplayChipKind::GitDiffStats { .. } => {}

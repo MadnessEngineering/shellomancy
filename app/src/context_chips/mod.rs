@@ -8,6 +8,7 @@ pub mod display_chip;
 pub mod display_menu;
 pub(crate) mod git_branch_on_click;
 pub(crate) mod logging;
+pub mod madness_chip;
 pub mod node_version_popup;
 pub mod prompt;
 pub mod prompt_snapshot;
@@ -202,6 +203,10 @@ pub enum ContextChipKind {
     Subshell,
     /// A chip that shows the plan and todo list for the current conversation.
     AgentPlanAndTodoList,
+    /// Shellomancy: active Omnispindle todos for the repo ("12 owed · 1 doing").
+    Omnispindle,
+    /// Shellomancy: the repo's active Omnispindle quest ("Integrations 6/8").
+    Quest,
 }
 
 impl ContextChipKind {
@@ -366,12 +371,26 @@ impl ContextChipKind {
                 |_| Some(ChipValue::Text(String::new())),
                 RefreshConfig::OnDemandOnly,
             )),
+            // The value is the project; MadnessChipView looks up the numbers.
+            Self::Omnispindle => Some(ContextChip::builtin(
+                madness_themes::t("shellomancy.chips.omnispindleTitle"),
+                builtins::madness_project,
+                RefreshConfig::OnDemandOnly,
+            )),
+            Self::Quest => Some(ContextChip::builtin(
+                madness_themes::t("shellomancy.chips.questTitle"),
+                builtins::madness_project,
+                RefreshConfig::OnDemandOnly,
+            )),
         }
     }
 
     /// Whether the context chip has a copyable value.
     pub fn is_copyable(&self) -> bool {
-        !matches!(self, Self::AgentPlanAndTodoList)
+        !matches!(
+            self,
+            Self::AgentPlanAndTodoList | Self::Omnispindle | Self::Quest
+        )
     }
 
     /// Returns a generator to be used for the first fetch of
@@ -422,6 +441,8 @@ impl ContextChipKind {
             Self::Ssh => ChipValue::Text("alice@127.0.0.1".to_string()),
             Self::Subshell => ChipValue::Text("bash".to_string()),
             Self::AgentPlanAndTodoList => ChipValue::Text("Plan and Todo List".to_string()),
+            Self::Omnispindle => ChipValue::Text("12 owed · 1 doing".to_string()),
+            Self::Quest => ChipValue::Text("Integrations 6/8".to_string()),
         }
     }
 
@@ -455,6 +476,7 @@ impl ContextChipKind {
             Self::Ssh => prompt_colors.input_prompt_ssh,
             Self::Subshell => prompt_colors.input_prompt_subshell,
             Self::AgentPlanAndTodoList => prompt_colors.input_prompt_agent_mode_hint,
+            Self::Omnispindle | Self::Quest => appearance.theme().accent().into_solid(),
             Self::Custom { .. } => ColorU::new(255, 255, 255, 255),
         };
 
@@ -547,7 +569,8 @@ impl ContextChipKind {
             Self::GitDiffStats | Self::SvnDirtyItems => Some(Icon::File),
             Self::GithubPullRequest => Some(Icon::Github),
             Self::KubernetesContext => Some(Icon::Globe),
-            Self::AgentPlanAndTodoList => Some(Icon::CheckSkinny),
+            Self::AgentPlanAndTodoList | Self::Omnispindle => Some(Icon::CheckSkinny),
+            Self::Quest => Some(Icon::Lightning),
             Self::Custom { .. } => None,
         }
     }
@@ -585,6 +608,10 @@ pub fn available_chips() -> Vec<ContextChipKind> {
         ContextChipKind::SvnBranch,
         ContextChipKind::SvnDirtyItems,
     ]);
+    // Shellomancy: Omnispindle chips (shown only while signed in, in a repo).
+    if warp_core::channel::ChannelState::channel() == warp_core::channel::Channel::Oss {
+        chips.extend([ContextChipKind::Omnispindle, ContextChipKind::Quest]);
+    }
     chips
 }
 

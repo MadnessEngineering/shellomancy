@@ -1,0 +1,7 @@
+[
+ {"key": "shellomancy.chips.omnispindleTitle", "standard": "Omnispindle todos", "shellomancer": "What's owed"},
+ {"key": "shellomancy.chips.questTitle", "standard": "Active quest", "shellomancer": "Current quest"},
+ {"key": "shellomancy.chips.owed", "standard": "{{count}} owed", "shellomancer": "{{count}} owed"},
+ {"key": "shellomancy.chips.doing", "standard": "{{count}} in progress", "shellomancer": "{{count}} underway"},
+ {"key": "shellomancy.chips.quest", "standard": "{{name}} {{done}}/{{total}}", "shellomancer": "{{name}} {{done}}/{{total}}"}
+]
