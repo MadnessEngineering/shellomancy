@@ -18,6 +18,7 @@ use warpui::{AppContext, Entity, SingletonEntity, TypedActionView, View, ViewCon
 use crate::appearance::Appearance;
 use crate::mana_bar::{Fetch, List, ManaBar, ManaBarEvent, Quest, Todo};
 use crate::workspace::WorkspaceAction;
+use crate::workspace::view::mana_bar_view::ManaBarTab;
 
 /// How often a chip asks for fresh numbers. Requests already in flight (from
 /// the Mana Bar or another chip) are shared.
@@ -179,8 +180,13 @@ impl TypedActionView for MadnessChipView {
 
     fn handle_action(&mut self, action: &Self::Action, ctx: &mut ViewContext<Self>) {
         match action {
+            // Opens the Mana Bar on this chip's tab (never closes it).
             MadnessChipAction::OpenManaBar => {
-                ctx.dispatch_typed_action(&WorkspaceAction::ToggleManaBar);
+                let tab = match self.kind {
+                    MadnessChip::Omnispindle => ManaBarTab::Todos,
+                    MadnessChip::Quest => ManaBarTab::Quests,
+                };
+                ctx.dispatch_typed_action(&WorkspaceAction::ShowManaBar(tab));
             }
         }
     }
