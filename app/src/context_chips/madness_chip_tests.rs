@@ -10,6 +10,7 @@ fn todo(status: &str) -> Todo {
         status: status.to_owned(),
         created_at: 0,
         tags: vec![],
+        ..Default::default()
     }
 }
 
@@ -26,6 +27,7 @@ fn quest(name: &str, completed: u64, total: u64) -> Quest {
             completed * 100 / total
         },
         next: None::<NextStep>,
+        ..Default::default()
     }
 }
 

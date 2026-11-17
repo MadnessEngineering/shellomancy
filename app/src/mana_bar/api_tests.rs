@@ -11,6 +11,7 @@ fn todo(id: &str, priority: Priority, status: &str, created_at: i64) -> Todo {
         status: status.to_owned(),
         created_at,
         tags: vec![],
+        ..Default::default()
     }
 }
 
@@ -34,6 +35,9 @@ fn todos_parse_from_the_list_envelope() {
             created_at: 1763000000,
             // Root tags first, then metadata tags, without repeats.
             tags: vec!["mana-bar".to_owned(), "ui".to_owned(), "panel".to_owned()],
+            // The rest of the metadata, for the expanded card.
+            extra: vec![("quest_id".to_owned(), "q".to_owned())],
+            ..Default::default()
         }]
     );
 }
@@ -136,6 +140,7 @@ fn quests_parse_with_progress_and_next_step() {
                 todo_id: "t9".to_owned(),
                 description: "Mana Bar".to_owned(),
             }),
+            ..Default::default()
         }]
     );
 }
@@ -340,4 +345,76 @@ fn sort_todos_matches_the_grouped_order_without_copying() {
         sorted,
         ["crit-doing", "crit-new", "crit-old", "high", "low"]
     );
+}
+
+#[test]
+fn todo_details_parse_for_the_expanded_card() {
+    let reply = json!({"todos": [{
+        "id": "t1", "description": "d", "status": "pending",
+        "created_at": 1763000000, "updated_at": "2026-11-15T12:00:00.000Z",
+        "notes": "  see the log  ", "target_agent": "claude", "ticket": "",
+        "metadata": {"tags": ["x"], "quest_id": "q-1", "context": null,
+                     "files": ["a.rs", "b.rs"], "landed": {"sha": "abc"}, "empty": {}}
+    }]});
+    let todo = &parse_todos(&reply)[0];
+    assert_eq!(todo.updated_at, 1_794_744_000);
+    assert_eq!(todo.notes.as_deref(), Some("see the log"));
+    assert_eq!(todo.target_agent.as_deref(), Some("claude"));
+    assert_eq!(todo.ticket, None);
+    // Sorted by key; tags, nulls and empty objects are left out.
+    assert_eq!(
+        todo.extra,
+        vec![
+            ("files".to_owned(), "a.rs, b.rs".to_owned()),
+            ("landed".to_owned(), r#"{"sha":"abc"}"#.to_owned()),
+            ("quest_id".to_owned(), "q-1".to_owned()),
+        ]
+    );
+}
+
+#[test]
+fn quest_description_and_status_parse() {
+    let reply = json!({"data": [{
+        "quest": {"id": "q1", "description": "Make it ours", "status": "active"},
+        "overall": {}, "next_actions": []
+    }]});
+    let quest = &parse_quests(&reply)[0];
+    assert_eq!(quest.description.as_deref(), Some("Make it ours"));
+    assert_eq!(quest.status, "active");
+}
+
+#[test]
+fn activity_changes_keep_old_and_new_values_and_the_actor() {
+    let reply = json!({"logs": [{
+        "todoId": "t1", "operation": "update", "timestamp": 1_794_744_000,
+        "userAgent": "Omnispindle/1.4",
+        "changes": [
+            {"field": "status", "old_value": "pending", "new_value": "in_progress"},
+            {"field": "notes", "old_value": null, "new_value": "first note"},
+            {"field": "priority", "old_value": 3}
+        ]
+    }]});
+    let entry = &parse_activity(&reply)[0];
+    assert_eq!(entry.actor.as_deref(), Some("Omnispindle/1.4"));
+    assert_eq!(
+        entry.changes,
+        vec![
+            Change {
+                field: "status".to_owned(),
+                old: Some("pending".to_owned()),
+                new: Some("in_progress".to_owned()),
+            },
+            Change {
+                field: "notes".to_owned(),
+                old: None,
+                new: Some("first note".to_owned()),
+            },
+            Change {
+                field: "priority".to_owned(),
+                old: Some("3".to_owned()),
+                new: None,
+            },
+        ]
+    );
+    assert_eq!(entry.fields, vec!["status", "notes", "priority"]);
 }

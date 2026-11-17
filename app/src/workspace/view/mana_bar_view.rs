@@ -2,7 +2,9 @@
 //!
 //! Shows the signed-in Madness account's active todos and quests for the
 //! project the focused terminal is in (or every project), and recent lessons
-//! with a filter. Items open on madnessinteractive.cc; todos can be marked
+//! with a filter. Clicking a card unrolls it: a terminal-style block of the
+//! item's fields (ids with copy buttons), its notes or body, what an update
+//! changed, and a link to it on madnessinteractive.cc. Todos can be marked
 //! done. The data lives in [`ManaBar`], shared by every window; this view
 //! only decides which project to ask about and polls while it's on screen.
 
@@ -12,6 +14,7 @@ use std::time::Duration;
 use pathfinder_color::ColorU;
 use warp_core::ui::Icon;
 use warpui::r#async::Timer;
+use warpui::clipboard::ClipboardContent;
 use warpui::elements::{
     Border, ChildView, Clipped, ClippedScrollStateHandle, ClippedScrollable, ConstrainedBox,
     Container, CornerRadius, CrossAxisAlignment, Element, Empty, Expanded, Fill, Flex, Hoverable,
@@ -45,6 +48,14 @@ const SECTION_GAP: f32 = 16.;
 const PAGE_SIZE: usize = 30;
 /// Tag chips shown per card; the rest are on the site.
 const MAX_TAGS: usize = 5;
+/// How long a copy button says "copied".
+const COPIED_FLASH: Duration = Duration::from_millis(1500);
+/// The longest field value an unrolled card shows.
+const MAX_DETAIL_CHARS: usize = 600;
+/// Width of the field-name column in an unrolled card.
+const FIELD_COLUMN_WIDTH: f32 = 96.;
+/// The buttons an unrolled card can have, keyed `<card>|<slot>`.
+const BUTTON_SLOTS: [&str; 4] = ["id", "ref", "text", "open"];
 
 /// Which list the panel shows.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -128,10 +139,15 @@ pub enum ManaBarAction {
     SetLogFilter(LogFilter),
     Refresh,
     ToggleAllProjects,
-    OpenTodo(String),
     MarkDone(String),
     OpenUrl(String),
-    ToggleLesson(String),
+    /// Unrolls or rolls up the card with this key (`todo:<id>`, ...).
+    ToggleCard(String),
+    /// Copies `text`; `button` (`<card>|<slot>`) says "copied" for a moment.
+    Copy {
+        button: String,
+        text: String,
+    },
 }
 
 #[derive(Default)]
@@ -139,7 +155,6 @@ struct HeaderMouseStates {
     refresh: MouseStateHandle,
     scope: MouseStateHandle,
     account: MouseStateHandle,
-    site: MouseStateHandle,
     tabs: [MouseStateHandle; 4],
     show_more: MouseStateHandle,
     log_filters: [MouseStateHandle; 4],
@@ -155,7 +170,11 @@ pub struct ManaBarView {
     shown: usize,
     lesson_filter: ViewHandle<EditorView>,
     lesson_query: String,
-    expanded_lesson: Option<String>,
+    /// Keys of the unrolled cards.
+    expanded: HashSet<String>,
+    /// The copy button that just copied, for its "copied" flash.
+    copied: Option<String>,
+    copy_generation: u64,
     scroll: ClippedScrollStateHandle,
     header_mouse: HeaderMouseStates,
     /// Per-row mouse states, keyed like `todo:<id>`.
@@ -212,7 +231,9 @@ impl ManaBarView {
             shown: PAGE_SIZE,
             lesson_filter,
             lesson_query: String::new(),
-            expanded_lesson: None,
+            expanded: HashSet::new(),
+            copied: None,
+            copy_generation: 0,
             scroll: Default::default(),
             header_mouse: Default::default(),
             row_mouse: HashMap::new(),
@@ -321,8 +342,7 @@ impl ManaBarView {
             .and_then(Fetch::data)
             .into_iter()
             .flatten()
-            .enumerate()
-            .map(|(index, _)| format!("log:{index}"));
+            .map(log_card_key);
         let keys: Vec<String> = todos.chain(quests).chain(lessons).chain(log).collect();
         for key in keys {
             self.row_mouse.entry(key).or_default();
@@ -406,15 +426,29 @@ impl TypedActionView for ManaBarView {
                 self.sync_row_mouse_states(ctx);
                 ctx.notify();
             }
-            ManaBarAction::OpenTodo(id) => ctx.open_url(&api::todo_page_url(id)),
             ManaBarAction::MarkDone(id) => self.mark_done(id, ctx),
             ManaBarAction::OpenUrl(url) => ctx.open_url(url),
-            ManaBarAction::ToggleLesson(id) => {
-                self.expanded_lesson = if self.expanded_lesson.as_deref() == Some(id.as_str()) {
-                    None
-                } else {
-                    Some(id.clone())
-                };
+            ManaBarAction::ToggleCard(card) => {
+                if !self.expanded.remove(card) {
+                    for slot in BUTTON_SLOTS {
+                        self.row_mouse.entry(format!("{card}|{slot}")).or_default();
+                    }
+                    self.expanded.insert(card.clone());
+                }
+                ctx.notify();
+            }
+            ManaBarAction::Copy { button, text } => {
+                ctx.clipboard()
+                    .write(ClipboardContent::plain_text(text.clone()));
+                self.copied = Some(button.clone());
+                self.copy_generation += 1;
+                let generation = self.copy_generation;
+                let _ = ctx.spawn(Timer::after(COPIED_FLASH), move |me, _, ctx| {
+                    if me.copy_generation == generation {
+                        me.copied = None;
+                        ctx.notify();
+                    }
+                });
                 ctx.notify();
             }
         }
@@ -606,10 +640,9 @@ impl ManaBarView {
         let Some(entries) = entries else {
             return section.finish();
         };
-        let shown: Vec<(usize, &api::LogEntry)> = entries
+        let shown: Vec<&api::LogEntry> = entries
             .iter()
-            .enumerate()
-            .filter(|(_, entry)| self.log_filter.matches(&entry.operation))
+            .filter(|entry| self.log_filter.matches(&entry.operation))
             .collect();
         if shown.is_empty() {
             section.add_child(muted(
@@ -619,7 +652,9 @@ impl ManaBarView {
         }
         let now = chrono::Utc::now().timestamp();
         let total = shown.len();
-        for (index, entry) in shown.into_iter().take(self.shown) {
+        for entry in shown.into_iter().take(self.shown) {
+            let card_key = log_card_key(entry);
+            let expanded = self.expanded.contains(&card_key);
             let color = operation_color(&entry.operation, appearance);
             let mut pills = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
             pills.add_child(pill(entry.operation.to_uppercase(), color, appearance));
@@ -646,7 +681,8 @@ impl ManaBarView {
                 .with_margin_top(6.)
                 .finish(),
             );
-            if !entry.fields.is_empty() {
+            // Unrolled, the diff says the same thing in more detail.
+            if !entry.fields.is_empty() && !expanded {
                 lines.add_child(
                     Container::new(muted(
                         madness_themes::tf(
@@ -678,10 +714,35 @@ impl ManaBarView {
                     .finish(),
                 );
             }
+            if expanded {
+                let details = vec![
+                    Detail::copyable("todo_id", entry.todo_id.clone(), "id"),
+                    Detail::new("operation", entry.operation.clone()),
+                    Detail::new("project", entry.project.clone()),
+                    Detail::new("timestamp", when_label(entry.at, now)),
+                    Detail::new("by", entry.actor.clone().unwrap_or_default()),
+                ];
+                let blocks = if entry.changes.is_empty() {
+                    vec![]
+                } else {
+                    vec![changes_block(&entry.changes, appearance)]
+                };
+                lines.add_child(self.render_unrolled(
+                    &card_key,
+                    details,
+                    blocks,
+                    vec![self.open_button(
+                        &card_key,
+                        api::todo_page_url(&entry.todo_id),
+                        appearance,
+                    )],
+                    appearance,
+                ));
+            }
             section.add_child(card(
                 lines.finish(),
-                self.row_mouse(&format!("log:{index}")),
-                ManaBarAction::OpenTodo(entry.todo_id.clone()),
+                self.row_mouse(&card_key),
+                ManaBarAction::ToggleCard(card_key.clone()),
                 Some(color),
                 appearance,
             ));
@@ -902,10 +963,41 @@ impl ManaBarView {
                     .finish(),
             );
         }
+        let card_key = format!("todo:{}", todo.id);
+        if self.expanded.contains(&card_key) {
+            let mut details = vec![
+                Detail::copyable("id", todo.id.clone(), "id"),
+                Detail::new("project", todo.project.clone()),
+                Detail::new("status", todo.status.clone()),
+                Detail::new("priority", format!("{:?}", todo.priority)),
+                Detail::new(
+                    "target_agent",
+                    todo.target_agent.clone().unwrap_or_default(),
+                ),
+                Detail::new("created_at", when_label(todo.created_at, now)),
+                Detail::new("updated_at", when_label(todo.updated_at, now)),
+                Detail::new("ticket", todo.ticket.clone().unwrap_or_default()),
+                Detail::new("notes", todo.notes.clone().unwrap_or_default()),
+            ];
+            for (field, value) in &todo.extra {
+                details.push(if field == "quest_id" {
+                    Detail::copyable(field, value.clone(), "ref")
+                } else {
+                    Detail::new(field, value.clone())
+                });
+            }
+            content.add_child(self.render_unrolled(
+                &card_key,
+                details,
+                vec![],
+                vec![self.open_button(&card_key, api::todo_page_url(&todo.id), appearance)],
+                appearance,
+            ));
+        }
         card(
             content.finish(),
-            self.row_mouse(&format!("todo:{}", todo.id)),
-            ManaBarAction::OpenTodo(todo.id.clone()),
+            self.row_mouse(&card_key),
+            ManaBarAction::ToggleCard(card_key.clone()),
             Some(priority_color),
             appearance,
         )
@@ -986,15 +1078,45 @@ impl ManaBarView {
                             .finish(),
                         );
                     }
-                    let url = quest
-                        .next
-                        .as_ref()
-                        .map(|next| api::todo_page_url(&next.todo_id))
-                        .unwrap_or_else(|| DASHBOARD_URL.to_owned());
+                    let card_key = format!("quest:{}", quest.id);
+                    if self.expanded.contains(&card_key) {
+                        let url = quest
+                            .next
+                            .as_ref()
+                            .map(|next| api::todo_page_url(&next.todo_id))
+                            .unwrap_or_else(|| DASHBOARD_URL.to_owned());
+                        let mut details = vec![
+                            Detail::copyable("id", quest.id.clone(), "id"),
+                            Detail::new("project", quest.project.clone()),
+                            Detail::new("status", quest.status.clone()),
+                            Detail::new(
+                                "progress",
+                                format!("{}/{} ({}%)", quest.completed, quest.total, quest.pct),
+                            ),
+                            Detail::new(
+                                "description",
+                                quest.description.clone().unwrap_or_default(),
+                            ),
+                        ];
+                        if let Some(next) = &quest.next {
+                            details.push(Detail::copyable(
+                                "next_todo",
+                                next.todo_id.clone(),
+                                "ref",
+                            ));
+                        }
+                        lines.add_child(self.render_unrolled(
+                            &card_key,
+                            details,
+                            vec![],
+                            vec![self.open_button(&card_key, url, appearance)],
+                            appearance,
+                        ));
+                    }
                     section.add_child(card(
                         lines.finish(),
-                        self.row_mouse(&format!("quest:{}", quest.id)),
-                        ManaBarAction::OpenUrl(url),
+                        self.row_mouse(&card_key),
+                        ManaBarAction::ToggleCard(card_key.clone()),
                         Some(accent),
                         appearance,
                     ));
@@ -1060,7 +1182,7 @@ impl ManaBarView {
             let lesson_color = theme.terminal_colors().normal.magenta.into();
             let total = shown.len();
             for lesson in shown.into_iter().take(self.shown) {
-                let expanded = self.expanded_lesson.as_deref() == Some(lesson.id.as_str());
+                let card_key = format!("lesson:{}", lesson.id);
                 let top = Flex::row()
                     .with_main_axis_size(MainAxisSize::Max)
                     .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
@@ -1093,46 +1215,42 @@ impl ManaBarView {
                             .finish(),
                     );
                 }
-                if expanded {
-                    lines.add_child(
-                        Container::new(
-                            ui.wrappable_text(lesson.body.clone(), true)
-                                .with_style(UiComponentStyles {
-                                    font_size: Some(12.),
-                                    ..Default::default()
-                                })
-                                .build()
-                                .finish(),
-                        )
-                        .with_margin_top(8.)
-                        .with_uniform_padding(8.)
-                        .with_background(theme.surface_2())
-                        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
-                        .finish(),
+                if self.expanded.contains(&card_key) {
+                    let details = vec![
+                        Detail::copyable("id", lesson.id.clone(), "id"),
+                        Detail::new("language", lesson.language.clone()),
+                        Detail::new("created_at", when_label(lesson.created_at, now)),
+                        Detail::new("tags", lesson.tags.join(", ")),
+                    ];
+                    let copy_body = self.term_button(
+                        &card_key,
+                        "text",
+                        if self.copied.as_deref() == Some(format!("{card_key}|text").as_str()) {
+                            madness_themes::t("shellomancy.manaBar.copied")
+                        } else {
+                            madness_themes::t("shellomancy.manaBar.copyText")
+                        },
+                        ManaBarAction::Copy {
+                            button: format!("{card_key}|text"),
+                            text: lesson.body.clone(),
+                        },
+                        appearance,
                     );
-                    lines.add_child(
-                        Container::new(
-                            ui.link(
-                                madness_themes::t("shellomancy.manaBar.openOnSite").to_owned(),
-                                None,
-                                Some(Box::new(|ctx| {
-                                    ctx.dispatch_typed_action(ManaBarAction::OpenUrl(
-                                        DASHBOARD_URL.to_owned(),
-                                    ));
-                                })),
-                                self.header_mouse.site.clone(),
-                            )
-                            .build()
-                            .finish(),
-                        )
-                        .with_margin_top(6.)
-                        .finish(),
-                    );
+                    lines.add_child(self.render_unrolled(
+                        &card_key,
+                        details,
+                        vec![mono_block(&lesson.body, appearance)],
+                        vec![
+                            copy_body,
+                            self.open_button(&card_key, DASHBOARD_URL.to_owned(), appearance),
+                        ],
+                        appearance,
+                    ));
                 }
                 section.add_child(card(
                     lines.finish(),
-                    self.row_mouse(&format!("lesson:{}", lesson.id)),
-                    ManaBarAction::ToggleLesson(lesson.id.clone()),
+                    self.row_mouse(&card_key),
+                    ManaBarAction::ToggleCard(card_key.clone()),
                     Some(lesson_color),
                     appearance,
                 ));
@@ -1145,6 +1263,256 @@ impl ManaBarView {
             .with_margin_top(SECTION_GAP)
             .finish()
     }
+}
+
+/// One line of an unrolled card: the API's field name and its value, with a
+/// copy button in `copy` slot when it's an id worth copying.
+struct Detail {
+    field: String,
+    value: String,
+    copy: Option<&'static str>,
+}
+
+impl Detail {
+    fn new(field: &str, value: impl Into<String>) -> Self {
+        Self {
+            field: field.to_owned(),
+            value: value.into(),
+            copy: None,
+        }
+    }
+
+    fn copyable(field: &str, value: impl Into<String>, slot: &'static str) -> Self {
+        Self {
+            copy: Some(slot),
+            ..Self::new(field, value)
+        }
+    }
+}
+
+impl ManaBarView {
+    /// The unrolled part of a card: the fields, then any `blocks` (notes,
+    /// diffs), then the action row.
+    fn render_unrolled(
+        &self,
+        card: &str,
+        details: Vec<Detail>,
+        blocks: Vec<Box<dyn Element>>,
+        actions: Vec<Box<dyn Element>>,
+        appearance: &Appearance,
+    ) -> Box<dyn Element> {
+        let theme = appearance.theme();
+        let mut rows = Flex::column();
+        for detail in details.into_iter().filter(|d| !d.value.trim().is_empty()) {
+            let mut row = Flex::row()
+                .with_cross_axis_alignment(CrossAxisAlignment::Start)
+                .with_child(
+                    ConstrainedBox::new(mono(detail.field, MonoTone::Dim, appearance))
+                        .with_width(FIELD_COLUMN_WIDTH)
+                        .finish(),
+                )
+                .with_child(
+                    Shrinkable::new(
+                        1.,
+                        mono(truncate(&detail.value), MonoTone::Plain, appearance),
+                    )
+                    .finish(),
+                );
+            if let Some(slot) = detail.copy {
+                row.add_child(
+                    Container::new(self.copy_button(card, slot, detail.value, appearance))
+                        .with_margin_left(6.)
+                        .finish(),
+                );
+            }
+            rows.add_child(Container::new(row.finish()).with_margin_bottom(2.).finish());
+        }
+        for block in blocks {
+            rows.add_child(Container::new(block).with_margin_top(6.).finish());
+        }
+        let inset = Container::new(rows.finish())
+            .with_uniform_padding(8.)
+            .with_background(theme.background())
+            .with_border(Border::all(1.).with_border_fill(theme.surface_3()))
+            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
+            .finish();
+        let mut column = Flex::column().with_child(inset);
+        if !actions.is_empty() {
+            let mut row = Wrap::row().with_run_spacing(4.);
+            for action in actions {
+                row.add_child(Container::new(action).with_margin_right(8.).finish());
+            }
+            column.add_child(Container::new(row.finish()).with_margin_top(6.).finish());
+        }
+        Container::new(column.finish()).with_margin_top(8.).finish()
+    }
+
+    /// `[copy]`, or `[copied ✓]` for a moment after it's clicked.
+    fn copy_button(
+        &self,
+        card: &str,
+        slot: &str,
+        text: String,
+        appearance: &Appearance,
+    ) -> Box<dyn Element> {
+        let button = format!("{card}|{slot}");
+        let label = if self.copied.as_deref() == Some(button.as_str()) {
+            madness_themes::t("shellomancy.manaBar.copied")
+        } else {
+            madness_themes::t("shellomancy.manaBar.copy")
+        };
+        self.term_button(
+            card,
+            slot,
+            label,
+            ManaBarAction::Copy {
+                button: button.clone(),
+                text,
+            },
+            appearance,
+        )
+    }
+
+    /// A bracketed monospace button, like `[open ↗]`.
+    fn term_button(
+        &self,
+        card: &str,
+        slot: &str,
+        label: &str,
+        action: ManaBarAction,
+        appearance: &Appearance,
+    ) -> Box<dyn Element> {
+        let theme = appearance.theme();
+        let accent = theme.accent().into_solid();
+        let hover = theme.surface_3();
+        let text = appearance
+            .ui_builder()
+            .span(format!("[{label}]"))
+            .with_style(UiComponentStyles {
+                font_family_id: Some(appearance.monospace_font_family()),
+                font_size: Some(11.),
+                font_color: Some(accent),
+                ..Default::default()
+            })
+            .build()
+            .finish();
+        Hoverable::new(self.row_mouse(&format!("{card}|{slot}")), move |state| {
+            let mut container = Container::new(text)
+                .with_horizontal_padding(2.)
+                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(3.)));
+            if state.is_hovered() {
+                container = container.with_background(hover);
+            }
+            container.finish()
+        })
+        .with_cursor(Cursor::PointingHand)
+        .on_click(move |ctx, _, _| ctx.dispatch_typed_action(action.clone()))
+        .finish()
+    }
+
+    fn open_button(&self, card: &str, url: String, appearance: &Appearance) -> Box<dyn Element> {
+        self.term_button(
+            card,
+            "open",
+            madness_themes::t("shellomancy.manaBar.open"),
+            ManaBarAction::OpenUrl(url),
+            appearance,
+        )
+    }
+}
+
+/// How bright a line of monospace text is.
+#[derive(Clone, Copy)]
+enum MonoTone {
+    Plain,
+    Dim,
+    Color(ColorU),
+}
+
+/// Monospace text that wraps, for the unrolled cards.
+fn mono(text: String, tone: MonoTone, appearance: &Appearance) -> Box<dyn Element> {
+    let theme = appearance.theme();
+    let color = match tone {
+        MonoTone::Plain => theme.main_text_color(theme.background()).into_solid(),
+        MonoTone::Dim => theme.sub_text_color(theme.background()).into_solid(),
+        MonoTone::Color(color) => color,
+    };
+    appearance
+        .ui_builder()
+        .wrappable_text(text, true)
+        .with_style(UiComponentStyles {
+            font_family_id: Some(appearance.monospace_font_family()),
+            font_size: Some(11.),
+            font_color: Some(color),
+            ..Default::default()
+        })
+        .build()
+        .finish()
+}
+
+/// Free text (notes, a quest's description, a scroll's body) in the inset.
+fn mono_block(text: &str, appearance: &Appearance) -> Box<dyn Element> {
+    mono(truncate(text.trim()), MonoTone::Plain, appearance)
+}
+
+/// What an update changed, as a diff: `- field: old` / `+ field: new`.
+fn changes_block(changes: &[api::Change], appearance: &Appearance) -> Box<dyn Element> {
+    let colors = &appearance.theme().terminal_colors().normal;
+    let (red, green) = (colors.red.into(), colors.green.into());
+    let mut lines = Flex::column();
+    for change in changes {
+        if let Some(old) = &change.old {
+            lines.add_child(mono(
+                format!("- {}: {}", change.field, one_line(old)),
+                MonoTone::Color(red),
+                appearance,
+            ));
+        }
+        if let Some(new) = &change.new {
+            lines.add_child(mono(
+                format!("+ {}: {}", change.field, one_line(new)),
+                MonoTone::Color(green),
+                appearance,
+            ));
+        }
+        if change.old.is_none() && change.new.is_none() {
+            lines.add_child(mono(
+                format!("~ {}", change.field),
+                MonoTone::Dim,
+                appearance,
+            ));
+        }
+    }
+    lines.finish()
+}
+
+/// `2026-11-16 22:24 (3h)`, in local time; blank for 0.
+pub fn when_label(at: i64, now: i64) -> String {
+    if at <= 0 {
+        return String::new();
+    }
+    let Some(local) = chrono::DateTime::from_timestamp(at, 0) else {
+        return String::new();
+    };
+    let local = local.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M");
+    format!("{local} ({})", api::age_label(at, now))
+}
+
+/// A card's key for a log entry: stable while newer entries arrive above it.
+fn log_card_key(entry: &api::LogEntry) -> String {
+    format!("log:{}:{}:{}", entry.todo_id, entry.at, entry.operation)
+}
+
+fn truncate(text: &str) -> String {
+    match text.char_indices().nth(MAX_DETAIL_CHARS) {
+        Some((cut, _)) => format!("{}…", &text[..cut]),
+        None => text.to_owned(),
+    }
+}
+
+/// Newlines folded so a diff line stays one line.
+fn one_line(text: &str) -> String {
+    truncate(&text.split_whitespace().collect::<Vec<_>>().join(" "))
 }
 
 /// A section's heading in the accent colour, with a count badge once loaded.
@@ -1467,3 +1835,7 @@ fn card(
     }
     card.finish()
 }
+
+#[cfg(test)]
+#[path = "mana_bar_view_tests.rs"]
+mod tests;

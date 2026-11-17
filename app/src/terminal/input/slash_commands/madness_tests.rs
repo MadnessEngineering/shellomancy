@@ -21,6 +21,7 @@ fn quest(name: &str, next: Option<&str>) -> Quest {
             todo_id: format!("todo-{name}"),
             description: description.to_owned(),
         }),
+        ..Default::default()
     }
 }
 

@@ -1,0 +1,22 @@
+[
+ {
+  "key": "shellomancy.manaBar.copy",
+  "standard": "copy",
+  "shellomancer": "copy"
+ },
+ {
+  "key": "shellomancy.manaBar.copied",
+  "standard": "copied ✓",
+  "shellomancer": "copied ✓"
+ },
+ {
+  "key": "shellomancy.manaBar.copyText",
+  "standard": "copy text",
+  "shellomancer": "copy the scroll"
+ },
+ {
+  "key": "shellomancy.manaBar.open",
+  "standard": "open ↗",
+  "shellomancer": "open ↗"
+ }
+]

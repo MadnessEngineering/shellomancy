@@ -25,10 +25,11 @@ const LESSON_LIMIT: u32 = 50;
 const ACTIVITY_LIMIT: u32 = 50;
 
 /// A todo's priority, in the order the panel lists them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Priority {
     Critical,
     High,
+    #[default]
     Medium,
     Low,
 }
@@ -56,7 +57,7 @@ impl Priority {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Todo {
     pub id: String,
     pub description: String,
@@ -66,14 +67,25 @@ pub struct Todo {
     /// Unix seconds.
     pub created_at: i64,
     pub tags: Vec<String>,
+    /// Unix seconds; 0 if never updated.
+    pub updated_at: i64,
+    pub notes: Option<String>,
+    /// Who it's for: "user", "claude", ...
+    pub target_agent: Option<String>,
+    pub ticket: Option<String>,
+    /// The rest of its metadata (quest_id, context, next_step, ...), tags
+    /// left out, values as text.
+    pub extra: Vec<(String, String)>,
 }
 
 /// A quest and how far along it is.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Quest {
     pub id: String,
     pub name: String,
     pub project: String,
+    pub description: Option<String>,
+    pub status: String,
     pub total: u64,
     pub completed: u64,
     pub pct: u64,
@@ -81,13 +93,13 @@ pub struct Quest {
     pub next: Option<NextStep>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct NextStep {
     pub todo_id: String,
     pub description: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Lesson {
     pub id: String,
     pub topic: String,
@@ -100,7 +112,7 @@ pub struct Lesson {
 }
 
 /// One entry in the activity log: something that happened to a todo.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct LogEntry {
     /// The todo it happened to.
     pub todo_id: String,
@@ -114,6 +126,18 @@ pub struct LogEntry {
     pub fields: Vec<String>,
     /// The note left when it was completed, if any.
     pub comment: Option<String>,
+    /// What an update changed, field by field.
+    pub changes: Vec<Change>,
+    /// Who or what made the change (the request's user agent).
+    pub actor: Option<String>,
+}
+
+/// One field an update changed, values as text (`None` when unset).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Change {
+    pub field: String,
+    pub old: Option<String>,
+    pub new: Option<String>,
 }
 
 /// Whether a todo still needs doing. Inventorium's `exclude_completed` only
@@ -150,6 +174,11 @@ pub fn parse_todos(reply: &Value) -> Vec<Todo> {
                         }
                         tags
                     }),
+                updated_at: log_timestamp(&todo["updated_at"]),
+                notes: text(&todo["notes"]),
+                target_agent: text(&todo["target_agent"]),
+                ticket: text(&todo["ticket"]),
+                extra: metadata_details(&todo["metadata"]),
             })
         })
         .collect()
@@ -221,6 +250,8 @@ pub fn parse_quests(reply: &Value) -> Vec<Quest> {
                 id: text(&quest["id"])?,
                 name: text(&quest["name"]).unwrap_or_default(),
                 project: text(&quest["project"]).unwrap_or_default(),
+                description: text(&quest["description"]),
+                status: text(&quest["status"]).unwrap_or_default(),
                 total: overall["total"].as_u64().unwrap_or(0),
                 completed: overall["completed"].as_u64().unwrap_or(0),
                 pct: overall["pct"].as_u64().unwrap_or(0),
@@ -259,12 +290,19 @@ pub fn parse_activity(reply: &Value) -> Vec<LogEntry> {
         .flatten()
         .filter_map(|entry| {
             let todo_id = text(&entry["todoId"]).or_else(|| text(&entry["todo_id"]))?;
-            let mut fields: Vec<String> = entry["changes"]
+            let changes: Vec<Change> = entry["changes"]
                 .as_array()
                 .into_iter()
                 .flatten()
-                .filter_map(|change| text(&change["field"]))
+                .filter_map(|change| {
+                    Some(Change {
+                        field: text(&change["field"])?,
+                        old: value_text(&change["old_value"]),
+                        new: value_text(&change["new_value"]),
+                    })
+                })
                 .collect();
+            let mut fields: Vec<String> = changes.iter().map(|c| c.field.clone()).collect();
             fields.dedup();
             Some(LogEntry {
                 todo_id,
@@ -284,6 +322,8 @@ pub fn parse_activity(reply: &Value) -> Vec<LogEntry> {
                 ]
                 .iter()
                 .find_map(|key| text(&entry[*key]).or_else(|| text(&entry["metadata"][*key]))),
+                changes,
+                actor: text(&entry["userAgent"]).or_else(|| text(&entry["user_agent"])),
             })
         })
         .collect()
@@ -487,6 +527,35 @@ pub fn age_label(created_at: i64, now: i64) -> String {
         _ if days < 60 => format!("{days}d"),
         _ if days < 730 => format!("{}mo", days / 30),
         _ => format!("{}y", days / 365),
+    }
+}
+
+/// A todo's metadata other than its tags, as (key, text) sorted by key.
+fn metadata_details(metadata: &Value) -> Vec<(String, String)> {
+    let mut details: Vec<(String, String)> = metadata
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter(|(key, _)| key.as_str() != "tags")
+        .filter_map(|(key, value)| Some((key.clone(), value_text(value)?)))
+        .collect();
+    details.sort();
+    details
+}
+
+/// Any JSON value as one line of text for the detail view: strings as they
+/// are, arrays joined with ", ", objects as compact JSON. Null and blank give
+/// `None`.
+pub fn value_text(value: &Value) -> Option<String> {
+    match value {
+        Value::Null => None,
+        Value::String(_) => text(value),
+        Value::Array(items) => {
+            let parts: Vec<String> = items.iter().filter_map(value_text).collect();
+            (!parts.is_empty()).then(|| parts.join(", "))
+        }
+        Value::Object(map) if map.is_empty() => None,
+        other => Some(other.to_string()),
     }
 }
 
