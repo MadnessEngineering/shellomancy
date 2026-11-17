@@ -25,8 +25,7 @@ pub fn working_directory(ctx: &GeneratorContext) -> Option<ChipValue> {
 /// outside a repo, or for a folder that isn't on this machine (SSH).
 pub fn madness_project(ctx: &GeneratorContext) -> Option<ChipValue> {
     let pwd = std::path::Path::new(ctx.active_block_metadata.current_working_directory()?);
-    let repo = pwd.ancestors().find(|dir| dir.join(".git").exists())?;
-    crate::mana_bar::api::project_name(repo.file_name()?.to_str()).map(ChipValue::Text)
+    crate::mana_bar::api::project_for_path(pwd).map(ChipValue::Text)
 }
 
 /// Generator function that always shows the username.
