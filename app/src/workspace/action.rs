@@ -388,6 +388,8 @@ pub enum WorkspaceAction {
     OpenWarpDrive,
     /// Shellomancy: toggles the Mana Bar tab of the tools panel.
     ToggleManaBar,
+    /// Shellomancy: opens the Mana Bar (never closes it) on one of its tabs.
+    ShowManaBar(crate::workspace::view::mana_bar_view::ManaBarTab),
     /// Shellomancy: settings sync checks madnessinteractive.cc right away.
     MadnessSyncNow,
     /// Toggles the right panel. This happens as an explicit action from the user.
@@ -1103,6 +1105,7 @@ impl WorkspaceAction {
             | ToggleWarpDrive
             | OpenWarpDrive
             | ToggleManaBar
+            | ShowManaBar(_)
             | ClosePanel
             | ToggleRightPanel
             | OpenCodeReviewPanel(..)

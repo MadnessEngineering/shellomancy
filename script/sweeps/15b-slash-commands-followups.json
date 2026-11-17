@@ -1,0 +1,22 @@
+[
+ {
+  "key": "shellomancy.slash.map.started",
+  "standard": "Mapping {{folder}}. You'll get a note when it's done.",
+  "shellomancer": "Cartogomancy is surveying {{folder}}. It'll report back."
+ },
+ {
+  "key": "shellomancy.slash.map.alreadyMapping",
+  "standard": "{{folder}} is already being mapped. You'll get a note when it's done.",
+  "shellomancer": "Cartogomancy is already surveying {{folder}}. It doesn't go faster when watched, but it'll report back."
+ },
+ {
+  "key": "shellomancy.slash.map.done",
+  "standard": "Mapped {{folder}}: {{summary}} ({{upload}}).",
+  "shellomancer": "Cartogomancy is back from {{folder}}: {{summary}} ({{upload}})."
+ },
+ {
+  "key": "shellomancy.slash.map.failed",
+  "standard": "Mapping {{folder}} failed: {{error}}",
+  "shellomancer": "The survey of {{folder}} fizzled: {{error}}"
+ }
+]

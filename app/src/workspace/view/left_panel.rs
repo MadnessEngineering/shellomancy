@@ -63,7 +63,7 @@ use crate::workspace::view::conversation_list::view::{
 use crate::workspace::view::global_search::view::{
     Event as GlobalSearchViewEvent, GlobalSearchEntryFocus, GlobalSearchView,
 };
-use crate::workspace::view::mana_bar_view::ManaBarView;
+use crate::workspace::view::mana_bar_view::{ManaBarTab, ManaBarView};
 use crate::workspace::view::{
     LEFT_PANEL_AGENT_CONVERSATIONS_BINDING_NAME, LEFT_PANEL_GLOBAL_SEARCH_BINDING_NAME,
     LEFT_PANEL_MANA_BAR_BINDING_NAME, LEFT_PANEL_PROJECT_EXPLORER_BINDING_NAME,
@@ -1248,6 +1248,12 @@ impl LeftPanelView {
                 ctx.emit(LeftPanelEvent::SignInRequested);
             }
         }
+    }
+
+    /// Shellomancy: switches the Mana Bar to `tab`.
+    pub fn select_mana_bar_tab(&mut self, tab: ManaBarTab, ctx: &mut ViewContext<Self>) {
+        self.mana_bar_view
+            .update(ctx, |view, ctx| view.select_tab(tab, ctx));
     }
 
     pub fn on_left_panel_visibility_changed(&self, is_now_open: bool, ctx: &mut ViewContext<Self>) {

@@ -2,17 +2,18 @@
 //!
 //! `/todo` and `/lesson` send what was typed to Inventorium's REST API with the
 //! signed-in Madness key (the same requests as a spell's "Make it a todo"),
-//! `/quest` reads this repo's active quests, `/map` hands the repo to Code
-//! Maps, and `/sync` asks settings sync to run now. Each says how it went in a
-//! toast; nothing here runs while signed out except `/map`, which maps locally
-//! and only uploads when signed in.
+//! `/quest` opens the Mana Bar's quests and reads this repo's next step, `/map`
+//! hands the repo to Code Maps and reports back when the map is done, and
+//! `/sync` asks settings sync to run now. Each says how it went in a toast;
+//! nothing here runs while signed out except `/map`, which maps locally and
+//! only uploads when signed in.
 
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 use warpui::{SingletonEntity, ViewContext};
 
-use crate::code_maps::CodeMaps;
+use crate::code_maps::{CodeMaps, MappedFolder, UploadOutcome};
 use crate::madness_sync::{SettingsSync, SyncStatus};
 use crate::mana_bar::{self, Quest};
 use crate::search::slash_command_menu::static_commands::MadnessSlash;
@@ -22,6 +23,7 @@ use crate::spell_todo::{
 };
 use crate::terminal::input::Input;
 use crate::view_components::{DismissibleToast, ToastLink};
+use crate::workspace::view::mana_bar_view::ManaBarTab;
 use crate::workspace::{ToastStack, WorkspaceAction};
 
 type Toast = DismissibleToast<WorkspaceAction>;
@@ -118,6 +120,60 @@ pub fn quest_message(quest: &Quest, others: usize) -> (String, Option<String>) {
         .as_ref()
         .map(|next| mana_bar::api::todo_page_url(&next.todo_id));
     (message, link)
+}
+
+/// What `/map` says when a folder's map is done: the message, the map's page
+/// in Inventorium if it was uploaded, and whether it worked.
+pub fn map_done_message(folder: &MappedFolder) -> (String, Option<String>, bool) {
+    if let Some(error) = &folder.error {
+        let message = madness_themes::tf(
+            "shellomancy.slash.map.failed",
+            &[("folder", &folder.name), ("error", error)],
+        );
+        return (message, None, false);
+    }
+    let summary = folder
+        .summary
+        .as_ref()
+        .map(|summary| {
+            madness_themes::tf(
+                "shellomancy.codeMaps.summary",
+                &[
+                    ("classes", &summary.classes.to_string()),
+                    ("packages", &summary.packages.to_string()),
+                    ("critical", &summary.critical.to_string()),
+                    ("high", &summary.high.to_string()),
+                    ("unused", &summary.unused_exports.to_string()),
+                ],
+            )
+        })
+        .unwrap_or_default();
+    let (upload, link) = match &folder.upload {
+        Some(UploadOutcome::Uploaded { version, view_url }) => (
+            madness_themes::tf(
+                "shellomancy.codeMaps.uploaded",
+                &[("version", &version.to_string())],
+            ),
+            view_url.clone(),
+        ),
+        Some(UploadOutcome::Failed { error }) => (
+            madness_themes::tf("shellomancy.codeMaps.uploadFailed", &[("error", error)]),
+            None,
+        ),
+        Some(UploadOutcome::KeptLocal) | None => (
+            madness_themes::t("shellomancy.codeMaps.keptLocal").to_owned(),
+            None,
+        ),
+    };
+    let message = madness_themes::tf(
+        "shellomancy.slash.map.done",
+        &[
+            ("folder", &folder.name),
+            ("summary", &summary),
+            ("upload", &upload),
+        ],
+    );
+    (message, link, true)
 }
 
 fn show_toast(toast: Toast, ctx: &mut ViewContext<Input>) {
@@ -251,9 +307,30 @@ impl Input {
         let key = if CodeMaps::as_ref(ctx).is_mapping(&folder) {
             "shellomancy.slash.map.alreadyMapping"
         } else {
-            CodeMaps::handle(ctx).update(ctx, |maps, ctx| maps.map(folder, ctx));
             "shellomancy.slash.map.started"
         };
+        let window_id = ctx.window_id();
+        let report: crate::code_maps::WhenMapped = Box::new(move |folder, ctx| {
+            let (message, link, worked) = map_done_message(folder);
+            let toast = if worked {
+                let toast = Toast::success(message);
+                match link {
+                    Some(href) => toast.with_link(
+                        ToastLink::new(
+                            madness_themes::t("shellomancy.codeMaps.openInInventorium").to_owned(),
+                        )
+                        .with_href(href),
+                    ),
+                    None => toast,
+                }
+            } else {
+                Toast::error(message)
+            };
+            ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
+                toast_stack.add_ephemeral_toast(toast, window_id, ctx);
+            });
+        });
+        CodeMaps::handle(ctx).update(ctx, |maps, ctx| maps.map_then(folder, report, ctx));
         show_toast(
             Toast::default(madness_themes::tf(key, &[("folder", &name)])),
             ctx,
@@ -264,6 +341,7 @@ impl Input {
         let Some(key) = self.madness_key(ctx) else {
             return;
         };
+        ctx.dispatch_typed_action(&WorkspaceAction::ShowManaBar(ManaBarTab::Quests));
         // Outside a repo there's no project, so every project's quests count.
         let project = self
             .madness_cwd()

@@ -190,3 +190,69 @@ fn todo_and_lesson_take_text_the_rest_run_on_selection() {
     }
     assert!(MADNESS_MAP.availability.contains(Availability::LOCAL));
 }
+
+fn mapped(upload: Option<UploadOutcome>, error: Option<&str>) -> MappedFolder {
+    MappedFolder {
+        path: PathBuf::from("/nowhere/shellomancy"),
+        name: "shellomancy".to_owned(),
+        map_file: PathBuf::from("/nowhere/maps/shellomancy-uml.json"),
+        mapped_at: Some(1_794_883_435),
+        summary: Some(crate::code_maps::MapSummary {
+            classes: 120,
+            packages: 14,
+            critical: 3,
+            high: 9,
+            unused_exports: 42,
+        }),
+        upload,
+        error: error.map(str::to_owned),
+        git: None,
+    }
+}
+
+#[test]
+fn an_uploaded_map_reports_its_numbers_and_links_to_inventorium() {
+    let folder = mapped(
+        Some(UploadOutcome::Uploaded {
+            version: 7,
+            view_url: Some("https://madnessinteractive.cc/swarmdesk/shellomancy".to_owned()),
+        }),
+        None,
+    );
+    let (message, link, worked) = map_done_message(&folder);
+    assert!(worked);
+    assert!(message.contains("shellomancy"), "{message}");
+    assert!(message.contains("120"), "{message}");
+    assert!(
+        message.contains(&madness_themes::tf(
+            "shellomancy.codeMaps.uploaded",
+            &[("version", "7")]
+        )),
+        "{message}"
+    );
+    assert_eq!(
+        link.as_deref(),
+        Some("https://madnessinteractive.cc/swarmdesk/shellomancy")
+    );
+}
+
+#[test]
+fn a_local_map_has_no_link() {
+    let (message, link, worked) = map_done_message(&mapped(Some(UploadOutcome::KeptLocal), None));
+    assert!(worked);
+    assert!(
+        message.contains(madness_themes::t("shellomancy.codeMaps.keptLocal")),
+        "{message}"
+    );
+    assert_eq!(link, None);
+}
+
+#[test]
+fn a_failed_map_reports_the_error_even_with_an_old_summary() {
+    let folder = mapped(Some(UploadOutcome::KeptLocal), Some("npx not found"));
+    let (message, link, worked) = map_done_message(&folder);
+    assert!(!worked);
+    assert!(message.contains("npx not found"), "{message}");
+    assert!(!message.contains("120"), "{message}");
+    assert_eq!(link, None);
+}

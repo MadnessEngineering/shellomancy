@@ -236,6 +236,14 @@ impl ManaBarView {
     }
 
     /// The panel is shown or hidden; it only fetches and polls while shown.
+    /// Shows `tab`, from the first page.
+    pub fn select_tab(&mut self, tab: ManaBarTab, ctx: &mut ViewContext<Self>) {
+        self.tab = tab;
+        self.shown = PAGE_SIZE;
+        self.ensure_loaded(ctx);
+        ctx.notify();
+    }
+
     pub fn set_visible(&mut self, visible: bool, ctx: &mut ViewContext<Self>) {
         if self.visible == visible {
             return;
@@ -380,12 +388,7 @@ impl TypedActionView for ManaBarView {
 
     fn handle_action(&mut self, action: &Self::Action, ctx: &mut ViewContext<Self>) {
         match action {
-            ManaBarAction::SelectTab(tab) => {
-                self.tab = *tab;
-                self.shown = PAGE_SIZE;
-                self.ensure_loaded(ctx);
-                ctx.notify();
-            }
+            ManaBarAction::SelectTab(tab) => self.select_tab(*tab, ctx),
             ManaBarAction::SetLogFilter(filter) => {
                 self.log_filter = *filter;
                 self.shown = PAGE_SIZE;

@@ -26679,6 +26679,14 @@ impl TypedActionView for Workspace {
                     self.toggle_left_panel_view(&LeftPanelAction::ManaBar, is_showing, ctx);
                 }
             }
+            ShowManaBar(tab) => {
+                if self.left_panel_views.contains(&ToolPanelView::ManaBar) {
+                    self.open_left_panel_view(&LeftPanelAction::ManaBar, ctx);
+                    self.left_panel_view.update(ctx, |left_panel, ctx| {
+                        left_panel.select_mana_bar_tab(*tab, ctx);
+                    });
+                }
+            }
             ToggleConversationListView => {
                 if FeatureFlag::AgentViewConversationListView.is_enabled() {
                     let is_showing = self.left_panel_view.as_ref(ctx).active_view()

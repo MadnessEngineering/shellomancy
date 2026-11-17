@@ -16,7 +16,7 @@
 //! Nothing here touches the network except that upload. The list of mapped
 //! folders lives next to the maps in `index.json`.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -127,7 +127,12 @@ pub struct CodeMaps {
     watched_git_dirs: HashSet<PathBuf>,
     /// Folders with a re-map waiting out the hourly limit.
     remap_scheduled: HashSet<PathBuf>,
+    /// Called once when a folder's current map finishes, for `/map`'s toast.
+    when_mapped: HashMap<PathBuf, Vec<WhenMapped>>,
 }
+
+/// Told how a map went: the folder as it now stands.
+pub type WhenMapped = Box<dyn FnOnce(&MappedFolder, &mut ModelContext<CodeMaps>)>;
 
 impl Entity for CodeMaps {
     type Event = CodeMapsEvent;
@@ -153,6 +158,7 @@ impl CodeMaps {
             refs_watcher,
             watched_git_dirs: HashSet::new(),
             remap_scheduled: HashSet::new(),
+            when_mapped: HashMap::new(),
         };
         let git_dirs: Vec<PathBuf> = me
             .folders
@@ -187,6 +193,14 @@ impl CodeMaps {
 
     /// Maps `path` (adding it to the list if it's new) and, when signed in with
     /// uploads on, sends the map to Inventorium.
+    /// Like [`Self::map`], then calls `done` once the map finishes (or the
+    /// one already running does). Not called if the folder is forgotten first.
+    pub fn map_then(&mut self, path: PathBuf, done: WhenMapped, ctx: &mut ModelContext<Self>) {
+        let path = path.canonicalize().unwrap_or(path);
+        self.when_mapped.entry(path.clone()).or_default().push(done);
+        self.map(path, ctx);
+    }
+
     pub fn map(&mut self, path: PathBuf, ctx: &mut ModelContext<Self>) {
         let path = path.canonicalize().unwrap_or(path);
         if self.mapping.contains(&path) {
@@ -252,6 +266,12 @@ impl CodeMaps {
                     me.watch_refs(git_dir, ctx);
                 }
                 me.changed(ctx);
+                let waiting = me.when_mapped.remove(&path).unwrap_or_default();
+                if let Some(folder) = me.folders.iter().find(|f| f.path == path).cloned() {
+                    for done in waiting {
+                        done(&folder, ctx);
+                    }
+                }
             },
         );
     }
