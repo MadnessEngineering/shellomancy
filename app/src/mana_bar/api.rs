@@ -372,6 +372,63 @@ pub fn project_name(repo_folder: Option<&str>) -> Option<String> {
         .filter(|name| !name.is_empty())
 }
 
+/// The Omnispindle project for a folder: the lowercased name of the nearest
+/// enclosing folder with a `.git` entry (a directory, or the file a submodule
+/// has), or `None` outside a repo. Shared with the context chips.
+pub fn project_for_path(path: &std::path::Path) -> Option<String> {
+    let root = path.ancestors().find(|dir| dir.join(".git").exists())?;
+    project_name(root.file_name().and_then(|name| name.to_str()))
+}
+
+/// The project names of a repo's submodules, from its `.gitmodules`: each
+/// `path = ...` entry's last folder, lowercased, without repeats.
+pub fn submodule_projects(gitmodules: &str) -> Vec<String> {
+    let mut projects: Vec<String> = Vec::new();
+    for line in gitmodules.lines() {
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if key.trim() != "path" {
+            continue;
+        }
+        let name = value
+            .trim()
+            .trim_end_matches('/')
+            .rsplit('/')
+            .next()
+            .unwrap_or_default();
+        if let Some(project) = project_name(Some(name))
+            && !projects.contains(&project)
+        {
+            projects.push(project);
+        }
+    }
+    projects
+}
+
+/// The Mana Bar's project key for a repo with submodules: the repo's own
+/// project first, then its submodules', comma-separated (Inventorium filters
+/// a comma list with `$in`). Just the repo's project when it has none.
+pub fn project_scope(project: &str, submodules: &[String]) -> String {
+    let mut scope = vec![project.to_owned()];
+    for submodule in submodules {
+        if !scope.contains(submodule) {
+            scope.push(submodule.clone());
+        }
+    }
+    scope.join(",")
+}
+
+/// How to show a project key: its first project and how many more it covers.
+pub fn project_label(key: &str) -> String {
+    let mut projects = key.split(',');
+    let first = projects.next().unwrap_or_default();
+    match projects.count() {
+        0 => first.to_owned(),
+        more => format!("{first} +{more}"),
+    }
+}
+
 /// `GET /api/todos` for one project (or all of them).
 pub fn todos_url(project: Option<&str>) -> Url {
     let limit = match project {

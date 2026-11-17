@@ -418,3 +418,37 @@ fn activity_changes_keep_old_and_new_values_and_the_actor() {
     );
     assert_eq!(entry.fields, vec!["status", "notes", "priority"]);
 }
+
+#[test]
+fn submodule_paths_become_projects() {
+    let gitmodules = "[submodule \"projects/common/Inventorium\"]\n\tpath = projects/common/Inventorium\n\turl = git@github.com:x/Inventorium.git\n[submodule \"Omnispindle\"]\n\tpath = projects/common/Omnispindle/\n[submodule \"dup\"]\n\tpath = other/inventorium\n";
+    assert_eq!(
+        submodule_projects(gitmodules),
+        vec!["inventorium".to_owned(), "omnispindle".to_owned()]
+    );
+    assert!(submodule_projects("").is_empty());
+}
+
+#[test]
+fn a_repo_with_submodules_scopes_to_all_of_them() {
+    let subs = vec!["inventorium".to_owned(), "madness_interactive".to_owned()];
+    let scope = project_scope("madness_interactive", &subs);
+    assert_eq!(scope, "madness_interactive,inventorium");
+    assert_eq!(project_label(&scope), "madness_interactive +1");
+    assert_eq!(project_scope("solo", &[]), "solo");
+    assert_eq!(project_label("solo"), "solo");
+    // The list goes to Inventorium as one comma-separated value.
+    assert!(
+        todos_url(Some(&scope))
+            .query()
+            .unwrap()
+            .contains("project=madness_interactive%2Cinventorium")
+    );
+}
+
+#[test]
+fn project_for_path_finds_the_nearest_repo() {
+    let here = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    assert_eq!(project_for_path(&here), Some("shellomancy".to_owned()));
+    assert_eq!(project_for_path(std::path::Path::new("/")), None);
+}

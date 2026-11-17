@@ -612,9 +612,10 @@ impl ManaBarView {
     ) -> Box<dyn Element> {
         let ui = appearance.ui_builder();
         let heading = match (&self.project, self.all_projects) {
-            (Some(project), false) => {
-                madness_themes::tf("shellomancy.manaBar.logHeading", &[("project", project)])
-            }
+            (Some(project), false) => madness_themes::tf(
+                "shellomancy.manaBar.logHeading",
+                &[("project", &api::project_label(project))],
+            ),
             _ => madness_themes::t("shellomancy.manaBar.logHeadingAll").to_owned(),
         };
         let entries = fetch.and_then(Fetch::data);
@@ -835,9 +836,10 @@ impl ManaBarView {
         appearance: &Appearance,
     ) -> Box<dyn Element> {
         let heading = match (&self.project, self.all_projects) {
-            (Some(project), false) => {
-                madness_themes::tf("shellomancy.manaBar.todosHeading", &[("project", project)])
-            }
+            (Some(project), false) => madness_themes::tf(
+                "shellomancy.manaBar.todosHeading",
+                &[("project", &api::project_label(project))],
+            ),
             _ => madness_themes::t("shellomancy.manaBar.todosHeadingAll").to_owned(),
         };
         let todos = fetch.and_then(Fetch::data);
@@ -857,7 +859,7 @@ impl ManaBarView {
                 let empty = match (&self.project, self.all_projects) {
                     (Some(project), false) => madness_themes::tf(
                         "shellomancy.manaBar.todosEmpty",
-                        &[("project", project)],
+                        &[("project", &api::project_label(project))],
                     ),
                     _ => madness_themes::t("shellomancy.manaBar.todosEmptyAll").to_owned(),
                 };
@@ -896,7 +898,14 @@ impl ManaBarView {
             priority_color,
             appearance,
         ));
-        if self.all_projects || self.project.is_none() {
+        // Name the project whenever the list spans more than one (all
+        // projects, or a repo plus its submodules).
+        let many_projects = self.all_projects
+            || self
+                .project
+                .as_deref()
+                .is_none_or(|project| project.contains(','));
+        if many_projects {
             pills.add_child(chip(todo.project.clone(), appearance));
         }
         let done_tooltip = ui

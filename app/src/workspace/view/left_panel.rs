@@ -1297,6 +1297,19 @@ impl LeftPanelView {
             .focused_repo(pane_group.id());
         let project =
             crate::mana_bar::api::project_name(repo.as_ref().and_then(|repo| repo.file_name()));
+        // A repo with submodules (the lab root) also covers each submodule's
+        // project. Only local repos have a .gitmodules we can read.
+        let project = project.map(|project| {
+            let submodules = match &repo {
+                Some(warp_util::local_or_remote_path::LocalOrRemotePath::Local(root)) => {
+                    std::fs::read_to_string(root.join(".gitmodules"))
+                        .map(|text| crate::mana_bar::api::submodule_projects(&text))
+                        .unwrap_or_default()
+                }
+                _ => Vec::new(),
+            };
+            crate::mana_bar::api::project_scope(&project, &submodules)
+        });
         self.mana_bar_view
             .update(ctx, |view, ctx| view.set_project(project, ctx));
     }
