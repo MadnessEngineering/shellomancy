@@ -118,6 +118,24 @@ pub enum SlashCommandKind {
     VimMode,
     Status,
     CopyDebuggingId,
+    /// Shellomancy: the Madness Interactive commands (Omnispindle, Code Maps, sync).
+    Madness(MadnessSlash),
+}
+
+/// Shellomancy: which Madness command. One [`SlashCommandKind`] variant covers
+/// them all so Warp's matches on the kind only grow by one arm.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MadnessSlash {
+    /// `/todo <text>`: a todo in this repo's Omnispindle project.
+    Todo,
+    /// `/lesson <text>`: a lesson tagged with this repo's project.
+    Lesson,
+    /// `/map`: map this repo with cartogomancy (Code Maps).
+    Map,
+    /// `/quest`: the active quest here and its next step.
+    Quest,
+    /// `/sync`: sync settings with Inventorium now.
+    Sync,
 }
 
 /// The application surfaces on which a static slash command is implemented.

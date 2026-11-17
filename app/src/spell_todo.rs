@@ -122,7 +122,11 @@ pub fn lesson_body(spell: &Spell) -> Value {
 
 /// Records the lesson; returns it, or a message ready to show.
 pub async fn create_lesson(key: &str, spell: Spell) -> Result<CreatedLesson, String> {
-    let body = lesson_body(&spell);
+    post_lesson(key, lesson_body(&spell)).await
+}
+
+/// Sends a ready lesson body to `POST /api/lessons`.
+pub async fn post_lesson(key: &str, body: Value) -> Result<CreatedLesson, String> {
     let failed =
         |error: String| madness_themes::tf("shellomancy.spell.lessonFailed", &[("error", &error)]);
     let response = http_client::Client::new_external()
@@ -164,7 +168,11 @@ fn language_for(command: &str) -> &'static str {
 
 /// Creates the todo; returns it, or a message ready to show.
 pub async fn create_todo(key: &str, spell: Spell) -> Result<CreatedTodo, String> {
-    let body = todo_body(&spell);
+    post_todo(key, todo_body(&spell)).await
+}
+
+/// Sends a ready todo body to `POST /api/todos`.
+pub async fn post_todo(key: &str, body: Value) -> Result<CreatedTodo, String> {
     let response = http_client::Client::new_external()
         .post(format!("{MADNESS_API_ROOT}/todos"))
         .bearer_auth(key)
@@ -201,7 +209,7 @@ fn created_from_reply(status: u16, reply: &Value, body: &Value) -> Result<Create
 }
 
 /// The lowercase name of the git repo `cwd` is in, else of `cwd` itself.
-fn project_for(cwd: Option<&str>) -> String {
+pub(crate) fn project_for(cwd: Option<&str>) -> String {
     let Some(cwd) = cwd.map(Path::new) else {
         return FALLBACK_PROJECT.to_owned();
     };
@@ -216,16 +224,16 @@ fn project_for(cwd: Option<&str>) -> String {
 }
 
 /// Blanks out anything that looks like a secret.
-fn redact(text: &mut String) {
+pub(crate) fn redact(text: &mut String) {
     crate::server::telemetry::secret_redaction::redact_secrets_in_string(text);
     secret_redaction::redact_secrets(text);
 }
 
-fn first_line(text: &str) -> &str {
+pub(crate) fn first_line(text: &str) -> &str {
     text.lines().next().unwrap_or_default()
 }
 
-fn truncate_chars(text: &str, max: usize) -> String {
+pub(crate) fn truncate_chars(text: &str, max: usize) -> String {
     match text.char_indices().nth(max) {
         Some((cut, _)) => format!("{}…", &text[..cut]),
         None => text.to_owned(),

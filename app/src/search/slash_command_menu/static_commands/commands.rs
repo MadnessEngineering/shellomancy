@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use warp_core::features::FeatureFlag;
 
-use super::{Availability, SlashCommandKind, SlashCommandSurfaces};
+use super::{Availability, MadnessSlash, SlashCommandKind, SlashCommandSurfaces};
 use crate::search::slash_command_menu::StaticCommand;
 use crate::search::slash_command_menu::static_commands::Argument;
 use crate::ui_components::color_dot;
@@ -86,6 +86,86 @@ pub const MCP: StaticCommand = StaticCommand {
     auto_enter_ai_mode: false,
     argument: None,
 };
+
+/// Shellomancy: `/todo <text>` files a todo in this repo's Omnispindle project.
+pub static MADNESS_TODO: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
+    name: "/todo",
+    description: madness_themes::t("shellomancy.slash.todo.description"),
+    kind: SlashCommandKind::Madness(MadnessSlash::Todo),
+    supported_surfaces: SlashCommandSurfaces::GuiOnly {
+        icon_path: "bundled/svg/block-tasklist.svg",
+    },
+    availability: Availability::ALWAYS,
+    auto_enter_ai_mode: false,
+    argument: Some(
+        Argument::required().with_hint_text(madness_themes::t("shellomancy.slash.todo.hint")),
+    ),
+});
+
+/// Shellomancy: `/lesson <text>` writes down a lesson tagged with this repo.
+pub static MADNESS_LESSON: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
+    name: "/lesson",
+    description: madness_themes::t("shellomancy.slash.lesson.description"),
+    kind: SlashCommandKind::Madness(MadnessSlash::Lesson),
+    supported_surfaces: SlashCommandSurfaces::GuiOnly {
+        icon_path: "bundled/svg/book-open.svg",
+    },
+    availability: Availability::ALWAYS,
+    auto_enter_ai_mode: false,
+    argument: Some(
+        Argument::required().with_hint_text(madness_themes::t("shellomancy.slash.lesson.hint")),
+    ),
+});
+
+/// Shellomancy: `/map` maps this repo with cartogomancy.
+pub static MADNESS_MAP: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
+    name: "/map",
+    description: madness_themes::t("shellomancy.slash.map.description"),
+    kind: SlashCommandKind::Madness(MadnessSlash::Map),
+    supported_surfaces: SlashCommandSurfaces::GuiOnly {
+        icon_path: "bundled/svg/compass-3.svg",
+    },
+    availability: Availability::LOCAL,
+    auto_enter_ai_mode: false,
+    argument: None,
+});
+
+/// Shellomancy: `/quest` shows this repo's active quest and its next step.
+pub static MADNESS_QUEST: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
+    name: "/quest",
+    description: madness_themes::t("shellomancy.slash.quest.description"),
+    kind: SlashCommandKind::Madness(MadnessSlash::Quest),
+    supported_surfaces: SlashCommandSurfaces::GuiOnly {
+        icon_path: "bundled/svg/completion-flag.svg",
+    },
+    availability: Availability::ALWAYS,
+    auto_enter_ai_mode: false,
+    argument: None,
+});
+
+/// Shellomancy: `/sync` syncs settings with Inventorium now.
+pub static MADNESS_SYNC: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
+    name: "/sync",
+    description: madness_themes::t("shellomancy.slash.sync.description"),
+    kind: SlashCommandKind::Madness(MadnessSlash::Sync),
+    supported_surfaces: SlashCommandSurfaces::GuiOnly {
+        icon_path: "bundled/svg/refresh.svg",
+    },
+    availability: Availability::ALWAYS,
+    auto_enter_ai_mode: false,
+    argument: None,
+});
+
+/// Shellomancy: the Madness commands, in menu order.
+pub fn madness_commands() -> Vec<StaticCommand> {
+    vec![
+        MADNESS_TODO.clone(),
+        MADNESS_LESSON.clone(),
+        MADNESS_MAP.clone(),
+        MADNESS_QUEST.clone(),
+        MADNESS_SYNC.clone(),
+    ]
+}
 
 pub const VIEW_LOGS: StaticCommand = StaticCommand {
     name: "/view-logs",
@@ -1105,6 +1185,10 @@ fn all_commands_for_all_surfaces() -> Vec<StaticCommand> {
         commands.push(HOST.clone());
         commands.push(HARNESS.clone());
         commands.push(ENVIRONMENT.clone());
+    }
+
+    if crate::channel::ChannelState::channel() == crate::channel::Channel::Oss {
+        commands.extend(madness_commands());
     }
 
     commands

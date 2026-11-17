@@ -1,0 +1,97 @@
+[
+ {
+  "key": "shellomancy.slash.todo.description",
+  "standard": "Add a todo to this repo's Omnispindle project",
+  "shellomancer": "Hand Omnispindle a todo for this repo"
+ },
+ {
+  "key": "shellomancy.slash.todo.hint",
+  "standard": "<what needs doing, !high or !low first to set priority>",
+  "shellomancer": "<what needs doing; lead with !high or !low if it matters>"
+ },
+ {
+  "key": "shellomancy.slash.todo.empty",
+  "standard": "Say what the todo is after /todo.",
+  "shellomancer": "/todo needs something to do. Omnispindle won't file a blank."
+ },
+ {
+  "key": "shellomancy.slash.lesson.description",
+  "standard": "Record a lesson tagged with this repo",
+  "shellomancer": "Write down what the universe just taught you"
+ },
+ {
+  "key": "shellomancy.slash.lesson.hint",
+  "standard": "<what you learned; the first line becomes the topic>",
+  "shellomancer": "<what you learned; the first line is the topic>"
+ },
+ {
+  "key": "shellomancy.slash.lesson.empty",
+  "standard": "Say what the lesson is after /lesson.",
+  "shellomancer": "/lesson needs the lesson. Knowing you learned something isn't the same as writing it down."
+ },
+ {
+  "key": "shellomancy.slash.map.description",
+  "standard": "Map this repo with cartogomancy (Code Maps)",
+  "shellomancer": "Have cartogomancy survey this repo"
+ },
+ {
+  "key": "shellomancy.slash.map.noFolder",
+  "standard": "There's no folder to map yet. Run a command here first.",
+  "shellomancer": "Nothing to survey yet; cast a spell here first so we know where here is."
+ },
+ {
+  "key": "shellomancy.slash.map.started",
+  "standard": "Mapping {{folder}}. The map shows up in Settings > Code Maps.",
+  "shellomancer": "Cartogomancy is surveying {{folder}}. The map lands in Settings > Code Maps."
+ },
+ {
+  "key": "shellomancy.slash.map.alreadyMapping",
+  "standard": "{{folder}} is already being mapped.",
+  "shellomancer": "Cartogomancy is already surveying {{folder}}. It doesn't go faster when watched."
+ },
+ {
+  "key": "shellomancy.slash.quest.description",
+  "standard": "Show this repo's active quest and its next step",
+  "shellomancer": "Ask what this repo's quest wants from you next"
+ },
+ {
+  "key": "shellomancy.slash.quest.next",
+  "standard": "{{quest}}: {{progress}} done. Next: {{next}}",
+  "shellomancer": "{{quest}}, {{progress}} done. Next it wants: {{next}}"
+ },
+ {
+  "key": "shellomancy.slash.quest.noNext",
+  "standard": "{{quest}}: {{progress}} done. Nothing is ready to start.",
+  "shellomancer": "{{quest}}, {{progress}} done. Everything left is waiting on something else."
+ },
+ {
+  "key": "shellomancy.slash.quest.more",
+  "standard": "({{count}} more in the Mana Bar.)",
+  "shellomancer": "({{count}} more in the Mana Bar.)"
+ },
+ {
+  "key": "shellomancy.slash.quest.none",
+  "standard": "No active quest in {{project}}.",
+  "shellomancer": "{{project}} has no quest underway. Enjoy it while it lasts."
+ },
+ {
+  "key": "shellomancy.slash.quest.noneAnywhere",
+  "standard": "No active quests.",
+  "shellomancer": "No quests underway anywhere. Suspicious."
+ },
+ {
+  "key": "shellomancy.slash.sync.description",
+  "standard": "Sync settings with Inventorium now",
+  "shellomancer": "Compare notes with Inventorium now"
+ },
+ {
+  "key": "shellomancy.slash.sync.started",
+  "standard": "Syncing with Inventorium.",
+  "shellomancer": "Comparing notes with Inventorium."
+ },
+ {
+  "key": "shellomancy.slash.sync.off",
+  "standard": "Settings sync is off. Turn it on in Settings > Account.",
+  "shellomancer": "Settings sync is off, so there's nothing to compare. Turn it on in Settings > Account."
+ }
+]

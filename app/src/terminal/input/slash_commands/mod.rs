@@ -1,5 +1,6 @@
 mod cloud_mode_v2_view;
 mod data_source;
+mod madness;
 mod mixer;
 mod search_item;
 pub(super) mod view;
@@ -627,6 +628,9 @@ impl Input {
                 } else {
                     ctx.dispatch_typed_action(&TerminalAction::OpenConversationsPalette);
                 }
+            }
+            SlashCommandKind::Madness(which) => {
+                self.execute_madness_slash(which, argument, ctx);
             }
             SlashCommandKind::RenameTab => {
                 let Some(name) = argument
