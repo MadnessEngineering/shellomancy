@@ -858,6 +858,18 @@ pub fn init(app: &mut AppContext) {
         .with_mac_key_binding("ctrl-4")
         .with_linux_or_windows_key_binding("alt-4"),
         EditableBinding::new(
+            "workspace:madness_sync_now",
+            BindingDescription::new(madness_themes::t(
+                "shellomancy.settings.sync.syncNowBinding",
+            )),
+            WorkspaceAction::MadnessSyncNow,
+        )
+        .with_group(bindings::BindingGroup::Settings.as_str())
+        .with_context_predicate(id!("Workspace"))
+        .with_enabled(|| crate::channel::ChannelState::channel() == crate::channel::Channel::Oss)
+        .with_mac_key_binding("cmd-shift-Y")
+        .with_linux_or_windows_key_binding("ctrl-shift-Y"),
+        EditableBinding::new(
             TOGGLE_PROJECT_EXPLORER_BINDING_NAME,
             BindingDescription::new("Toggle project explorer")
                 .with_custom_description(bindings::MAC_MENUS_CONTEXT, "Project Explorer"),

@@ -138,6 +138,8 @@ pub enum MainPageAction {
     /// Shellomancy: settings sync through the Madness account.
     ToggleMadnessSettingsSync,
     MadnessSyncNow,
+    /// Shellomancy: how often settings sync checks madnessinteractive.cc.
+    SetMadnessSyncInterval(u32),
     #[cfg(not(target_family = "wasm"))]
     RefreshIapCredentials,
 }
@@ -266,6 +268,15 @@ impl TypedActionView for MainSettingsPageView {
                 if ctx.has_singleton_model::<SettingsSync>() {
                     SettingsSync::handle(ctx).update(ctx, |sync, ctx| sync.sync_now(ctx));
                 }
+            }
+            MainPageAction::SetMadnessSyncInterval(minutes) => {
+                let minutes = *minutes;
+                MadnessSyncSettings::handle(ctx).update(ctx, |settings, ctx| {
+                    if let Err(err) = settings.pull_interval_minutes.set_value(minutes, ctx) {
+                        log::warn!("Failed to set the settings sync interval: {err:?}");
+                    }
+                });
+                ctx.notify();
             }
             #[cfg(not(target_family = "wasm"))]
             MainPageAction::RefreshIapCredentials => {
@@ -910,7 +921,12 @@ impl SettingsWidget for MadnessAccountWidget {
 struct MadnessSettingsSyncWidget {
     switch_state: SwitchStateHandle,
     sync_now_button: MouseStateHandle,
+    interval_buttons: [MouseStateHandle; SYNC_INTERVAL_CHOICES.len()],
 }
+
+/// The check intervals offered, in minutes. Any value from 1 to 1440 can be
+/// set in settings.toml (`madness.sync_interval_minutes`).
+const SYNC_INTERVAL_CHOICES: [u32; 5] = [1, 5, 10, 30, 60];
 
 impl SettingsWidget for MadnessSettingsSyncWidget {
     type View = MainSettingsPageView;
@@ -997,6 +1013,59 @@ impl SettingsWidget for MadnessSettingsSyncWidget {
             );
         }
         column.add_child(Container::new(row.finish()).with_margin_top(4.).finish());
+        if signed_in {
+            let current = *MadnessSyncSettings::as_ref(app)
+                .pull_interval_minutes
+                .value();
+            let mut choices = Flex::row()
+                .with_cross_axis_alignment(CrossAxisAlignment::Center)
+                .with_child(
+                    Container::new(
+                        ui.span(madness_themes::t("shellomancy.settings.sync.interval").to_owned())
+                            .with_style(UiComponentStyles {
+                                font_color: Some(
+                                    theme.sub_text_color(theme.background()).into_solid(),
+                                ),
+                                ..Default::default()
+                            })
+                            .build()
+                            .finish(),
+                    )
+                    .with_margin_right(8.)
+                    .finish(),
+                );
+            for (minutes, mouse) in SYNC_INTERVAL_CHOICES.iter().zip(&self.interval_buttons) {
+                let minutes = *minutes;
+                let variant = if minutes == current {
+                    ButtonVariant::Accent
+                } else {
+                    ButtonVariant::Secondary
+                };
+                choices.add_child(
+                    Container::new(
+                        ui.button(variant, mouse.clone())
+                            .with_text_label(madness_themes::tf(
+                                "shellomancy.settings.sync.intervalMinutes",
+                                &[("minutes", &minutes.to_string())],
+                            ))
+                            .build()
+                            .on_click(move |ctx, _, _| {
+                                ctx.dispatch_typed_action(MainPageAction::SetMadnessSyncInterval(
+                                    minutes,
+                                ));
+                            })
+                            .finish(),
+                    )
+                    .with_margin_right(6.)
+                    .finish(),
+                );
+            }
+            column.add_child(
+                Container::new(choices.finish())
+                    .with_margin_top(8.)
+                    .finish(),
+            );
+        }
         Container::new(column.finish())
             .with_margin_top(16.)
             .finish()

@@ -22,7 +22,7 @@ use warpui::r#async::Timer;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
 use self::api::{HttpTransport, Pulled, Pushed, SyncError, Transport};
-use self::model::{Key, LocalState, Stamped, SyncDoc, merge};
+use self::model::{Key, LocalState, Stamped, SyncDoc, clamp_minutes, merge};
 use crate::madness_account::{MadnessAccount, MadnessAccountState};
 use crate::settings::madness_sync::{MadnessSyncSettings, MadnessSyncSettingsChangedEvent};
 use crate::settings::madness_voice::{MadnessVoiceSettings, MadnessVoiceSettingsChangedEvent};
@@ -32,7 +32,6 @@ use crate::themes::theme::ThemeKind;
 /// How long after a local change the change is sent.
 const PUSH_DELAY: Duration = Duration::from_secs(2);
 /// How often to look for changes made elsewhere while sync is on.
-const PULL_INTERVAL: Duration = Duration::from_secs(10 * 60);
 /// Retry delays after a network error; the last repeats.
 const RETRY_DELAYS: [Duration; 3] = [
     Duration::from_secs(30),
@@ -70,6 +69,8 @@ pub struct SettingsSync {
     generation: u64,
     /// Bumped to cancel a scheduled push.
     push_generation: u64,
+    /// Bumped to cancel the scheduled check, e.g. when its interval changes.
+    poll_generation: u64,
     retry_level: usize,
     /// A refused push merges and sends again once; never in a loop.
     resent_after_refusal: bool,
@@ -127,6 +128,12 @@ impl SettingsSync {
                 ) {
                     me.sync_now(ctx);
                 }
+                if matches!(
+                    event,
+                    MadnessSyncSettingsChangedEvent::MadnessSyncIntervalMinutes { .. }
+                ) {
+                    me.restart_polling(ctx);
+                }
             });
         }
         let me = Self {
@@ -135,6 +142,7 @@ impl SettingsSync {
             transport,
             generation: 0,
             push_generation: 0,
+            poll_generation: 0,
             retry_level: 0,
             resent_after_refusal: false,
         };
@@ -382,9 +390,12 @@ impl SettingsSync {
         self.schedule_poll(self.generation, ctx);
     }
 
+    /// Schedules the next check, cancelling any already scheduled.
     fn schedule_poll(&mut self, generation: u64, ctx: &mut ModelContext<Self>) {
-        let _ = ctx.spawn(Timer::after(PULL_INTERVAL), move |me, _, ctx| {
-            if me.generation != generation {
+        self.poll_generation += 1;
+        let poll_generation = self.poll_generation;
+        let _ = ctx.spawn(Timer::after(pull_interval(ctx)), move |me, _, ctx| {
+            if me.generation != generation || me.poll_generation != poll_generation {
                 return;
             }
             if !matches!(me.status, SyncStatus::Refused(_)) {
@@ -392,6 +403,12 @@ impl SettingsSync {
             }
             me.schedule_poll(generation, ctx);
         });
+    }
+
+    /// Checks again now and restarts the poll timer, after the interval
+    /// setting changed.
+    pub fn restart_polling(&mut self, ctx: &mut ModelContext<Self>) {
+        self.schedule_poll(self.generation, ctx);
     }
 
     fn wants_pull(&self, ctx: &AppContext) -> bool {
@@ -504,4 +521,17 @@ pub fn voice_pending_restart(ctx: &AppContext) -> Option<String> {
             .find(|voice| &voice.id == wanted)
             .map_or_else(|| wanted.clone(), |voice| voice.name.clone())
     })
+}
+
+/// How long to wait between checks: the interval setting, kept to 1 minute
+/// to a day.
+fn pull_interval(ctx: &AppContext) -> Duration {
+    let minutes = if ctx.has_singleton_model::<MadnessSyncSettings>() {
+        *MadnessSyncSettings::as_ref(ctx)
+            .pull_interval_minutes
+            .value()
+    } else {
+        10
+    };
+    Duration::from_secs(u64::from(clamp_minutes(minutes)) * 60)
 }

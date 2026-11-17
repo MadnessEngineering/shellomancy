@@ -24906,6 +24906,12 @@ impl TypedActionView for Workspace {
             SendFeedback => self.send_feedback(ctx),
             #[cfg(not(target_family = "wasm"))]
             ViewLogs => self.view_logs(ctx),
+            MadnessSyncNow => {
+                if ctx.has_singleton_model::<crate::madness_sync::SettingsSync>() {
+                    crate::madness_sync::SettingsSync::handle(ctx)
+                        .update(ctx, |sync, ctx| sync.sync_now(ctx));
+                }
+            }
             ChangeCursor(cursor) => self.change_cursor(*cursor, ctx),
             ToggleErrorUnderlining => self.toggle_error_underlining(ctx),
             ToggleSyntaxHighlighting => self.toggle_syntax_highlighting(ctx),

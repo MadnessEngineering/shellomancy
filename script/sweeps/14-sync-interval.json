@@ -1,0 +1,5 @@
+[
+ {"key": "shellomancy.settings.sync.syncNowBinding", "standard": "Sync settings now", "shellomancer": "Sync settings now"},
+ {"key": "shellomancy.settings.sync.interval", "standard": "Check every", "shellomancer": "Check in every"},
+ {"key": "shellomancy.settings.sync.intervalMinutes", "standard": "{{minutes}} min", "shellomancer": "{{minutes}} min"}
+]

@@ -388,6 +388,8 @@ pub enum WorkspaceAction {
     OpenWarpDrive,
     /// Shellomancy: toggles the Mana Bar tab of the tools panel.
     ToggleManaBar,
+    /// Shellomancy: settings sync checks madnessinteractive.cc right away.
+    MadnessSyncNow,
     /// Toggles the right panel. This happens as an explicit action from the user.
     ToggleRightPanel,
     /// Opens the code review panel (right panel) without toggling. If already open,
@@ -1255,6 +1257,7 @@ impl WorkspaceAction {
             | UseLocalOpenCodeWarpPlugin => false,
             #[cfg(not(target_family = "wasm"))]
             ViewLogs => false,
+            MadnessSyncNow => false,
             #[cfg(target_os = "macos")]
             SampleProcess => false,
             #[cfg(target_os = "macos")]

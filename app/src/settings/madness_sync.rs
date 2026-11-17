@@ -38,6 +38,17 @@ define_settings_group!(MadnessSyncSettings, settings: [
         toml_path: "appearance.follow_inventorium_voice",
         description: "Whether the voice follows the one picked on madnessinteractive.cc (applies after a restart).",
     },
+    pull_interval_minutes: MadnessSyncIntervalMinutes {
+        type: u32,
+        default: 10,
+        supported_platforms: SupportedPlatforms::DESKTOP,
+        sync_to_cloud: SyncToCloud::Never,
+        surface: settings::SettingSurfaces::GUI,
+        private: false,
+        storage_key: "MadnessSyncIntervalMinutes",
+        toml_path: "madness.sync_interval_minutes",
+        description: "How often, in minutes, settings sync checks madnessinteractive.cc for changes (1 to 1440).",
+    },
     // What was last synced and when each value changed, as JSON. Not a
     // user-visible setting.
     state: MadnessSyncState {

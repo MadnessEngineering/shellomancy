@@ -203,3 +203,11 @@ fn unsent_changes_are_those_newer_than_the_last_ack() {
     assert_eq!(LocalState::from_json(&state.to_json()), state);
     assert_eq!(LocalState::from_json("not json"), LocalState::default());
 }
+
+#[test]
+fn check_interval_is_kept_to_a_minute_to_a_day() {
+    assert_eq!(clamp_minutes(0), 1);
+    assert_eq!(clamp_minutes(10), 10);
+    assert_eq!(clamp_minutes(1440), 1440);
+    assert_eq!(clamp_minutes(100_000), MAX_PULL_MINUTES);
+}

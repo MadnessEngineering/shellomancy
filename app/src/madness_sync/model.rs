@@ -212,6 +212,14 @@ impl LocalState {
     }
 }
 
+/// The longest check interval allowed, a day.
+pub const MAX_PULL_MINUTES: u32 = 24 * 60;
+
+/// A check interval kept to 1 minute to a day, whatever settings.toml says.
+pub fn clamp_minutes(minutes: u32) -> u32 {
+    minutes.clamp(1, MAX_PULL_MINUTES)
+}
+
 #[cfg(test)]
 #[path = "model_tests.rs"]
 mod tests;
