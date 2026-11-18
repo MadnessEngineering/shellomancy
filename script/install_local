@@ -48,10 +48,52 @@ case "$(uname -m)" in
 esac
 BUILT="$REPO/target/$TARGET/debug/bundle/osx/Shellomancy.app"
 
+# Kills a process and everything it started (bundle -> cargo -> rustc).
+kill_tree() {
+  local child
+  for child in $(pgrep -P "$1" 2>/dev/null); do
+    kill_tree "$child"
+  done
+  kill -TERM "$1" 2>/dev/null || true
+}
+
+# One install at a time, and the newest wins: an older install_local that's
+# still building is stopped (with its cargo/rustc) instead of queueing behind
+# it. Builds of the same target/ already wait on cargo's lock; this keeps a
+# stale one from holding the machine for half an hour.
+LOCK="$REPO/target/.install_local.pid"
+mkdir -p "$REPO/target"
+if [[ -f "$LOCK" ]]; then
+  OLD="$(cat "$LOCK" 2>/dev/null || true)"
+  if [[ -n "$OLD" && "$OLD" != "$$" ]] && kill -0 "$OLD" 2>/dev/null; then
+    echo "Stopping an older install still building (pid $OLD)"
+    kill_tree "$OLD"
+    for _ in $(seq 1 30); do
+      kill -0 "$OLD" 2>/dev/null || break
+      sleep 1
+    done
+  fi
+fi
+echo $$ >"$LOCK"
+cleanup() {
+  # Stop our own build if we're interrupted, and release the lock if it's ours.
+  for child in $(pgrep -P $$ 2>/dev/null); do
+    kill_tree "$child"
+  done
+  if [[ "$(cat "$LOCK" 2>/dev/null)" == "$$" ]]; then
+    rm -f "$LOCK"
+  fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
 if $BUILD; then
   # script/bundle uses repo-relative paths, so build from the repo root.
-  # No cargo-about locally, so skip the third-party licenses file.
-  (cd "$REPO" && NO_LICENSES=1 ./script/bundle --channel oss --debug --nouniversal --selfsign --nodmg)
+  # No cargo-about locally, so skip the third-party licenses file. Builds run
+  # at low priority with fewer parallel jobs (override CARGO_BUILD_JOBS) so
+  # the machine stays usable meanwhile.
+  (cd "$REPO" && NO_LICENSES=1 CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-6}" \
+    nice -n 10 ./script/bundle --channel oss --debug --nouniversal --selfsign --nodmg)
 fi
 if [[ ! -x "$BUILT/Contents/MacOS/warp-oss" ]]; then
   echo "install_local: no build at $BUILT" >&2
@@ -91,6 +133,11 @@ if [[ -L "$CLI_LINK" ]]; then
     fi
   fi
 fi
+
+# Clean up after ourselves: incremental-compilation caches cargo no longer uses
+# (older than a week) pile up into tens of GB in target/.
+find "$REPO/target" -maxdepth 4 -type d -path "*/incremental/*" -mtime +7 \
+  -prune -exec rm -rf {} + 2>/dev/null || true
 
 echo "Installed $DEST"
 if $OPEN; then
