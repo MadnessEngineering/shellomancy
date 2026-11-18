@@ -14,8 +14,8 @@ It's a `uv` script, so `uv` fetches `paho-mqtt` on first run. It uses the same s
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `MADNESS_MQTT_HOST` | `localhost` | broker host |
-| `MADNESS_MQTT_PORT` | `1883` | broker port |
+| `MADNESS_MQTT_HOST` | `localhost` | broker host; falls back to `~/.mad/mqtt.env` |
+| `MADNESS_MQTT_PORT` | `1883` | broker port (eaws: `4140`); falls back to `~/.mad/mqtt.env` |
 | `DeNa` | `macbook` | device name in topics |
 | `SHELLOMANCY_MQTT_POLL` | `5` | seconds between state polls |
 

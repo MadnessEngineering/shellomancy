@@ -236,5 +236,29 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(state["instances"][0]["instance_id"], "inst_test")
 
 
+class BrokerLookupTest(unittest.TestCase):
+    """The environment, then ~/.mad/mqtt.env, then localhost:1883."""
+
+    def test_lookup_order(self):
+        shared = {"MADNESS_MQTT_HOST": "broker.example", "MADNESS_MQTT_PORT": "4140"}
+        self.assertEqual(bridge_mod.broker(environ={}, shared={}), ("localhost", 1883))
+        self.assertEqual(bridge_mod.broker(environ={}, shared=shared), ("broker.example", 4140))
+        self.assertEqual(
+            bridge_mod.broker(environ={"MADNESS_MQTT_HOST": "env.example"}, shared=shared),
+            ("env.example", 4140),
+        )
+
+    def test_reads_key_values(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "mqtt.env"
+            path.write_text("# comment\nMADNESS_MQTT_HOST='b.example'\nMADNESS_MQTT_PORT=4140\n")
+            self.assertEqual(
+                bridge_mod.mad_mqtt_env(str(path)),
+                {"MADNESS_MQTT_HOST": "b.example", "MADNESS_MQTT_PORT": "4140"},
+            )
+            self.assertEqual(bridge_mod.mad_mqtt_env(str(Path(tmp) / "missing")), {})
+
+
 if __name__ == "__main__":
     unittest.main()
+

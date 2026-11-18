@@ -21,7 +21,8 @@ Never accepts a command string: `attach` builds `claude attach <id8>` itself
 from a hex session id, so anyone who can publish to the broker can at most
 attach to an existing Claude session or focus a tab.
 
-Environment: MADNESS_MQTT_HOST (default localhost), MADNESS_MQTT_PORT (1883),
+Environment: MADNESS_MQTT_HOST / MADNESS_MQTT_PORT, else ~/.mad/mqtt.env (shared
+by the Madness tools), else localhost:1883 (the eaws broker is on 4140),
 DeNa (device name, default macbook), SHELLOMANCY_MQTT_POLL (seconds, default 5).
 
 Run: script/shellomancy_mqtt/shellomancy_mqtt.py   (uv fetches paho-mqtt)
@@ -198,11 +199,36 @@ def diff_events(old: Optional[Dict[str, Any]], new: Dict[str, Any]) -> List[Dict
     return events
 
 
+MAD_MQTT_ENV = os.path.expanduser("~/.mad/mqtt.env")
+
+
+def mad_mqtt_env(path: str = MAD_MQTT_ENV) -> dict:
+    """KEY=VALUE lines from ~/.mad/mqtt.env; empty if it's missing."""
+    values = {}
+    try:
+        with open(path) as handle:
+            for line in handle:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    values[key.strip()] = value.strip().strip("'\"")
+    except OSError:
+        pass
+    return values
+
+
+def broker(environ=os.environ, shared=None) -> tuple:
+    """The environment, then ~/.mad/mqtt.env, then localhost:1883."""
+    shared = mad_mqtt_env() if shared is None else shared
+    host = environ.get("MADNESS_MQTT_HOST") or shared.get("MADNESS_MQTT_HOST") or "localhost"
+    port = int(environ.get("MADNESS_MQTT_PORT") or shared.get("MADNESS_MQTT_PORT") or 1883)
+    return host, port
+
+
 def main() -> int:
     import paho.mqtt.client as mqtt
 
-    host = os.environ.get("MADNESS_MQTT_HOST", "localhost")
-    port = int(os.environ.get("MADNESS_MQTT_PORT", "1883"))
+    host, port = broker()
     device = os.environ.get("DeNa", "macbook")
     interval = float(os.environ.get("SHELLOMANCY_MQTT_POLL", "5"))
 
