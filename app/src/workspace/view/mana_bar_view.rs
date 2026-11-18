@@ -9,7 +9,10 @@
 //! only decides which project to ask about and polls while it's on screen.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::Duration;
+
+use parking_lot::RwLock;
 
 use pathfinder_color::ColorU;
 use warp_core::ui::Icon;
@@ -19,9 +22,10 @@ use warpui::elements::{
     Border, ChildView, Clipped, ClippedScrollStateHandle, ClippedScrollable, ConstrainedBox,
     Container, CornerRadius, CrossAxisAlignment, Element, Empty, Expanded, Fill, Flex, Hoverable,
     MainAxisAlignment, MainAxisSize, MouseStateHandle, Padding, ParentElement, Radius,
-    ScrollbarWidth, Shrinkable, Wrap,
+    ScrollbarWidth, SelectableArea, SelectionHandle, Shrinkable, Wrap,
 };
 use warpui::fonts::Weight;
+use warpui::keymap::FixedBinding;
 use warpui::platform::Cursor;
 use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
@@ -36,6 +40,7 @@ use crate::mana_bar::api::{self, DASHBOARD_URL};
 use crate::mana_bar::{Fetch, List, ManaBar, ManaBarEvent, ProjectKey};
 use crate::settings_view::SettingsSection;
 use crate::ui_components::buttons::icon_button;
+use crate::util::bindings::CustomAction;
 use crate::view_components::DismissibleToast;
 use crate::workspace::{ToastStack, WorkspaceAction};
 
@@ -55,7 +60,8 @@ const MAX_DETAIL_CHARS: usize = 600;
 /// Width of the field-name column in an unrolled card.
 const FIELD_COLUMN_WIDTH: f32 = 96.;
 /// The buttons an unrolled card can have, keyed `<card>|<slot>`.
-const BUTTON_SLOTS: [&str; 4] = ["id", "ref", "text", "open"];
+/// `head` is the summary a card rolls up from; the rest are buttons.
+const BUTTON_SLOTS: [&str; 7] = ["id", "ref", "text", "open", "done", "all", "head"];
 
 /// Which list the panel shows.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -148,6 +154,21 @@ pub enum ManaBarAction {
         button: String,
         text: String,
     },
+    /// Cmd-C: copies the text selected in the panel.
+    CopySelectedText,
+    /// A selection started; take focus so cmd-C reaches the panel.
+    Focus,
+}
+
+pub fn init(app: &mut AppContext) {
+    use warpui::keymap::macros::*;
+
+    app.register_fixed_bindings([FixedBinding::custom(
+        CustomAction::Copy,
+        ManaBarAction::CopySelectedText,
+        "Copy",
+        id!(ManaBarView::ui_name()) & !id!("IMEOpen"),
+    )]);
 }
 
 #[derive(Default)]
@@ -176,6 +197,9 @@ pub struct ManaBarView {
     copied: Option<String>,
     copy_generation: u64,
     scroll: ClippedScrollStateHandle,
+    /// Text selected by dragging across the panel, for cmd-C.
+    selection: SelectionHandle,
+    selected_text: Arc<RwLock<Option<String>>>,
     header_mouse: HeaderMouseStates,
     /// Per-row mouse states, keyed like `todo:<id>`.
     row_mouse: HashMap<String, MouseStateHandle>,
@@ -235,6 +259,8 @@ impl ManaBarView {
             copied: None,
             copy_generation: 0,
             scroll: Default::default(),
+            selection: SelectionHandle::default(),
+            selected_text: Default::default(),
             header_mouse: Default::default(),
             row_mouse: HashMap::new(),
             completing: HashSet::new(),
@@ -330,7 +356,24 @@ impl ManaBarView {
             .and_then(Fetch::data)
             .into_iter()
             .flatten()
-            .map(|quest| format!("quest:{}", quest.id));
+            .flat_map(|quest| {
+                let card = format!("quest:{}", quest.id);
+                // An unrolled quest's todos have buttons of their own.
+                let todos: Vec<String> = if self.expanded.contains(&card) {
+                    quest
+                        .chains
+                        .iter()
+                        .flat_map(|chain| &chain.todos)
+                        .flat_map(|todo| {
+                            let key = quest_todo_key(&quest.id, &todo.id);
+                            BUTTON_SLOTS.map(|slot| format!("{key}|{slot}"))
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                std::iter::once(card).chain(todos)
+            });
         let lessons = mana_bar
             .lessons()
             .data()
@@ -345,6 +388,8 @@ impl ManaBarView {
             .map(log_card_key);
         let keys: Vec<String> = todos.chain(quests).chain(lessons).chain(log).collect();
         for key in keys {
+            // A card's summary has its own mouse state: only it rolls the card.
+            self.row_mouse.entry(format!("{key}|head")).or_default();
             self.row_mouse.entry(key).or_default();
         }
     }
@@ -361,11 +406,24 @@ impl ManaBarView {
             return;
         };
         let project = self.project_key();
-        let description = ManaBar::as_ref(ctx)
+        let mana_bar = ManaBar::as_ref(ctx);
+        let description = mana_bar
             .todos(&project)
             .and_then(Fetch::data)
             .and_then(|todos| todos.iter().find(|todo| todo.id == id))
             .map(|todo| todo.description.clone())
+            .or_else(|| {
+                // Marked done from a quest card.
+                mana_bar
+                    .quests(&project)
+                    .and_then(Fetch::data)
+                    .into_iter()
+                    .flatten()
+                    .flat_map(|quest| &quest.chains)
+                    .flat_map(|chain| &chain.todos)
+                    .find(|todo| todo.id == id)
+                    .map(|todo| todo.description.clone())
+            })
             .unwrap_or_default();
         self.completing.insert(id.to_owned());
         ctx.notify();
@@ -434,9 +492,18 @@ impl TypedActionView for ManaBarView {
                         self.row_mouse.entry(format!("{card}|{slot}")).or_default();
                     }
                     self.expanded.insert(card.clone());
+                    if card.starts_with("quest:") {
+                        self.sync_row_mouse_states(ctx);
+                    }
                 }
                 ctx.notify();
             }
+            ManaBarAction::CopySelectedText => {
+                if let Some(text) = self.selected_text.read().clone() {
+                    ctx.clipboard().write(ClipboardContent::plain_text(text));
+                }
+            }
+            ManaBarAction::Focus => ctx.focus_self(),
             ManaBarAction::Copy { button, text } => {
                 ctx.clipboard()
                     .write(ClipboardContent::plain_text(text.clone()));
@@ -488,6 +555,17 @@ impl View for ManaBarView {
             theme.main_text_color(theme.background()).into(),
             Fill::None,
         )
+        .finish();
+        // Drag across any card to select its text; cmd-C copies it.
+        let selected_text = self.selected_text.clone();
+        let scrollable = SelectableArea::new(
+            self.selection.clone(),
+            move |selection_args, _, _| {
+                *selected_text.write() = selection_args.selection.filter(|s| !s.is_empty());
+            },
+            scrollable,
+        )
+        .on_selection_updated(|ctx, _| ctx.dispatch_typed_action(ManaBarAction::Focus))
         .finish();
 
         Flex::column()
@@ -715,6 +793,7 @@ impl ManaBarView {
                     .finish(),
                 );
             }
+            let mut unrolled = None;
             if expanded {
                 let details = vec![
                     Detail::copyable("todo_id", entry.todo_id.clone(), "id"),
@@ -728,10 +807,11 @@ impl ManaBarView {
                 } else {
                     vec![changes_block(&entry.changes, appearance)]
                 };
-                lines.add_child(self.render_unrolled(
+                unrolled = Some(self.render_unrolled(
                     &card_key,
                     details,
                     blocks,
+                    changes_text(&entry.changes),
                     vec![self.open_button(
                         &card_key,
                         api::todo_page_url(&entry.todo_id),
@@ -742,7 +822,8 @@ impl ManaBarView {
             }
             section.add_child(card(
                 lines.finish(),
-                self.row_mouse(&card_key),
+                unrolled,
+                self.row_mouse(&format!("{card_key}|head")),
                 ManaBarAction::ToggleCard(card_key.clone()),
                 Some(color),
                 appearance,
@@ -900,12 +981,7 @@ impl ManaBarView {
         ));
         // Name the project whenever the list spans more than one (all
         // projects, or a repo plus its submodules).
-        let many_projects = self.all_projects
-            || self
-                .project
-                .as_deref()
-                .is_none_or(|project| project.contains(','));
-        if many_projects {
+        if self.many_projects() {
             pills.add_child(chip(todo.project.clone(), appearance));
         }
         let done_tooltip = ui
@@ -973,6 +1049,7 @@ impl ManaBarView {
             );
         }
         let card_key = format!("todo:{}", todo.id);
+        let mut unrolled = None;
         if self.expanded.contains(&card_key) {
             let mut details = vec![
                 Detail::copyable("id", todo.id.clone(), "id"),
@@ -995,17 +1072,19 @@ impl ManaBarView {
                     Detail::new(field, value.clone())
                 });
             }
-            content.add_child(self.render_unrolled(
+            unrolled = Some(self.render_unrolled(
                 &card_key,
                 details,
                 vec![],
+                String::new(),
                 vec![self.open_button(&card_key, api::todo_page_url(&todo.id), appearance)],
                 appearance,
             ));
         }
         card(
             content.finish(),
-            self.row_mouse(&card_key),
+            unrolled,
+            self.row_mouse(&format!("{card_key}|head")),
             ManaBarAction::ToggleCard(card_key.clone()),
             Some(priority_color),
             appearance,
@@ -1052,19 +1131,9 @@ impl ManaBarView {
                                 .finish(),
                         )
                         .with_child(
-                            Container::new(muted(
-                                madness_themes::tf(
-                                    "shellomancy.manaBar.questProgress",
-                                    &[
-                                        ("done", &quest.completed.to_string()),
-                                        ("total", &quest.total.to_string()),
-                                        ("pct", &quest.pct.to_string()),
-                                    ],
-                                ),
-                                appearance,
-                            ))
-                            .with_margin_top(4.)
-                            .finish(),
+                            Container::new(self.quest_progress_line(quest, appearance))
+                                .with_margin_top(4.)
+                                .finish(),
                         );
                     if let Some(next) = &quest.next {
                         lines.add_child(
@@ -1088,6 +1157,7 @@ impl ManaBarView {
                         );
                     }
                     let card_key = format!("quest:{}", quest.id);
+                    let mut unrolled = None;
                     if self.expanded.contains(&card_key) {
                         let url = quest
                             .next
@@ -1114,17 +1184,19 @@ impl ManaBarView {
                                 "ref",
                             ));
                         }
-                        lines.add_child(self.render_unrolled(
+                        unrolled = Some(self.render_unrolled(
                             &card_key,
                             details,
-                            vec![],
+                            self.render_quest_chains(quest, appearance),
+                            quest_markdown(quest),
                             vec![self.open_button(&card_key, url, appearance)],
                             appearance,
                         ));
                     }
                     section.add_child(card(
                         lines.finish(),
-                        self.row_mouse(&card_key),
+                        unrolled,
+                        self.row_mouse(&format!("{card_key}|head")),
                         ManaBarAction::ToggleCard(card_key.clone()),
                         Some(accent),
                         appearance,
@@ -1139,6 +1211,167 @@ impl ManaBarView {
         Container::new(section.finish())
             .with_margin_top(SECTION_GAP)
             .finish()
+    }
+
+    /// "10 of 17 done (58%) · 1 blocked", with the project when the list
+    /// spans several.
+    fn quest_progress_line(&self, quest: &api::Quest, appearance: &Appearance) -> Box<dyn Element> {
+        let mut text = madness_themes::tf(
+            "shellomancy.manaBar.questProgress",
+            &[
+                ("done", &quest.completed.to_string()),
+                ("total", &quest.total.to_string()),
+                ("pct", &quest.pct.to_string()),
+            ],
+        );
+        if quest.blocked > 0 {
+            text.push_str(" · ");
+            text.push_str(&madness_themes::tf(
+                "shellomancy.manaBar.questBlocked",
+                &[("count", &quest.blocked.to_string())],
+            ));
+        }
+        let mut row = Flex::row()
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_child(Shrinkable::new(1., muted(text, appearance)).finish());
+        if self.many_projects() && !quest.project.is_empty() {
+            row.add_child(
+                Container::new(chip(quest.project.clone(), appearance))
+                    .with_margin_left(6.)
+                    .finish(),
+            );
+        }
+        row.finish()
+    }
+
+    /// Whether the lists span more than one project (all projects, or a repo
+    /// plus its submodules), so cards name theirs.
+    fn many_projects(&self) -> bool {
+        self.all_projects
+            || self
+                .project
+                .as_deref()
+                .is_none_or(|project| project.contains(','))
+    }
+
+    /// An unrolled quest's chains, as the dashboard lists them: each chain's
+    /// name and count, then its todos in order with what can be done to them.
+    fn render_quest_chains(
+        &self,
+        quest: &api::Quest,
+        appearance: &Appearance,
+    ) -> Vec<Box<dyn Element>> {
+        let accent = appearance.theme().accent().into_solid();
+        let red = appearance.theme().terminal_colors().normal.red.into();
+        quest
+            .chains
+            .iter()
+            .map(|chain| {
+                let mut heading = Flex::row()
+                    .with_cross_axis_alignment(CrossAxisAlignment::Center)
+                    .with_child(mono(
+                        chain.label.to_uppercase(),
+                        MonoTone::Color(accent),
+                        appearance,
+                    ))
+                    .with_child(
+                        Container::new(mono(
+                            format!("{}/{}", chain.completed, chain.total),
+                            MonoTone::Dim,
+                            appearance,
+                        ))
+                        .with_margin_left(8.)
+                        .finish(),
+                    );
+                if chain.blocked > 0 {
+                    heading.add_child(
+                        Container::new(mono(
+                            madness_themes::tf(
+                                "shellomancy.manaBar.questBlocked",
+                                &[("count", &chain.blocked.to_string())],
+                            ),
+                            MonoTone::Color(red),
+                            appearance,
+                        ))
+                        .with_margin_left(8.)
+                        .finish(),
+                    );
+                }
+                let mut column = Flex::column().with_child(
+                    Container::new(heading.finish())
+                        .with_margin_bottom(2.)
+                        .finish(),
+                );
+                for todo in &chain.todos {
+                    column.add_child(self.render_quest_todo(quest, todo, appearance));
+                }
+                column.finish()
+            })
+            .collect()
+    }
+
+    /// One todo in a quest chain: a status glyph, its description (and its
+    /// project, when it isn't the quest's), then copy, open and done buttons.
+    fn render_quest_todo(
+        &self,
+        quest: &api::Quest,
+        todo: &api::QuestTodo,
+        appearance: &Appearance,
+    ) -> Box<dyn Element> {
+        let is_next = quest.next_ids.contains(&todo.id);
+        let (glyph, glyph_tone, text_tone) = quest_todo_look(todo, is_next, appearance);
+        let mut description = if todo.missing || todo.description.is_empty() {
+            madness_themes::t("shellomancy.manaBar.questDeleted").to_owned()
+        } else {
+            one_line(&todo.description)
+        };
+        if !todo.project.is_empty() && todo.project != quest.project {
+            description = format!("{description} · {}", todo.project);
+        }
+        let card = quest_todo_key(&quest.id, &todo.id);
+        let mut row = Flex::row()
+            .with_cross_axis_alignment(CrossAxisAlignment::Start)
+            .with_child(
+                ConstrainedBox::new(mono(glyph.to_owned(), glyph_tone, appearance))
+                    .with_width(16.)
+                    .finish(),
+            )
+            .with_child(Shrinkable::new(1., mono(description, text_tone, appearance)).finish());
+        if !todo.missing {
+            let mut buttons = Flex::row()
+                .with_child(self.copy_button(&card, "id", todo.id.clone(), appearance))
+                .with_child(
+                    Container::new(self.term_button(
+                        &card,
+                        "open",
+                        "↗",
+                        ManaBarAction::OpenUrl(api::todo_page_url(&todo.id)),
+                        appearance,
+                    ))
+                    .with_margin_left(2.)
+                    .finish(),
+                );
+            if !todo.is_done() && !todo.is_cancelled() {
+                let done: Box<dyn Element> = if self.completing.contains(&todo.id) {
+                    mono("[…]".to_owned(), MonoTone::Dim, appearance)
+                } else {
+                    self.term_button(
+                        &card,
+                        "done",
+                        "✓",
+                        ManaBarAction::MarkDone(todo.id.clone()),
+                        appearance,
+                    )
+                };
+                buttons.add_child(Container::new(done).with_margin_left(2.).finish());
+            }
+            row.add_child(
+                Container::new(buttons.finish())
+                    .with_margin_left(6.)
+                    .finish(),
+            );
+        }
+        Container::new(row.finish()).with_margin_bottom(2.).finish()
     }
 
     fn render_lessons(
@@ -1224,6 +1457,7 @@ impl ManaBarView {
                             .finish(),
                     );
                 }
+                let mut unrolled = None;
                 if self.expanded.contains(&card_key) {
                     let details = vec![
                         Detail::copyable("id", lesson.id.clone(), "id"),
@@ -1245,10 +1479,11 @@ impl ManaBarView {
                         },
                         appearance,
                     );
-                    lines.add_child(self.render_unrolled(
+                    unrolled = Some(self.render_unrolled(
                         &card_key,
                         details,
                         vec![mono_block(&lesson.body, appearance)],
+                        lesson.body.clone(),
                         vec![
                             copy_body,
                             self.open_button(&card_key, DASHBOARD_URL.to_owned(), appearance),
@@ -1258,7 +1493,8 @@ impl ManaBarView {
                 }
                 section.add_child(card(
                     lines.finish(),
-                    self.row_mouse(&card_key),
+                    unrolled,
+                    self.row_mouse(&format!("{card_key}|head")),
                     ManaBarAction::ToggleCard(card_key.clone()),
                     Some(lesson_color),
                     appearance,
@@ -1301,15 +1537,34 @@ impl Detail {
 
 impl ManaBarView {
     /// The unrolled part of a card: the fields, then any `blocks` (notes,
-    /// diffs), then the action row.
+    /// diffs), then the action row, led by `[copy all]`: every field as
+    /// `field: value`, uncut, then `extra` (what the blocks show, as text).
     fn render_unrolled(
         &self,
         card: &str,
         details: Vec<Detail>,
         blocks: Vec<Box<dyn Element>>,
-        actions: Vec<Box<dyn Element>>,
+        extra: String,
+        mut actions: Vec<Box<dyn Element>>,
         appearance: &Appearance,
     ) -> Box<dyn Element> {
+        let button = format!("{card}|all");
+        let label = if self.copied.as_deref() == Some(button.as_str()) {
+            madness_themes::t("shellomancy.manaBar.copied")
+        } else {
+            madness_themes::t("shellomancy.manaBar.copyAll")
+        };
+        let copy_all = self.term_button(
+            card,
+            "all",
+            label,
+            ManaBarAction::Copy {
+                button,
+                text: copy_all_text(&details, &extra),
+            },
+            appearance,
+        );
+        actions.insert(0, copy_all);
         let theme = appearance.theme();
         let mut rows = Flex::column();
         for detail in details.into_iter().filter(|d| !d.value.trim().is_empty()) {
@@ -1495,6 +1750,85 @@ fn changes_block(changes: &[api::Change], appearance: &Appearance) -> Box<dyn El
     lines.finish()
 }
 
+/// What `[copy all]` copies: each non-blank field as `field: value`, then
+/// `extra` after a blank line.
+fn copy_all_text(details: &[Detail], extra: &str) -> String {
+    let mut text = details
+        .iter()
+        .filter(|detail| !detail.value.trim().is_empty())
+        .map(|detail| format!("{}: {}", detail.field, detail.value))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let extra = extra.trim();
+    if !extra.is_empty() {
+        if !text.is_empty() {
+            text.push_str("\n\n");
+        }
+        text.push_str(extra);
+    }
+    text
+}
+
+/// An update's changes as the diff the card shows, in plain text.
+fn changes_text(changes: &[api::Change]) -> String {
+    let mut lines = Vec::new();
+    for change in changes {
+        if let Some(old) = &change.old {
+            lines.push(format!("- {}: {old}", change.field));
+        }
+        if let Some(new) = &change.new {
+            lines.push(format!("+ {}: {new}", change.field));
+        }
+        if change.old.is_none() && change.new.is_none() {
+            lines.push(format!("~ {}", change.field));
+        }
+    }
+    lines.join("\n")
+}
+
+/// A quest's chains as a markdown checklist, ids kept for agents:
+/// `## Foundation (1/2)` then `- [x] Sign in (`t1`)`.
+fn quest_markdown(quest: &api::Quest) -> String {
+    let mut sections = Vec::new();
+    for chain in &quest.chains {
+        let mut lines = vec![format!(
+            "## {} ({}/{})",
+            chain.label, chain.completed, chain.total
+        )];
+        for todo in &chain.todos {
+            let mark = if todo.is_done() {
+                "x"
+            } else if todo.is_cancelled() {
+                "-"
+            } else {
+                " "
+            };
+            let description = if todo.missing || todo.description.is_empty() {
+                "(deleted)".to_owned()
+            } else {
+                // Folded to one line, but not cut short: it's for pasting.
+                todo.description
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            };
+            let mut status = String::new();
+            if !todo.is_done()
+                && !todo.is_cancelled()
+                && !matches!(todo.status.as_str(), "" | "pending")
+            {
+                status = format!(" [{}]", todo.status);
+            }
+            if quest.next_ids.contains(&todo.id) {
+                status.push_str(" <- next");
+            }
+            lines.push(format!("- [{mark}] {description}{status} (`{}`)", todo.id));
+        }
+        sections.push(lines.join("\n"));
+    }
+    sections.join("\n\n")
+}
+
 /// `2026-11-16 22:24 (3h)`, in local time; blank for 0.
 pub fn when_label(at: i64, now: i64) -> String {
     if at <= 0 {
@@ -1505,6 +1839,40 @@ pub fn when_label(at: i64, now: i64) -> String {
     };
     let local = local.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M");
     format!("{local} ({})", api::age_label(at, now))
+}
+
+/// The button key prefix for a todo inside a quest card.
+fn quest_todo_key(quest_id: &str, todo_id: &str) -> String {
+    format!("qt:{quest_id}:{todo_id}")
+}
+
+/// How a quest's todo looks: its glyph, the glyph's tone and the text's.
+/// Done and cancelled todos fade; the ones to do next get the accent.
+fn quest_todo_look(
+    todo: &api::QuestTodo,
+    is_next: bool,
+    appearance: &Appearance,
+) -> (&'static str, MonoTone, MonoTone) {
+    let colors = &appearance.theme().terminal_colors().normal;
+    if todo.missing {
+        ("?", MonoTone::Dim, MonoTone::Dim)
+    } else if todo.is_done() {
+        ("✓", MonoTone::Color(colors.green.into()), MonoTone::Dim)
+    } else if todo.is_cancelled() {
+        ("✕", MonoTone::Dim, MonoTone::Dim)
+    } else if todo.status == "blocked" {
+        ("⊘", MonoTone::Color(colors.red.into()), MonoTone::Plain)
+    } else if todo.status == "in_progress" {
+        ("◐", MonoTone::Color(colors.cyan.into()), MonoTone::Plain)
+    } else if is_next {
+        (
+            "▶",
+            MonoTone::Color(appearance.theme().accent().into_solid()),
+            MonoTone::Plain,
+        )
+    } else {
+        ("○", MonoTone::Dim, MonoTone::Plain)
+    }
 }
 
 /// A card's key for a log entry: stable while newer entries arrive above it.
@@ -1809,9 +2177,13 @@ fn fetch_status<T>(fetch: Option<&Fetch<T>>, appearance: &Appearance) -> Option<
     })
 }
 
-/// A bordered card, tinted on hover, with an optional coloured left edge.
+/// A bordered card with an optional coloured left edge. Its summary
+/// (`content`) is what you click to unroll it, tinted on hover; the unrolled
+/// `body` isn't clickable, so a drag there selects text instead of rolling the
+/// card up.
 fn card(
     content: Box<dyn Element>,
+    body: Option<Box<dyn Element>>,
     mouse: MouseStateHandle,
     action: ManaBarAction,
     edge: Option<ColorU>,
@@ -1821,26 +2193,47 @@ fn card(
     let background = theme.surface_1();
     let hover = theme.surface_2();
     let border = theme.surface_3();
-    let inner = Hoverable::new(mouse, move |state| {
-        Container::new(content)
-            .with_uniform_padding(10.)
-            .with_background(if state.is_hovered() {
-                hover
-            } else {
-                background
-            })
-            .with_border(Border::all(1.).with_border_fill(border))
-            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(8.)))
-            .finish()
+    let radius = Radius::Pixels(8.);
+    let (head_corners, head_bottom) = if body.is_some() {
+        (CornerRadius::with_top(radius), 2.)
+    } else {
+        (CornerRadius::with_all(radius), 10.)
+    };
+    let head = Hoverable::new(mouse, move |state| {
+        let mut head = Container::new(content)
+            .with_horizontal_padding(10.)
+            .with_padding_top(10.)
+            .with_padding_bottom(head_bottom)
+            .with_corner_radius(head_corners);
+        if state.is_hovered() {
+            head = head.with_background(hover);
+        }
+        head.finish()
     })
     .with_cursor(Cursor::PointingHand)
     .on_click(move |ctx, _, _| ctx.dispatch_typed_action(action.clone()))
     .finish();
+    let mut column = Flex::column()
+        .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
+        .with_child(head);
+    if let Some(body) = body {
+        column.add_child(
+            Container::new(body)
+                .with_horizontal_padding(10.)
+                .with_padding_bottom(10.)
+                .finish(),
+        );
+    }
+    let inner = Container::new(column.finish())
+        .with_background(background)
+        .with_border(Border::all(1.).with_border_fill(border))
+        .with_corner_radius(CornerRadius::with_all(radius))
+        .finish();
     let mut card = Container::new(inner).with_margin_bottom(8.);
     if let Some(edge) = edge {
         card = card
             .with_border(Border::left(3.).with_border_color(edge))
-            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(8.)));
+            .with_corner_radius(CornerRadius::with_all(radius));
     }
     card.finish()
 }

@@ -85,6 +85,7 @@ pub fn init(app: &mut AppContext) {
     modal::init(app);
     native_modal::init(app);
     lightbox_view::init(app);
+    view::mana_bar_view::init(app);
     rewind_confirmation_dialog::init(app);
     delete_conversation_confirmation_dialog::init(app);
     crate::tab_configs::remove_confirmation_dialog::init(app);

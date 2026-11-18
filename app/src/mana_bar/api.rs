@@ -89,14 +89,54 @@ pub struct Quest {
     pub total: u64,
     pub completed: u64,
     pub pct: u64,
+    /// Todos marked blocked, across every chain.
+    pub blocked: u64,
     /// The first todo that can be worked on next, if any.
     pub next: Option<NextStep>,
+    /// Every todo that can be worked on next (a parallel chain has several).
+    pub next_ids: Vec<String>,
+    /// The quest's chains in order, each with its todos.
+    pub chains: Vec<QuestChain>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct NextStep {
     pub todo_id: String,
     pub description: String,
+}
+
+/// One chain of a quest: a named run of todos and how far along it is.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct QuestChain {
+    pub label: String,
+    /// pending, in_progress, blocked or completed.
+    pub status: String,
+    pub total: u64,
+    pub completed: u64,
+    pub blocked: u64,
+    pub todos: Vec<QuestTodo>,
+}
+
+/// A todo as a quest chain lists it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct QuestTodo {
+    pub id: String,
+    pub status: String,
+    pub description: String,
+    pub project: String,
+    /// Linked to the chain but deleted.
+    pub missing: bool,
+}
+
+impl QuestTodo {
+    /// Completed or in review: what the quest counts as done.
+    pub fn is_done(&self) -> bool {
+        matches!(self.status.as_str(), "completed" | "review")
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        matches!(self.status.as_str(), "cancelled" | "canceled")
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -227,8 +267,9 @@ fn status_rank(status: &str) -> u8 {
     }
 }
 
-/// The quests in a `GET /api/quests/progress` reply
-/// (`{ "data": [{ "quest": {...}, "overall": {...}, "next_actions": [...] }] }`).
+/// The quests in a `GET /api/quests/progress?todos=1` reply
+/// (`{ "data": [{ "quest": {...}, "overall": {...}, "chains": [...],
+/// "next_actions": [...] }] }`).
 pub fn parse_quests(reply: &Value) -> Vec<Quest> {
     reply["data"]
         .as_array()
@@ -255,10 +296,82 @@ pub fn parse_quests(reply: &Value) -> Vec<Quest> {
                 total: overall["total"].as_u64().unwrap_or(0),
                 completed: overall["completed"].as_u64().unwrap_or(0),
                 pct: overall["pct"].as_u64().unwrap_or(0),
+                blocked: overall["blocked"].as_u64().unwrap_or(0),
                 next,
+                next_ids: entry["next_actions"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|action| text(&action["todo_id"]))
+                    .collect(),
+                chains: entry["chains"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(parse_chain)
+                    .collect(),
             })
         })
         .collect()
+}
+
+/// Counts a todo done in every quest that lists it, until the next fetch
+/// brings the server's numbers.
+pub fn quest_todo_done(quests: &mut [Quest], id: &str) {
+    for quest in quests {
+        let mut newly_done = 0;
+        for chain in &mut quest.chains {
+            for todo in chain.todos.iter_mut().filter(|todo| todo.id == id) {
+                if todo.is_done() || todo.is_cancelled() {
+                    continue;
+                }
+                if todo.status == "blocked" {
+                    chain.blocked = chain.blocked.saturating_sub(1);
+                    quest.blocked = quest.blocked.saturating_sub(1);
+                }
+                todo.status = "review".to_owned();
+                chain.completed += 1;
+                newly_done += 1;
+            }
+        }
+        if newly_done == 0 {
+            continue;
+        }
+        quest.completed = (quest.completed + newly_done).min(quest.total);
+        quest.pct = if quest.total == 0 {
+            0
+        } else {
+            quest.completed * 100 / quest.total
+        };
+        quest.next_ids.retain(|next| next != id);
+        if quest.next.as_ref().is_some_and(|next| next.todo_id == id) {
+            quest.next = None;
+        }
+    }
+}
+
+fn parse_chain(chain: &Value) -> QuestChain {
+    QuestChain {
+        label: text(&chain["label"]).unwrap_or_else(|| "unnamed".to_owned()),
+        status: text(&chain["status"]).unwrap_or_default(),
+        total: chain["total"].as_u64().unwrap_or(0),
+        completed: chain["completed"].as_u64().unwrap_or(0),
+        blocked: chain["blocked"].as_u64().unwrap_or(0),
+        todos: chain["items"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|item| {
+                Some(QuestTodo {
+                    id: text(&item["id"])?,
+                    status: text(&item["status"]).unwrap_or_else(|| "pending".to_owned()),
+                    description: text(&item["description"]).unwrap_or_default(),
+                    project: text(&item["project"]).unwrap_or_default(),
+                    missing: item["missing"].as_bool().unwrap_or(false),
+                })
+            })
+            .collect(),
+    }
 }
 
 /// The lessons in a `GET /api/lessons` reply (`{ "data": [...] }`).
@@ -443,10 +556,15 @@ pub fn todos_url(project: Option<&str>) -> Url {
     api_url("/todos", &params)
 }
 
-/// `GET /api/quests/progress` for active quests in one project (or all).
+/// `GET /api/quests/progress` for active quests in one project (or all), with
+/// each chain's todos.
 pub fn quests_url(project: Option<&str>) -> Url {
     let limit = QUEST_LIMIT.to_string();
-    let mut params = vec![("status", "active"), ("limit", limit.as_str())];
+    let mut params = vec![
+        ("status", "active"),
+        ("limit", limit.as_str()),
+        ("todos", "1"),
+    ];
     if let Some(project) = project {
         params.push(("project", project));
     }

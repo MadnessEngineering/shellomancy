@@ -53,3 +53,90 @@ fn card_button_words_are_voiced() {
         assert_ne!(madness_themes::t(key), key, "{key} has no wording");
     }
 }
+
+#[test]
+fn copy_all_is_every_filled_field_then_the_extra_uncut() {
+    let long_notes = "n".repeat(MAX_DETAIL_CHARS + 50);
+    let details = vec![
+        Detail::copyable("id", "t1", "id"),
+        Detail::new("ticket", "  "),
+        Detail::new("notes", long_notes.clone()),
+    ];
+    assert_eq!(
+        copy_all_text(&details, "\n- status: pending\n"),
+        format!("id: t1\nnotes: {long_notes}\n\n- status: pending")
+    );
+    assert_eq!(copy_all_text(&[], "body"), "body");
+    assert_eq!(copy_all_text(&details[..1], " "), "id: t1");
+}
+
+#[test]
+fn changes_text_matches_the_diff_the_card_shows() {
+    let changes = vec![
+        api::Change {
+            field: "status".to_owned(),
+            old: Some("pending".to_owned()),
+            new: Some("review".to_owned()),
+        },
+        api::Change {
+            field: "tags".to_owned(),
+            old: None,
+            new: None,
+        },
+    ];
+    assert_eq!(
+        changes_text(&changes),
+        "- status: pending\n+ status: review\n~ tags"
+    );
+}
+
+#[test]
+fn quest_markdown_is_a_checklist_per_chain_with_ids() {
+    let todo = |id: &str, status: &str, description: &str| api::QuestTodo {
+        id: id.to_owned(),
+        status: status.to_owned(),
+        description: description.to_owned(),
+        ..Default::default()
+    };
+    let quest = api::Quest {
+        next_ids: vec!["t3".to_owned()],
+        chains: vec![
+            api::QuestChain {
+                label: "Foundation".to_owned(),
+                total: 2,
+                completed: 1,
+                todos: vec![
+                    todo("t1", "review", "Sign in"),
+                    todo("t2", "cancelled", "Old idea"),
+                ],
+                ..Default::default()
+            },
+            api::QuestChain {
+                label: "Next".to_owned(),
+                total: 2,
+                todos: vec![
+                    todo("t3", "pending", "Sync\nsettings"),
+                    todo("t4", "blocked", "Ship"),
+                    api::QuestTodo {
+                        id: "t5".to_owned(),
+                        missing: true,
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    assert_eq!(
+        quest_markdown(&quest),
+        "## Foundation (1/2)\n\
+         - [x] Sign in (`t1`)\n\
+         - [-] Old idea (`t2`)\n\
+         \n\
+         ## Next (0/2)\n\
+         - [ ] Sync settings <- next (`t3`)\n\
+         - [ ] Ship [blocked] (`t4`)\n\
+         - [ ] (deleted) (`t5`)"
+    );
+}

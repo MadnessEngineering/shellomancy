@@ -54,6 +54,7 @@ use crate::ui_components::item_highlight::{ImageOrIcon, ItemHighlightState};
 use crate::ui_components::render_file_search_row::{FileSearchRowOptions, render_file_search_row};
 use crate::util::path::{display_name_with_host, display_path_with_host};
 use crate::view_components::action_button::{ActionButton, ButtonSize, NakedTheme};
+use crate::workspace::view::global_search::madness::{MadnessSearchView, SearchScope};
 use crate::workspace::view::global_search::model::GlobalSearch;
 use crate::workspace::view::global_search::{GlobalSearchMatch, SearchConfig};
 
@@ -107,6 +108,8 @@ pub enum GlobalSearchAction {
     FocusResultsList,
     ToggleRegexSearch,
     ToggleCaseSensitivity,
+    /// Shellomancy: search files, spells (command history) or scrolls (lessons).
+    SetScope(SearchScope),
 }
 
 #[cfg_attr(target_family = "wasm", allow(dead_code))]
@@ -344,6 +347,10 @@ pub struct GlobalSearchView {
     regex_button: ViewHandle<ActionButton>,
     case_sensitivity_enabled: bool,
     case_sensitivity_button: ViewHandle<ActionButton>,
+    /// Shellomancy: the Spells and Scrolls results; `None` outside Shellomancy.
+    madness: Option<ViewHandle<MadnessSearchView>>,
+    scope: SearchScope,
+    scope_mouse: [MouseStateHandle; 3],
 }
 
 impl Entity for GlobalSearchView {
@@ -496,6 +503,7 @@ impl TypedActionView for GlobalSearchView {
                 });
                 self.rerun_search_from_query(ctx, true);
             }
+            GlobalSearchAction::SetScope(scope) => self.set_scope(*scope, ctx),
             GlobalSearchAction::ToggleCaseSensitivity => {
                 self.case_sensitivity_enabled = !self.case_sensitivity_enabled;
                 self.case_sensitivity_button.update(ctx, |button, ctx| {
@@ -655,7 +663,8 @@ impl GlobalSearchView {
             };
 
             let mut editor = EditorView::new(options, ctx);
-            editor.set_placeholder_text("Search in files", ctx);
+            editor
+                .set_placeholder_text(madness_themes::t(SearchScope::Files.placeholder_key()), ctx);
             editor
         });
 
@@ -694,6 +703,8 @@ impl GlobalSearchView {
             me.handle_find_model_event(event, ctx);
         });
         let handle = ctx.handle();
+        let madness = (crate::channel::ChannelState::channel() == crate::channel::Channel::Oss)
+            .then(|| ctx.add_typed_action_view(MadnessSearchView::new));
 
         GlobalSearchView {
             find_model,
@@ -721,7 +732,43 @@ impl GlobalSearchView {
             regex_button,
             case_sensitivity_enabled: false,
             case_sensitivity_button,
+            madness,
+            scope: SearchScope::Files,
+            scope_mouse: Default::default(),
         }
+    }
+
+    /// Shellomancy: switches what the query searches.
+    fn set_scope(&mut self, scope: SearchScope, ctx: &mut ViewContext<Self>) {
+        if self.scope == scope {
+            return;
+        }
+        self.scope = scope;
+        self.query_editor.update(ctx, |editor, ctx| {
+            editor.set_placeholder_text(madness_themes::t(scope.placeholder_key()), ctx);
+        });
+        if scope == SearchScope::Files {
+            self.rerun_search_from_query(ctx, true);
+        } else {
+            self.cancel_search(ctx);
+            self.search_madness(ctx);
+        }
+        self.enter_query_mode(ctx);
+        ctx.notify();
+    }
+
+    /// Hands the query to the Spells/Scrolls view. Returns false in the Files
+    /// scope, where ripgrep does the searching.
+    fn search_madness(&mut self, ctx: &mut ViewContext<Self>) -> bool {
+        let Some(madness) = self.madness.clone() else {
+            return false;
+        };
+        if self.scope == SearchScope::Files {
+            return false;
+        }
+        let (scope, query) = (self.scope, self.query_editor.as_ref(ctx).buffer_text(ctx));
+        madness.update(ctx, |view, ctx| view.search(scope, query, ctx));
+        true
     }
 
     pub fn on_left_panel_focused(
@@ -831,6 +878,9 @@ impl GlobalSearchView {
         });
     }
     fn handle_debounced_query_change(&mut self, _event: (), ctx: &mut ViewContext<Self>) {
+        if self.search_madness(ctx) {
+            return;
+        }
         self.rerun_search_from_query(ctx, false);
     }
 
@@ -849,6 +899,10 @@ impl GlobalSearchView {
             | EditorEvent::BufferReplaced
             | EditorEvent::BufferReinitialized => {
                 let query_text = self.query_editor.as_ref(ctx).buffer_text(ctx);
+                if self.scope != SearchScope::Files {
+                    self.notify_query_changed();
+                    return;
+                }
                 if query_text.is_empty() {
                     self.cancel_search(ctx);
                     self.reset_search_state(true);
@@ -859,6 +913,15 @@ impl GlobalSearchView {
                 self.notify_query_changed();
             }
             EditorEvent::Enter => {
+                if self.scope == SearchScope::Spells
+                    && let Some(madness) = self.madness.clone()
+                {
+                    madness.update(ctx, |view, ctx| view.activate_first(ctx));
+                    return;
+                }
+                if self.search_madness(ctx) {
+                    return;
+                }
                 self.rerun_search_from_query(ctx, true);
             }
             _ => {}
@@ -2062,6 +2125,131 @@ impl View for GlobalSearchView {
     }
 
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
+        let Some(madness) = &self.madness else {
+            return self.render_files(app);
+        };
+        // Spells and Scrolls work in any session, so they skip the file
+        // search's availability states.
+        let body = if self.scope == SearchScope::Files {
+            self.render_files(app)
+        } else {
+            self.render_madness_scope(madness, app)
+        };
+        Flex::column()
+            .with_main_axis_size(MainAxisSize::Max)
+            .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .with_child(self.render_scope_row(app))
+            .with_child(Shrinkable::new(1.0, body).finish())
+            .finish()
+    }
+}
+
+impl GlobalSearchView {
+    /// Shellomancy: FILES · SPELLS · SCROLLS.
+    fn render_scope_row(&self, app: &AppContext) -> Box<dyn Element> {
+        let appearance = Appearance::as_ref(app);
+        let theme = appearance.theme();
+        let mut row = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
+        for (scope, mouse) in SearchScope::ALL.iter().zip(&self.scope_mouse) {
+            let selected = *scope == self.scope;
+            let label = Span::new(
+                madness_themes::t(scope.voice_key()).to_uppercase(),
+                UiComponentStyles {
+                    font_family_id: Some(appearance.ui_font_family()),
+                    font_size: Some(11.),
+                    font_weight: Some(Weight::Bold),
+                    font_color: Some(if selected {
+                        theme.background().into_solid()
+                    } else {
+                        theme.main_text_color(theme.background()).into_solid()
+                    }),
+                    ..Default::default()
+                },
+            )
+            .build()
+            .finish();
+            let (accent, idle, hover, border) = (
+                theme.accent(),
+                theme.surface_2(),
+                theme.surface_3(),
+                theme.surface_3(),
+            );
+            let scope = *scope;
+            row.add_child(
+                Container::new(
+                    Hoverable::new(mouse.clone(), move |state| {
+                        let background = if selected {
+                            accent
+                        } else if state.is_hovered() {
+                            hover
+                        } else {
+                            idle
+                        };
+                        Container::new(label)
+                            .with_horizontal_padding(10.)
+                            .with_vertical_padding(4.)
+                            .with_background(background)
+                            .with_border(Border::all(1.).with_border_fill(border))
+                            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(12.)))
+                            .finish()
+                    })
+                    .with_cursor(Cursor::PointingHand)
+                    .on_click(move |ctx, _, _| {
+                        ctx.dispatch_typed_action(GlobalSearchAction::SetScope(scope));
+                    })
+                    .finish(),
+                )
+                .with_margin_right(6.)
+                .finish(),
+            );
+        }
+        Container::new(row.finish())
+            .with_padding(Padding::uniform(12.).with_top(2.).with_bottom(6.))
+            .finish()
+    }
+
+    /// Shellomancy: the query box over the Spells or Scrolls results.
+    fn render_madness_scope(
+        &self,
+        madness: &ViewHandle<MadnessSearchView>,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        let appearance = Appearance::as_ref(app);
+        let theme = appearance.theme();
+        let editor_line_height = self
+            .query_editor
+            .as_ref(app)
+            .line_height(app.font_cache(), appearance);
+        let query_row = Container::new(
+            ConstrainedBox::new(Clipped::new(ChildView::new(&self.query_editor).finish()).finish())
+                .with_max_height(QUERY_EDITOR_MAX_LINES as f32 * editor_line_height)
+                .finish(),
+        )
+        .with_padding(Padding::uniform(6.))
+        .with_border(Border::all(BORDER_WIDTH).with_border_fill(theme.surface_3()))
+        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(BORDER_RADIUS)))
+        .with_margin_bottom(8.)
+        .finish();
+        let query_row = EventHandler::new(query_row)
+            .on_left_mouse_down(|ctx, _, _| {
+                ctx.dispatch_typed_action(GlobalSearchAction::FocusQueryEditor);
+                DispatchEventResult::StopPropagation
+            })
+            .finish();
+        Flex::column()
+            .with_main_axis_size(MainAxisSize::Max)
+            .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .with_child(
+                Container::new(query_row)
+                    .with_horizontal_padding(12.)
+                    .finish(),
+            )
+            .with_child(Shrinkable::new(1.0, ChildView::new(madness).finish()).finish())
+            .finish()
+    }
+
+    /// Warp's file search.
+    fn render_files(&self, app: &AppContext) -> Box<dyn Element> {
         match self.enablement {
             CodingPanelEnablementState::PendingRemoteSession => {
                 return self.render_remote_loading_state(app);

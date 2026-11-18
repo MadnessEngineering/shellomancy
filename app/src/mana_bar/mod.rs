@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
-pub use self::api::{Lesson, LogEntry, NextStep, Priority, Quest, Todo};
+pub use self::api::{Lesson, LogEntry, NextStep, Priority, Quest, QuestChain, QuestTodo, Todo};
 use crate::madness_account::{MadnessAccount, MadnessAccountState};
 
 /// One of the panel's lists.
@@ -240,11 +240,16 @@ impl ManaBar {
                 data.retain(|todo| todo.id != id);
             }
         }
-        // Quest progress moved, and the log has a new entry; fetch them when
-        // they're next looked at.
-        self.quests.remove(project);
+        // Quest progress moved: show it at once (an open quest card stays
+        // open), then fetch the real numbers. The log has a new entry; fetch
+        // it when it's next looked at.
+        for fetch in self.quests.values_mut() {
+            if let Fetch::Loaded { data } = fetch {
+                api::quest_todo_done(data, id);
+            }
+        }
         self.activity.remove(project);
-        self.changed(ctx);
+        self.refresh(List::Quests, project, ctx);
     }
 
     fn reset(&mut self, ctx: &mut ModelContext<Self>) {

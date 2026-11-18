@@ -20,6 +20,7 @@ pub struct GlobalSearchMatch {
     pub submatches: Vec<Submatch>,
 }
 
+pub mod madness;
 #[cfg_attr(not(target_family = "wasm"), path = "model.rs")]
 #[cfg_attr(target_family = "wasm", path = "model_wasm.rs")]
 pub mod model;

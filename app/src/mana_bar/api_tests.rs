@@ -136,13 +136,78 @@ fn quests_parse_with_progress_and_next_step() {
             total: 6,
             completed: 2,
             pct: 33,
+            blocked: 1,
             next: Some(NextStep {
                 todo_id: "t9".to_owned(),
                 description: "Mana Bar".to_owned(),
             }),
+            next_ids: vec!["t9".to_owned()],
             ..Default::default()
         }]
     );
+}
+
+#[test]
+fn quest_chains_parse_with_their_todos_in_order() {
+    let reply = json!({"data": [{
+        "quest": {"id": "q1"},
+        "overall": {"total": 3, "completed": 1, "blocked": 1, "pct": 33},
+        "chains": [
+            {"label": "Foundation", "status": "blocked", "total": 3, "completed": 1, "blocked": 1,
+             "items": [
+                {"id": "t1", "status": "review", "description": "Sign in", "project": "shellomancy"},
+                {"id": "t2", "status": "blocked", "description": "Sync", "project": "inventorium"},
+                {"id": "t3", "status": "pending", "description": null, "project": null, "missing": true},
+                {"status": "pending"}
+             ]},
+            {"label": "Later", "status": "pending", "total": 0, "completed": 0, "blocked": 0}
+        ],
+        "next_actions": [{"chain": "Foundation", "todo_id": "t3", "description": null}]
+    }]});
+    let quest = &parse_quests(&reply)[0];
+
+    assert_eq!(quest.next_ids, vec!["t3".to_owned()]);
+    assert_eq!(
+        quest.chains,
+        vec![
+            QuestChain {
+                label: "Foundation".to_owned(),
+                status: "blocked".to_owned(),
+                total: 3,
+                completed: 1,
+                blocked: 1,
+                todos: vec![
+                    QuestTodo {
+                        id: "t1".to_owned(),
+                        status: "review".to_owned(),
+                        description: "Sign in".to_owned(),
+                        project: "shellomancy".to_owned(),
+                        missing: false,
+                    },
+                    QuestTodo {
+                        id: "t2".to_owned(),
+                        status: "blocked".to_owned(),
+                        description: "Sync".to_owned(),
+                        project: "inventorium".to_owned(),
+                        missing: false,
+                    },
+                    QuestTodo {
+                        id: "t3".to_owned(),
+                        status: "pending".to_owned(),
+                        missing: true,
+                        ..Default::default()
+                    },
+                ],
+            },
+            QuestChain {
+                label: "Later".to_owned(),
+                status: "pending".to_owned(),
+                ..Default::default()
+            },
+        ]
+    );
+    assert!(quest.chains[0].todos[0].is_done());
+    assert!(!quest.chains[0].todos[1].is_done());
 }
 
 #[test]
@@ -254,7 +319,7 @@ fn urls_encode_the_project() {
     );
     assert_eq!(
         quests_url(Some("shellomancy")).as_str(),
-        "https://madnessinteractive.cc/api/quests/progress?status=active&limit=50&project=shellomancy"
+        "https://madnessinteractive.cc/api/quests/progress?status=active&limit=50&todos=1&project=shellomancy"
     );
 }
 
@@ -451,4 +516,57 @@ fn project_for_path_finds_the_nearest_repo() {
     let here = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     assert_eq!(project_for_path(&here), Some("shellomancy".to_owned()));
     assert_eq!(project_for_path(std::path::Path::new("/")), None);
+}
+
+#[test]
+fn a_todo_marked_done_counts_in_every_quest_that_lists_it() {
+    let chain = |todos: Vec<QuestTodo>| QuestChain {
+        label: "main".to_owned(),
+        total: todos.len() as u64,
+        todos,
+        ..Default::default()
+    };
+    let todo = |id: &str, status: &str| QuestTodo {
+        id: id.to_owned(),
+        status: status.to_owned(),
+        ..Default::default()
+    };
+    let mut quests = vec![
+        Quest {
+            id: "q1".to_owned(),
+            total: 3,
+            completed: 1,
+            pct: 33,
+            blocked: 1,
+            next: Some(NextStep {
+                todo_id: "t2".to_owned(),
+                description: "Sync".to_owned(),
+            }),
+            next_ids: vec!["t2".to_owned()],
+            chains: vec![chain(vec![
+                todo("t1", "completed"),
+                todo("t2", "blocked"),
+                todo("t3", "pending"),
+            ])],
+            ..Default::default()
+        },
+        Quest {
+            id: "q2".to_owned(),
+            total: 1,
+            chains: vec![chain(vec![todo("t9", "pending")])],
+            ..Default::default()
+        },
+    ];
+
+    quest_todo_done(&mut quests, "t2");
+    // Done already: nothing moves.
+    quest_todo_done(&mut quests, "t1");
+
+    let quest = &quests[0];
+    assert_eq!((quest.completed, quest.pct, quest.blocked), (2, 66, 0));
+    assert_eq!(quest.chains[0].todos[1].status, "review");
+    assert_eq!(quest.chains[0].completed, 1);
+    assert_eq!(quest.next, None);
+    assert!(quest.next_ids.is_empty());
+    assert_eq!(quests[1].completed, 0);
 }

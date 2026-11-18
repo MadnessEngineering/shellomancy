@@ -1,0 +1,23 @@
+[
+ {"key": "shellomancy.search.scopeFiles", "standard": "Files", "shellomancer": "Files"},
+ {"key": "shellomancy.search.scopeSpells", "standard": "Commands", "shellomancer": "Spells"},
+ {"key": "shellomancy.search.scopeScrolls", "standard": "Lessons", "shellomancer": "Scrolls"},
+ {"key": "shellomancy.search.placeholderFiles", "standard": "Search in files", "shellomancer": "Search in files"},
+ {"key": "shellomancy.search.placeholderSpells", "standard": "Search command history", "shellomancer": "Search every spell you've cast"},
+ {"key": "shellomancy.search.placeholderScrolls", "standard": "Search your lessons", "shellomancer": "Search the scrolls"},
+ {"key": "shellomancy.search.spellsRecent", "standard": "Recent commands. Click one to put it back in the input.", "shellomancer": "Recently cast. Click one to put it back on your tongue."},
+ {"key": "shellomancy.search.spellsCount", "standard": "{{count}} matching commands", "shellomancer": "{{count}} spells match"},
+ {"key": "shellomancy.search.spellsEmpty", "standard": "No command in the history matches.", "shellomancer": "You've never cast anything like that. Or you did it somewhere else."},
+ {"key": "shellomancy.search.spellsNoHistory", "standard": "No history yet. Run a command in a terminal first.", "shellomancer": "No spells cast yet. Cast one; history needs something to remember."},
+ {"key": "shellomancy.search.run", "standard": "run", "shellomancer": "cast"},
+ {"key": "shellomancy.search.copy", "standard": "copy", "shellomancer": "copy"},
+ {"key": "shellomancy.search.copied", "standard": "copied ✓", "shellomancer": "copied ✓"},
+ {"key": "shellomancy.search.copyId", "standard": "copy id", "shellomancer": "copy id"},
+ {"key": "shellomancy.search.toScroll", "standard": "lesson", "shellomancer": "scroll it"},
+ {"key": "shellomancy.search.open", "standard": "open ↗", "shellomancer": "open ↗"},
+ {"key": "shellomancy.search.scrollsSignedOut", "standard": "Sign in on the Account page to search your lessons.", "shellomancer": "Bind your account on the Account page and the scrolls open up."},
+ {"key": "shellomancy.search.scrollsLoading", "standard": "Searching…", "shellomancer": "Unrolling…"},
+ {"key": "shellomancy.search.scrollsCount", "standard": "{{count}} lessons", "shellomancer": "{{count}} scrolls"},
+ {"key": "shellomancy.search.scrollsEmpty", "standard": "No lesson matches.", "shellomancer": "No scroll mentions that. Maybe nobody learned it yet."},
+ {"key": "shellomancy.search.scrollsError", "standard": "Couldn't reach madnessinteractive.cc: {{error}}", "shellomancer": "The scrolls are out of reach: {{error}}"}
+]

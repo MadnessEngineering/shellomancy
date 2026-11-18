@@ -1,0 +1,5 @@
+[
+ {"key": "shellomancy.manaBar.questBlocked", "standard": "{{count}} blocked", "shellomancer": "{{count}} warded"},
+ {"key": "shellomancy.manaBar.questDeleted", "standard": "(deleted todo)", "shellomancer": "(struck from the record)"},
+ {"key": "shellomancy.manaBar.copyAll", "standard": "copy all", "shellomancer": "copy the lot"}
+]
