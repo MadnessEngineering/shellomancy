@@ -180,15 +180,45 @@ fn search_needs_every_word_and_ranks_titles_first() {
 
 #[test]
 fn repo_shelves_list_first_and_home_is_not_a_repo_shelf() {
-    let repo = Path::new("/work/shellomancy");
+    let repo = Path::new("/work/Omnispindle");
     let shelves = shelves(Some(repo));
-    assert_eq!(shelves[0], (Shelf::Repo, repo.join(GRIMOIRE_DIR)));
-    assert_eq!(shelves[1].0, Shelf::Global);
+    let global = global_dir().unwrap();
+    assert_eq!(
+        shelves,
+        [
+            (Shelf::Repo, repo.join(GRIMOIRE_DIR)),
+            // Lowercased, the way `jot` and `ticket` name it from a shell.
+            (Shelf::Private, global.join("omnispindle")),
+            (Shelf::Global, global),
+        ]
+    );
     if let Some(home) = dirs::home_dir() {
         let at_home = super::shelves(Some(&home));
         assert_eq!(at_home.len(), 1);
         assert_eq!(at_home[0].0, Shelf::Global);
     }
+}
+
+#[test]
+fn a_private_shelf_is_not_listed_again_in_the_global_one() {
+    let global = tempfile::tempdir().unwrap();
+    write(global.path(), "shellomancy/desknote.md", "# Desknote\n");
+    write(global.path(), "eaws/triage.md", "# eaws triage\n");
+    let pages = read_all(&[
+        (Shelf::Private, global.path().join("shellomancy")),
+        (Shelf::Global, global.path().to_path_buf()),
+    ]);
+    let listed: Vec<(Shelf, &str, &str)> = pages
+        .iter()
+        .map(|page| (page.shelf, page.folder.as_str(), page.title.as_str()))
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            (Shelf::Private, "", "Desknote"),
+            (Shelf::Global, "eaws", "eaws triage"),
+        ]
+    );
 }
 
 #[test]

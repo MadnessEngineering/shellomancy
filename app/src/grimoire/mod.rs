@@ -1,10 +1,13 @@
 //! Shellomancy: the Grimoire, Drive's notebooks and workflows reborn as plain
 //! files you own.
 //!
-//! A shelf is a folder of pages: the global one, `~/.mad/grimoire` (this
-//! machine only, never pushed, so a page can hold a password), and a repo's
-//! own `<repo>/.mad/grimoire`, which travels with the repo. Pages are read
-//! from disk on every scan; nothing is cached or synced.
+//! A shelf is a folder of pages. In a repo there are two of its own: the
+//! committed `<repo>/.mad/grimoire`, which travels with the repo, and the
+//! private `~/.mad/grimoire/<repo>` (folder name lowercased), which follows
+//! it on this machine only. Then the global `~/.mad/grimoire`: this machine
+//! only, never pushed, so a page can hold a password. A repo's private shelf
+//! isn't listed again as a folder of the global one. Pages are read from disk
+//! on every scan; nothing is cached or synced.
 //!
 //! - `.md` is a notebook: it opens in the Markdown viewer, code blocks runnable.
 //! - `.yaml` / `.yml` holds incantations: Warp's workflow format, one per YAML
@@ -38,10 +41,14 @@ const MAX_NAME_WORDS: usize = 6;
 const MAX_NAME_CHARS: usize = 60;
 const MAX_HIT_LINE_CHARS: usize = 120;
 
-/// Which shelf a page is on. Repo pages list first.
+/// Which shelf a page is on, in listing order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Shelf {
+    /// `<repo>/.mad/grimoire`, committed with the repo.
     Repo,
+    /// `~/.mad/grimoire/<repo>`, the repo's pages on this machine only.
+    Private,
+    /// `~/.mad/grimoire`.
     Global,
 }
 
@@ -97,6 +104,13 @@ pub fn repo_dir(root: &Path) -> PathBuf {
     root.join(GRIMOIRE_DIR)
 }
 
+/// `~/.mad/grimoire/<repo folder name, lowercased>`. The `jot` and `ticket`
+/// incantations name it the same way from a shell.
+pub fn private_dir(root: &Path) -> Option<PathBuf> {
+    let name = root.file_name()?.to_string_lossy().to_lowercase();
+    Some(global_dir()?.join(name))
+}
+
 /// The repo a folder is in: the nearest folder at or above it with a `.git`.
 pub fn repo_root_of(path: &Path) -> Option<PathBuf> {
     path.ancestors()
@@ -104,8 +118,8 @@ pub fn repo_root_of(path: &Path) -> Option<PathBuf> {
         .map(Path::to_path_buf)
 }
 
-/// The shelves to read for a terminal in `repo` (if any): the repo's first,
-/// then the global one. A repo at the home folder has no shelf of its own.
+/// The shelves to read for a terminal in `repo` (if any): the repo's two,
+/// then the global one. A repo at the home folder has none of its own.
 pub fn shelves(repo: Option<&Path>) -> Vec<(Shelf, PathBuf)> {
     let global = global_dir();
     let mut shelves = Vec::new();
@@ -113,6 +127,9 @@ pub fn shelves(repo: Option<&Path>) -> Vec<(Shelf, PathBuf)> {
         let dir = repo_dir(repo);
         if Some(&dir) != global.as_ref() {
             shelves.push((Shelf::Repo, dir));
+            if let Some(private) = private_dir(repo) {
+                shelves.push((Shelf::Private, private));
+            }
         }
     }
     if let Some(global) = global {
@@ -121,11 +138,25 @@ pub fn shelves(repo: Option<&Path>) -> Vec<(Shelf, PathBuf)> {
     shelves
 }
 
-/// Reads every shelf, in listing order. Missing shelves are just empty.
+/// Reads every shelf, in listing order, off the main thread.
 pub async fn read_shelves(shelves: Vec<(Shelf, PathBuf)>) -> Vec<Page> {
+    read_all(&shelves)
+}
+
+/// Reads every shelf, in listing order. Missing shelves are just empty, and a
+/// shelf inside another (a repo's private one in the global one) is only read
+/// as itself.
+pub fn read_all(shelves: &[(Shelf, PathBuf)]) -> Vec<Page> {
     let mut pages: Vec<Page> = shelves
         .iter()
-        .flat_map(|(shelf, dir)| read_shelf(dir, *shelf))
+        .flat_map(|(shelf, dir)| {
+            let nested: Vec<&Path> = shelves
+                .iter()
+                .map(|(_, other)| other.as_path())
+                .filter(|other| *other != dir.as_path() && other.starts_with(dir))
+                .collect();
+            read_shelf_without(dir, *shelf, &nested)
+        })
         .collect();
     sort_pages(&mut pages);
     pages
@@ -144,12 +175,21 @@ pub fn sort_pages(pages: &mut [Page]) {
 
 /// Every page on one shelf. Hidden files and folders are skipped.
 pub fn read_shelf(dir: &Path, shelf: Shelf) -> Vec<Page> {
+    read_shelf_without(dir, shelf, &[])
+}
+
+/// Every page on one shelf except under the `skip` folders.
+fn read_shelf_without(dir: &Path, shelf: Shelf, skip: &[&Path]) -> Vec<Page> {
     let mut pages = Vec::new();
     let walker = WalkDir::new(dir)
         .max_depth(MAX_DEPTH)
         .follow_links(true)
         .into_iter()
-        .filter_entry(|entry| entry.depth() == 0 || !is_hidden(entry.file_name()));
+        .filter_entry(|entry| {
+            entry.depth() == 0
+                || !(is_hidden(entry.file_name())
+                    || skip.iter().any(|skip| same_path(entry.path(), skip)))
+        });
     for entry in walker.filter_map(Result::ok) {
         if pages.len() >= MAX_PAGES {
             break;
@@ -187,6 +227,16 @@ pub fn read_shelf(dir: &Path, shelf: Shelf) -> Vec<Page> {
 
 fn is_hidden(name: &std::ffi::OsStr) -> bool {
     name.to_string_lossy().starts_with('.')
+}
+
+/// Whether two paths name the same folder. macOS and Windows file systems
+/// ignore case by default, so `Omnispindle` there is the `omnispindle` shelf.
+fn same_path(a: &Path, b: &Path) -> bool {
+    if cfg!(any(target_os = "macos", target_os = "windows")) {
+        a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+    } else {
+        a == b
+    }
 }
 
 /// The pages one file holds: a notebook, a script, or the incantations in a
@@ -432,19 +482,25 @@ pub fn hit_line(page: &Page, query: &str) -> Option<String> {
     })
 }
 
-/// Creates a shelf's folder. A new global shelf is private to its owner,
-/// since pages there may hold secrets.
+/// Creates a shelf's folder. A new global shelf (made first when a private
+/// one inside it is) is private to its owner, since pages there may hold
+/// secrets.
 pub fn ensure_shelf(dir: &Path) -> io::Result<()> {
     if dir.is_dir() {
         return Ok(());
     }
-    std::fs::create_dir_all(dir)?;
-    #[cfg(unix)]
-    if Some(dir) == global_dir().as_deref() {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    if let Some(global) = global_dir()
+        && dir.starts_with(&global)
+        && !global.is_dir()
+    {
+        std::fs::create_dir_all(&global)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&global, std::fs::Permissions::from_mode(0o700))?;
+        }
     }
-    Ok(())
+    std::fs::create_dir_all(dir)
 }
 
 /// Writes a command from history into the shelf as an incantation, under

@@ -1,0 +1,5 @@
+[
+ {"key": "shellomancy.grimoire.privateShelf", "standard": "Private · {{repo}}", "shellomancer": "Private · {{repo}}"},
+ {"key": "shellomancy.grimoire.privateNone", "standard": "No private notes for {{repo}} on this machine yet.", "shellomancer": "No private pages for {{repo}} on this machine yet."},
+ {"key": "shellomancy.grimoire.privateBadge", "standard": "private", "shellomancer": "private"}
+]

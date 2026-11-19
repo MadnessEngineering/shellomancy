@@ -1,8 +1,9 @@
 //! Shellomancy: the Grimoire tab of the tools panel, where Drive's notebooks
 //! and workflows went: plain files on disk (see [`crate::grimoire`]).
 //!
-//! It lists the focused repo's shelf (`<repo>/.mad/grimoire`) and the global
-//! one (`~/.mad/grimoire`), grouped by folder, with a filter over titles and
+//! It lists the focused repo's shelves (the committed `<repo>/.mad/grimoire`
+//! and the private `~/.mad/grimoire/<repo>`) and the global one
+//! (`~/.mad/grimoire`), grouped by folder, with a filter over titles and
 //! text. A notebook opens in the Markdown viewer with runnable blocks, an
 //! incantation casts into the focused input (asking for its arguments), and
 //! a script puts the command that runs it in the input. The shelves are read
@@ -87,6 +88,7 @@ struct HeaderMouseStates {
     new_incantation: MouseStateHandle,
     open_folder: MouseStateHandle,
     start_repo: MouseStateHandle,
+    start_private: MouseStateHandle,
     empty_notebook: MouseStateHandle,
     empty_incantation: MouseStateHandle,
 }
@@ -245,12 +247,12 @@ impl GrimoireView {
         self.row_mouse.get(key).cloned().unwrap_or_default()
     }
 
-    /// The repo's shelf folder, when the focused terminal is in a repo that
-    /// can have one.
-    fn repo_shelf(&self) -> Option<PathBuf> {
+    /// A shelf's folder; a repo's shelves only when the focused terminal is
+    /// in a repo that can have them.
+    fn shelf_dir(&self, shelf: Shelf) -> Option<PathBuf> {
         grimoire::shelves(self.repo_root.as_deref())
             .into_iter()
-            .find_map(|(shelf, dir)| (shelf == Shelf::Repo).then_some(dir))
+            .find_map(|(found, dir)| (found == shelf).then_some(dir))
     }
 
     /// Writes a new page with `write`, then opens it to edit.
@@ -385,11 +387,7 @@ impl TypedActionView for GrimoireView {
                 ctx.notify();
             }
             GrimoireAction::NewNotebook(shelf) => {
-                let dir = match shelf {
-                    Shelf::Repo => self.repo_shelf(),
-                    Shelf::Global => grimoire::global_dir(),
-                };
-                self.create(dir, grimoire::new_notebook, ctx);
+                self.create(self.shelf_dir(*shelf), grimoire::new_notebook, ctx);
             }
             GrimoireAction::NewIncantation => {
                 self.create(grimoire::global_dir(), grimoire::new_incantation, ctx);
@@ -523,41 +521,56 @@ impl GrimoireView {
         .finish()
     }
 
-    /// No filter: the repo's shelf, then the global one, grouped by folder.
+    /// No filter: the repo's committed and private shelves, then the global
+    /// one, grouped by folder.
     fn render_shelves(&self, appearance: &Appearance) -> Box<dyn Element> {
         let mut column = Flex::column().with_cross_axis_alignment(CrossAxisAlignment::Stretch);
         let now = Local::now().timestamp();
-        if let Some(repo_dir) = self.repo_shelf() {
-            let repo_name = self
-                .repo_root
-                .as_ref()
-                .and_then(|root| root.file_name())
-                .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            let repo_pages: Vec<&Page> = self
+        let repo_name = self
+            .repo_root
+            .as_ref()
+            .and_then(|root| root.file_name())
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let repo_shelves = [
+            (
+                Shelf::Repo,
+                "shellomancy.grimoire.repoShelf",
+                madness_themes::tf(
+                    "shellomancy.grimoire.repoNone",
+                    &[("path", &format!("{repo_name}/{}", grimoire::GRIMOIRE_DIR))],
+                ),
+                &self.header_mouse.start_repo,
+            ),
+            (
+                Shelf::Private,
+                "shellomancy.grimoire.privateShelf",
+                madness_themes::tf("shellomancy.grimoire.privateNone", &[("repo", &repo_name)]),
+                &self.header_mouse.start_private,
+            ),
+        ];
+        for (shelf, heading_key, none, start_mouse) in repo_shelves {
+            let Some(dir) = self.shelf_dir(shelf) else {
+                continue;
+            };
+            let pages: Vec<&Page> = self
                 .pages
                 .iter()
-                .filter(|page| page.shelf == Shelf::Repo)
+                .filter(|page| page.shelf == shelf)
                 .collect();
             column.add_child(shelf_heading(
-                madness_themes::tf("shellomancy.grimoire.repoShelf", &[("repo", &repo_name)]),
-                repo_pages.len(),
-                &repo_dir,
+                madness_themes::tf(heading_key, &[("repo", &repo_name)]),
+                pages.len(),
+                &dir,
                 appearance,
             ));
-            if repo_pages.is_empty() {
+            if pages.is_empty() {
                 let mut line = Wrap::row().with_run_spacing(2.);
-                line.add_child(muted(
-                    madness_themes::tf(
-                        "shellomancy.grimoire.repoNone",
-                        &[("path", &format!("{repo_name}/{}", grimoire::GRIMOIRE_DIR))],
-                    ),
-                    appearance,
-                ));
+                line.add_child(muted(none, appearance));
                 line.add_child(term_button(
-                    self.header_mouse.start_repo.clone(),
+                    start_mouse.clone(),
                     madness_themes::t("shellomancy.grimoire.repoStart").to_owned(),
-                    GrimoireAction::NewNotebook(Shelf::Repo),
+                    GrimoireAction::NewNotebook(shelf),
                     appearance,
                 ));
                 column.add_child(
@@ -566,7 +579,7 @@ impl GrimoireView {
                         .finish(),
                 );
             } else {
-                self.render_folders(&repo_pages, now, &mut column, appearance);
+                self.render_folders(&pages, now, &mut column, appearance);
             }
         }
 
@@ -790,8 +803,14 @@ pub(crate) fn render_page<A: warpui::Action + Clone>(
 
     if look.show_folder {
         let mut place = Vec::new();
-        if page.shelf == Shelf::Repo {
-            place.push(madness_themes::t("shellomancy.grimoire.repoBadge").to_owned());
+        match page.shelf {
+            Shelf::Repo => {
+                place.push(madness_themes::t("shellomancy.grimoire.repoBadge").to_owned())
+            }
+            Shelf::Private => {
+                place.push(madness_themes::t("shellomancy.grimoire.privateBadge").to_owned())
+            }
+            Shelf::Global => {}
         }
         if !page.folder.is_empty() {
             place.push(format!("{}/", page.folder));
