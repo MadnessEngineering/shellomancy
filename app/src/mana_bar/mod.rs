@@ -8,6 +8,7 @@
 //! out or until a panel asks.
 
 pub mod api;
+pub mod git;
 
 use std::collections::HashMap;
 

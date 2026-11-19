@@ -1305,7 +1305,7 @@ impl LeftPanelView {
             _ => None,
         };
         self.mana_bar_view
-            .update(ctx, |view, _| view.set_repo_root(root));
+            .update(ctx, |view, ctx| view.set_repo_root(root, ctx));
         // A repo with submodules (the lab root) also covers each submodule's
         // project. Only local repos have a .gitmodules we can read.
         let project = project.map(|project| {

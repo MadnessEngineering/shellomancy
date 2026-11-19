@@ -108,6 +108,17 @@ define_settings_group!(MadnessSyncSettings, settings: [
         toml_path: "madness.todo_open_target",
         description: "Where a todo opens from the Mana Bar: in_place, browser or agent_tab.",
     },
+    log_commits: MadnessLogCommits {
+        type: bool,
+        default: true,
+        supported_platforms: SupportedPlatforms::DESKTOP,
+        sync_to_cloud: SyncToCloud::Never,
+        surface: settings::SettingSurfaces::GUI,
+        private: false,
+        storage_key: "MadnessLogCommits",
+        toml_path: "madness.log_commits",
+        description: "Whether the Mana Bar's Log mixes in the focused repo's git commits.",
+    },
     // What was last synced and when each value changed, as JSON. Not a
     // user-visible setting.
     state: MadnessSyncState {

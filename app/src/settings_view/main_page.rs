@@ -142,6 +142,8 @@ pub enum MainPageAction {
     SetMadnessSyncInterval(u32),
     /// Shellomancy: where a todo opens from the Mana Bar.
     SetTodoOpenTarget(TodoOpenTarget),
+    /// Shellomancy: whether the Mana Bar's Log mixes in git commits.
+    ToggleLogCommits,
     #[cfg(not(target_family = "wasm"))]
     RefreshIapCredentials,
 }
@@ -270,6 +272,12 @@ impl TypedActionView for MainSettingsPageView {
                 if ctx.has_singleton_model::<SettingsSync>() {
                     SettingsSync::handle(ctx).update(ctx, |sync, ctx| sync.sync_now(ctx));
                 }
+            }
+            MainPageAction::ToggleLogCommits => {
+                MadnessSyncSettings::handle(ctx).update(ctx, |settings, ctx| {
+                    report_if_error!(settings.log_commits.toggle_and_save_value(ctx));
+                });
+                ctx.notify();
             }
             MainPageAction::SetTodoOpenTarget(target) => {
                 let target = *target;
@@ -1088,13 +1096,14 @@ impl SettingsWidget for MadnessSettingsSyncWidget {
 #[derive(Default)]
 struct TodoOpenTargetWidget {
     buttons: [MouseStateHandle; TodoOpenTarget::ALL.len()],
+    log_commits_switch: SwitchStateHandle,
 }
 
 impl SettingsWidget for TodoOpenTargetWidget {
     type View = MainSettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "mana bar todo open browser in place agent tab claude edit dashboard"
+        "mana bar todo open browser in place agent tab claude edit dashboard log git commits"
     }
 
     fn render(
@@ -1143,6 +1152,22 @@ impl SettingsWidget for TodoOpenTargetWidget {
             })
             .build()
             .finish();
+        let log_commits = *MadnessSyncSettings::as_ref(app).log_commits.value();
+        let switch = ui
+            .switch(self.log_commits_switch.clone())
+            .check(log_commits)
+            .build()
+            .on_click(|ctx, _, _| ctx.dispatch_typed_action(MainPageAction::ToggleLogCommits))
+            .finish();
+        let log_commits_row = render_body_item::<MainPageAction>(
+            madness_themes::t("shellomancy.settings.manaBar.logCommits").to_owned(),
+            None,
+            LocalOnlyIconState::Hidden,
+            ToggleState::Enabled,
+            appearance,
+            switch,
+            Some(madness_themes::t("shellomancy.settings.manaBar.logCommitsNote").to_owned()),
+        );
         Container::new(
             Flex::column()
                 .with_child(label)
@@ -1150,6 +1175,11 @@ impl SettingsWidget for TodoOpenTargetWidget {
                 .with_child(
                     Container::new(choices.finish())
                         .with_margin_top(8.)
+                        .finish(),
+                )
+                .with_child(
+                    Container::new(log_commits_row)
+                        .with_margin_top(12.)
                         .finish(),
                 )
                 .finish(),

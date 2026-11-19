@@ -1,0 +1,9 @@
+[
+ {"key": "shellomancy.manaBar.logCommits", "standard": "Commits", "shellomancer": "Commits"},
+ {"key": "shellomancy.manaBar.commitPill", "standard": "commit", "shellomancer": "commit"},
+ {"key": "shellomancy.manaBar.commitsFailed", "standard": "Couldn't read this repo's commits: {{error}}", "shellomancer": "The repo's history wouldn't speak: {{error}}"},
+ {"key": "shellomancy.manaBar.linkedCommit", "standard": "↔ commit {{sha}} {{subject}}", "shellomancer": "↔ commit {{sha}} {{subject}}"},
+ {"key": "shellomancy.manaBar.linkedTodo", "standard": "↔ todo: {{description}}", "shellomancer": "↔ todo: {{description}}"},
+ {"key": "shellomancy.settings.manaBar.logCommits", "standard": "Show commits in the Log", "shellomancer": "Show commits in the Log"},
+ {"key": "shellomancy.settings.manaBar.logCommitsNote", "standard": "Mixes the focused terminal's repo's recent git commits in with the todo activity, newest first. A commit and a todo whose completion note names its sha link to each other.", "shellomancer": "Weaves the focused terminal's repo history in with the todo activity, newest first. A commit and a todo whose completion note names its sha link to each other."}
+]

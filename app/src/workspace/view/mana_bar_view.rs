@@ -39,6 +39,7 @@ use crate::editor::{
     PropagateHorizontalNavigationKeys, SingleLineEditorOptions, TextOptions,
 };
 use crate::mana_bar::api::{self, DASHBOARD_URL};
+use crate::mana_bar::git;
 use crate::mana_bar::{Fetch, List, ManaBar, ManaBarEvent, ProjectKey};
 use crate::settings::madness_sync::{MadnessSyncSettings, TodoOpenTarget};
 use crate::settings_view::SettingsSection;
@@ -112,14 +113,17 @@ pub enum LogFilter {
     Created,
     Updated,
     Completed,
+    /// Only the focused repo's git commits.
+    Commits,
 }
 
 impl LogFilter {
-    const ALL: [LogFilter; 4] = [
+    const ALL: [LogFilter; 5] = [
         LogFilter::All,
         LogFilter::Created,
         LogFilter::Updated,
         LogFilter::Completed,
+        LogFilter::Commits,
     ];
 
     fn voice_key(self) -> &'static str {
@@ -128,6 +132,7 @@ impl LogFilter {
             LogFilter::Created => "shellomancy.manaBar.logCreated",
             LogFilter::Updated => "shellomancy.manaBar.logUpdated",
             LogFilter::Completed => "shellomancy.manaBar.logCompleted",
+            LogFilter::Commits => "shellomancy.manaBar.logCommits",
         }
     }
 
@@ -137,7 +142,12 @@ impl LogFilter {
             LogFilter::Created => operation == "create",
             LogFilter::Updated => operation == "update",
             LogFilter::Completed => operation == "complete",
+            LogFilter::Commits => false,
         }
+    }
+
+    fn shows_commits(self) -> bool {
+        matches!(self, LogFilter::All | LogFilter::Commits)
     }
 }
 
@@ -186,7 +196,7 @@ struct HeaderMouseStates {
     account: MouseStateHandle,
     tabs: [MouseStateHandle; 4],
     show_more: MouseStateHandle,
-    log_filters: [MouseStateHandle; 4],
+    log_filters: [MouseStateHandle; LogFilter::ALL.len()],
 }
 
 pub struct ManaBarView {
@@ -220,6 +230,13 @@ pub struct ManaBarView {
     open_rows: HashSet<String>,
     /// Todos fetched for rows unrolled in place: `None` while loading.
     todo_details: HashMap<String, Option<Result<api::Todo, String>>>,
+    /// Whether the Log mixes in git commits (Settings > Account).
+    log_commits: bool,
+    /// The focused repo's recent commits, once read.
+    commits: Option<Result<git::RepoCommits, String>>,
+    commits_loading: bool,
+    /// What each unrolled commit changed: `None` while loading.
+    commit_files: HashMap<String, Option<Result<String, String>>>,
     visible: bool,
     /// Bumped to cancel a scheduled poll.
     poll_generation: u64,
@@ -263,17 +280,27 @@ impl ManaBarView {
                 }
             });
         }
-        let open_target = if ctx.has_singleton_model::<MadnessSyncSettings>() {
+        let (open_target, log_commits) = if ctx.has_singleton_model::<MadnessSyncSettings>() {
             ctx.subscribe_to_model(&MadnessSyncSettings::handle(ctx), |me, settings, _, ctx| {
-                let target = *settings.as_ref(ctx).todo_open_target.value();
-                if me.open_target != target {
+                let settings = settings.as_ref(ctx);
+                let (target, log_commits) = (
+                    *settings.todo_open_target.value(),
+                    *settings.log_commits.value(),
+                );
+                if me.open_target != target || me.log_commits != log_commits {
                     me.open_target = target;
+                    me.log_commits = log_commits;
+                    me.ensure_commits(ctx);
                     ctx.notify();
                 }
             });
-            *MadnessSyncSettings::as_ref(ctx).todo_open_target.value()
+            let settings = MadnessSyncSettings::as_ref(ctx);
+            (
+                *settings.todo_open_target.value(),
+                *settings.log_commits.value(),
+            )
         } else {
-            TodoOpenTarget::default()
+            (TodoOpenTarget::default(), true)
         };
         Self {
             project: None,
@@ -296,6 +323,10 @@ impl ManaBarView {
             repo_root: None,
             open_rows: HashSet::new(),
             todo_details: HashMap::new(),
+            log_commits,
+            commits: None,
+            commits_loading: false,
+            commit_files: HashMap::new(),
             visible: false,
             poll_generation: 0,
         }
@@ -314,9 +345,78 @@ impl ManaBarView {
         ctx.notify();
     }
 
-    /// The focused terminal's repo folder changed (an agent tab starts there).
-    pub fn set_repo_root(&mut self, root: Option<PathBuf>) {
+    /// The focused terminal's repo folder changed: an agent tab starts there,
+    /// and the Log shows its commits.
+    pub fn set_repo_root(&mut self, root: Option<PathBuf>, ctx: &mut ViewContext<Self>) {
+        if self.repo_root == root {
+            return;
+        }
         self.repo_root = root;
+        self.ensure_commits(ctx);
+        ctx.notify();
+    }
+
+    /// Reads the repo's commits if the Log is showing and they're missing
+    /// or from another repo.
+    fn ensure_commits(&mut self, ctx: &mut ViewContext<Self>) {
+        let current = match (&self.commits, &self.repo_root) {
+            (Some(Ok(commits)), Some(root)) => commits.root == *root,
+            _ => false,
+        };
+        if !current {
+            self.refresh_commits(ctx);
+        }
+    }
+
+    /// Reads the repo's commits again, when the Log is on screen and wants them.
+    fn refresh_commits(&mut self, ctx: &mut ViewContext<Self>) {
+        if !self.log_commits || !self.visible || self.tab != ManaBarTab::Log {
+            return;
+        }
+        let Some(root) = self.repo_root.clone() else {
+            self.commits = None;
+            return;
+        };
+        if self.commits_loading {
+            return;
+        }
+        self.commits_loading = true;
+        let _ = ctx.spawn(git::fetch_commits(root.clone()), move |me, result, ctx| {
+            me.commits_loading = false;
+            // The repo changed while reading: read the new one.
+            if me.repo_root.as_ref() != Some(&root) {
+                me.ensure_commits(ctx);
+                return;
+            }
+            if let Ok(repo) = &result {
+                for commit in &repo.commits {
+                    let card = commit_card_key(commit);
+                    me.row_mouse.entry(format!("{card}|head")).or_default();
+                    me.row_mouse.entry(card).or_default();
+                }
+            }
+            me.commits = Some(result);
+            ctx.notify();
+        });
+    }
+
+    /// Reads what a commit changed, for its unrolled card.
+    fn fetch_commit_files(&mut self, sha: &str, ctx: &mut ViewContext<Self>) {
+        if self.commit_files.contains_key(sha) {
+            return;
+        }
+        let Some(Ok(repo)) = &self.commits else {
+            return;
+        };
+        self.commit_files.insert(sha.to_owned(), None);
+        let sha = sha.to_owned();
+        let _ = ctx.spawn(
+            git::fetch_files(repo.root.clone(), sha.clone()),
+            move |me, result, ctx| {
+                me.commit_files.insert(sha, Some(result));
+                ctx.notify();
+            },
+        );
     }
 
     /// The panel is shown or hidden; it only fetches and polls while shown.
@@ -358,6 +458,7 @@ impl ManaBarView {
         }
         let (list, key) = (self.tab.list(), self.project_key());
         ManaBar::handle(ctx).update(ctx, |mana_bar, ctx| mana_bar.ensure_loaded(list, &key, ctx));
+        self.ensure_commits(ctx);
     }
 
     fn refresh(&mut self, ctx: &mut ViewContext<Self>) {
@@ -366,6 +467,7 @@ impl ManaBarView {
         }
         let (list, key) = (self.tab.list(), self.project_key());
         ManaBar::handle(ctx).update(ctx, |mana_bar, ctx| mana_bar.refresh(list, &key, ctx));
+        self.refresh_commits(ctx);
     }
 
     fn schedule_poll(&mut self, ctx: &mut ViewContext<Self>) {
@@ -562,6 +664,9 @@ impl TypedActionView for ManaBarView {
                     self.expanded.insert(card.clone());
                     if card.starts_with("quest:") {
                         self.sync_row_mouse_states(ctx);
+                    }
+                    if let Some(sha) = card.strip_prefix("commit:") {
+                        self.fetch_commit_files(sha, ctx);
                     }
                 }
                 ctx.notify();
@@ -775,6 +880,9 @@ impl ManaBarView {
         let mut section = Flex::column().with_child(section_heading(heading, None, appearance));
         let mut filters = Wrap::row().with_run_spacing(6.);
         for (filter, mouse) in LogFilter::ALL.iter().zip(&self.header_mouse.log_filters) {
+            if *filter == LogFilter::Commits && !self.log_commits {
+                continue;
+            }
             filters.add_child(toggle_chip(
                 madness_themes::t(filter.voice_key()).to_owned(),
                 *filter == self.log_filter,
@@ -791,119 +899,295 @@ impl ManaBarView {
         if let Some(status) = fetch_status(fetch, appearance) {
             section.add_child(status);
         }
-        let Some(entries) = entries else {
-            return section.finish();
+        let entries: &[api::LogEntry] = entries.map(Vec::as_slice).unwrap_or(&[]);
+        let commits: &[git::Commit] = match &self.commits {
+            Some(Ok(repo)) if self.log_commits && self.log_filter.shows_commits() => &repo.commits,
+            _ => &[],
         };
-        let shown: Vec<&api::LogEntry> = entries
+        if self.log_commits
+            && self.log_filter.shows_commits()
+            && let Some(Err(error)) = &self.commits
+        {
+            section.add_child(muted(
+                madness_themes::tf("shellomancy.manaBar.commitsFailed", &[("error", error)]),
+                appearance,
+            ));
+        }
+        // One timeline, newest first: todo activity and commits.
+        let mut shown: Vec<LogItem> = entries
             .iter()
             .filter(|entry| self.log_filter.matches(&entry.operation))
+            .map(LogItem::Entry)
+            .chain(commits.iter().map(LogItem::Commit))
             .collect();
-        if shown.is_empty() {
+        shown.sort_by_key(|item| std::cmp::Reverse(item.at()));
+        if shown.is_empty() && fetch.and_then(Fetch::data).is_some() {
             section.add_child(muted(
                 madness_themes::t("shellomancy.manaBar.logEmpty").to_owned(),
                 appearance,
             ));
         }
         let now = chrono::Utc::now().timestamp();
+        let all_commits = match &self.commits {
+            Some(Ok(repo)) if self.log_commits => repo.commits.as_slice(),
+            _ => &[],
+        };
         let total = shown.len();
-        for entry in shown.into_iter().take(self.shown) {
-            let card_key = log_card_key(entry);
-            let expanded = self.expanded.contains(&card_key);
-            let color = operation_color(&entry.operation, appearance);
-            let mut pills = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
-            pills.add_child(pill(entry.operation.to_uppercase(), color, appearance));
-            if !entry.project.is_empty() {
-                pills.add_child(chip(entry.project.clone(), appearance));
-            }
-            let top = Flex::row()
-                .with_main_axis_size(MainAxisSize::Max)
-                .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
-                .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                .with_child(Shrinkable::new(1., pills.finish()).finish())
-                .with_child(muted(api::age_label(entry.at, now), appearance))
-                .finish();
-            let mut lines = Flex::column().with_child(top).with_child(
+        for item in shown.into_iter().take(self.shown) {
+            section.add_child(match item {
+                LogItem::Entry(entry) => self.render_log_entry(entry, all_commits, now, appearance),
+                LogItem::Commit(commit) => self.render_commit(commit, entries, now, appearance),
+            });
+        }
+        if let Some(more) = self.render_show_more(total, appearance) {
+            section.add_child(more);
+        }
+        section.finish()
+    }
+
+    /// One todo log entry's card; it names any commit its note mentions.
+    fn render_log_entry(
+        &self,
+        entry: &api::LogEntry,
+        commits: &[git::Commit],
+        now: i64,
+        appearance: &Appearance,
+    ) -> Box<dyn Element> {
+        let ui = appearance.ui_builder();
+        let card_key = log_card_key(entry);
+        let expanded = self.expanded.contains(&card_key);
+        let color = operation_color(&entry.operation, appearance);
+        let mut pills = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
+        pills.add_child(pill(entry.operation.to_uppercase(), color, appearance));
+        if !entry.project.is_empty() {
+            pills.add_child(chip(entry.project.clone(), appearance));
+        }
+        let top = Flex::row()
+            .with_main_axis_size(MainAxisSize::Max)
+            .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_child(Shrinkable::new(1., pills.finish()).finish())
+            .with_child(muted(api::age_label(entry.at, now), appearance))
+            .finish();
+        let mut lines = Flex::column().with_child(top).with_child(
+            Container::new(
+                ui.wrappable_text(entry.description.clone(), true)
+                    .with_style(UiComponentStyles {
+                        font_size: Some(13.),
+                        ..Default::default()
+                    })
+                    .build()
+                    .finish(),
+            )
+            .with_margin_top(6.)
+            .finish(),
+        );
+        // Unrolled, the diff says the same thing in more detail.
+        if !entry.fields.is_empty() && !expanded {
+            lines.add_child(
+                Container::new(muted(
+                    madness_themes::tf(
+                        "shellomancy.manaBar.logChanged",
+                        &[("fields", &entry.fields.join(", "))],
+                    ),
+                    appearance,
+                ))
+                .with_margin_top(4.)
+                .finish(),
+            );
+        }
+        if let Some(comment) = &entry.comment {
+            lines.add_child(
                 Container::new(
-                    ui.wrappable_text(entry.description.clone(), true)
+                    ui.wrappable_text(comment.clone(), true)
                         .with_style(UiComponentStyles {
-                            font_size: Some(13.),
+                            font_size: Some(12.),
+                            font_color: Some(color),
                             ..Default::default()
                         })
                         .build()
                         .finish(),
                 )
                 .with_margin_top(6.)
+                .with_uniform_padding(8.)
+                .with_background(appearance.theme().surface_2())
+                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
                 .finish(),
             );
-            // Unrolled, the diff says the same thing in more detail.
-            if !entry.fields.is_empty() && !expanded {
-                lines.add_child(
-                    Container::new(muted(
-                        madness_themes::tf(
-                            "shellomancy.manaBar.logChanged",
-                            &[("fields", &entry.fields.join(", "))],
-                        ),
-                        appearance,
-                    ))
-                    .with_margin_top(4.)
-                    .finish(),
-                );
-            }
-            if let Some(comment) = &entry.comment {
-                lines.add_child(
-                    Container::new(
-                        ui.wrappable_text(comment.clone(), true)
-                            .with_style(UiComponentStyles {
-                                font_size: Some(12.),
-                                font_color: Some(color),
-                                ..Default::default()
-                            })
-                            .build()
-                            .finish(),
-                    )
-                    .with_margin_top(6.)
-                    .with_uniform_padding(8.)
-                    .with_background(appearance.theme().surface_2())
-                    .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
-                    .finish(),
-                );
-            }
-            let mut unrolled = None;
-            if expanded {
-                let details = vec![
-                    Detail::copyable("todo_id", entry.todo_id.clone(), "id"),
-                    Detail::new("operation", entry.operation.clone()),
-                    Detail::new("project", entry.project.clone()),
-                    Detail::new("timestamp", when_label(entry.at, now)),
-                    Detail::new("by", entry.actor.clone().unwrap_or_default()),
-                ];
-                let blocks = if entry.changes.is_empty() {
-                    vec![]
-                } else {
-                    vec![changes_block(&entry.changes, appearance)]
-                };
-                unrolled = Some(self.render_unrolled(
-                    &card_key,
-                    details,
-                    blocks,
-                    changes_text(&entry.changes),
-                    vec![self.todo_open_button(&card_key, &entry.todo_id, None, appearance)],
+        }
+        // Commits this entry's note names.
+        for commit in commits.iter().filter(|commit| {
+            entry
+                .comment
+                .as_deref()
+                .is_some_and(|note| git::mentions(note, &commit.sha))
+        }) {
+            lines.add_child(
+                Container::new(muted(
+                    madness_themes::tf(
+                        "shellomancy.manaBar.linkedCommit",
+                        &[("sha", commit.short()), ("subject", &commit.subject)],
+                    ),
                     appearance,
-                ));
-            }
-            section.add_child(card(
-                lines.finish(),
-                unrolled,
-                self.row_mouse(&format!("{card_key}|head")),
-                ManaBarAction::ToggleCard(card_key.clone()),
-                Some(color),
+                ))
+                .with_margin_top(4.)
+                .finish(),
+            );
+        }
+        let mut unrolled = None;
+        if expanded {
+            let details = vec![
+                Detail::copyable("todo_id", entry.todo_id.clone(), "id"),
+                Detail::new("operation", entry.operation.clone()),
+                Detail::new("project", entry.project.clone()),
+                Detail::new("timestamp", when_label(entry.at, now)),
+                Detail::new("by", entry.actor.clone().unwrap_or_default()),
+            ];
+            let blocks = if entry.changes.is_empty() {
+                vec![]
+            } else {
+                vec![changes_block(&entry.changes, appearance)]
+            };
+            unrolled = Some(self.render_unrolled(
+                &card_key,
+                details,
+                blocks,
+                changes_text(&entry.changes),
+                vec![self.todo_open_button(&card_key, &entry.todo_id, None, appearance)],
                 appearance,
             ));
         }
-        if let Some(more) = self.render_show_more(total, appearance) {
-            section.add_child(more);
+        card(
+            lines.finish(),
+            unrolled,
+            self.row_mouse(&format!("{card_key}|head")),
+            ManaBarAction::ToggleCard(card_key.clone()),
+            Some(color),
+            appearance,
+        )
+    }
+
+    /// A commit's card: subject, sha and age, the todos whose notes name it;
+    /// unrolled, its message and the files it changed.
+    fn render_commit(
+        &self,
+        commit: &git::Commit,
+        entries: &[api::LogEntry],
+        now: i64,
+        appearance: &Appearance,
+    ) -> Box<dyn Element> {
+        let ui = appearance.ui_builder();
+        let color: ColorU = appearance.theme().terminal_colors().normal.blue.into();
+        let card_key = commit_card_key(commit);
+        let mut pills = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
+        pills.add_child(pill(
+            madness_themes::t("shellomancy.manaBar.commitPill").to_uppercase(),
+            color,
+            appearance,
+        ));
+        pills.add_child(chip(commit.short().to_owned(), appearance));
+        let top = Flex::row()
+            .with_main_axis_size(MainAxisSize::Max)
+            .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_child(Shrinkable::new(1., pills.finish()).finish())
+            .with_child(muted(api::age_label(commit.at, now), appearance))
+            .finish();
+        let mut lines = Flex::column().with_child(top).with_child(
+            Container::new(
+                ui.wrappable_text(commit.subject.clone(), true)
+                    .with_style(UiComponentStyles {
+                        font_size: Some(13.),
+                        ..Default::default()
+                    })
+                    .build()
+                    .finish(),
+            )
+            .with_margin_top(6.)
+            .finish(),
+        );
+        // The todos whose completion notes name this commit, once each.
+        let mut linked: Vec<&api::LogEntry> = Vec::new();
+        for entry in entries {
+            if entry
+                .comment
+                .as_deref()
+                .is_some_and(|note| git::mentions(note, &commit.sha))
+                && !linked.iter().any(|seen| seen.todo_id == entry.todo_id)
+            {
+                linked.push(entry);
+            }
         }
-        section.finish()
+        for entry in &linked {
+            lines.add_child(
+                Container::new(muted(
+                    madness_themes::tf(
+                        "shellomancy.manaBar.linkedTodo",
+                        &[("description", &one_line(&entry.description))],
+                    ),
+                    appearance,
+                ))
+                .with_margin_top(4.)
+                .finish(),
+            );
+        }
+        let mut unrolled = None;
+        if self.expanded.contains(&card_key) {
+            let mut details = vec![
+                Detail::copyable("sha", commit.sha.clone(), "id"),
+                Detail::new("author", commit.author.clone()),
+                Detail::new("date", when_label(commit.at, now)),
+            ];
+            if let Some(entry) = linked.first() {
+                details.push(Detail::copyable("todo", entry.todo_id.clone(), "ref"));
+            }
+            for entry in linked.iter().skip(1) {
+                details.push(Detail::new("todo", entry.todo_id.clone()));
+            }
+            let mut blocks = Vec::new();
+            let mut extra = format!("{}\n", commit.subject);
+            if !commit.body.is_empty() {
+                blocks.push(mono_block(&commit.body, appearance));
+                extra.push_str(&format!("\n{}\n", commit.body));
+            }
+            match self.commit_files.get(&commit.sha) {
+                Some(Some(Ok(files))) if !files.is_empty() => {
+                    blocks.push(mono(truncate(files), MonoTone::Dim, appearance));
+                    extra.push_str(&format!("\n{files}"));
+                }
+                Some(Some(Err(error))) => blocks.push(mono(
+                    madness_themes::tf("shellomancy.manaBar.error", &[("error", error)]),
+                    MonoTone::Dim,
+                    appearance,
+                )),
+                Some(None) => blocks.push(mono(
+                    madness_themes::t("shellomancy.manaBar.loading").to_owned(),
+                    MonoTone::Dim,
+                    appearance,
+                )),
+                _ => {}
+            }
+            let mut actions = Vec::new();
+            if let Some(Ok(repo)) = &self.commits
+                && let Some(web) = &repo.web
+            {
+                actions.push(self.open_button(
+                    &card_key,
+                    format!("{web}/commit/{}", commit.sha),
+                    appearance,
+                ));
+            }
+            unrolled =
+                Some(self.render_unrolled(&card_key, details, blocks, extra, actions, appearance));
+        }
+        card(
+            lines.finish(),
+            unrolled,
+            self.row_mouse(&format!("{card_key}|head")),
+            ManaBarAction::ToggleCard(card_key.clone()),
+            Some(color),
+            appearance,
+        )
     }
 
     /// "Show N more" under a list cut off at `self.shown`.
@@ -2051,6 +2335,26 @@ fn quest_todo_look(
     } else {
         ("○", MonoTone::Dim, MonoTone::Plain)
     }
+}
+
+/// One line of the Log's timeline.
+enum LogItem<'a> {
+    Entry(&'a api::LogEntry),
+    Commit(&'a git::Commit),
+}
+
+impl LogItem<'_> {
+    fn at(&self) -> i64 {
+        match self {
+            LogItem::Entry(entry) => entry.at,
+            LogItem::Commit(commit) => commit.at,
+        }
+    }
+}
+
+/// A commit card's key.
+fn commit_card_key(commit: &git::Commit) -> String {
+    format!("commit:{}", commit.sha)
 }
 
 /// A card's key for a log entry: stable while newer entries arrive above it.
