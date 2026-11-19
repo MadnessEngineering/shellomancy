@@ -931,7 +931,7 @@ pub(crate) fn render_page<A: warpui::Action + Clone>(
     )
 }
 
-/// `Repo|regression/balena`.
+/// `Repo|ops/devices`.
 fn folder_key(shelf: Shelf, folder: &str) -> String {
     format!("{shelf:?}|{folder}")
 }
@@ -1035,7 +1035,7 @@ fn shelf_heading(
         .finish()
 }
 
-/// `▾ regression/  4`, rolling the folder up or out.
+/// `▾ ops/  4`, rolling the folder up or out.
 fn folder_heading(
     folder: &str,
     count: usize,

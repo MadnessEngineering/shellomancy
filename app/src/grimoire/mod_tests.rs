@@ -17,14 +17,10 @@ fn a_shelf_reads_notebooks_incantations_and_scripts() {
     let shelf = tempfile::tempdir().unwrap();
     write(
         shelf.path(),
-        "regression/balena-device-aliases.md",
-        "Some notes first\n\n# Balena device aliases\n\n```sh\nbalena ssh x\n```\n",
+        "ops/device-aliases.md",
+        "Some notes first\n\n# Device aliases\n\n```sh\nssh lab-pi\n```\n",
     );
-    write(
-        shelf.path(),
-        "regression/notes.md",
-        "no heading in this one\n",
-    );
+    write(shelf.path(), "ops/notes.md", "no heading in this one\n");
     write(
         shelf.path(),
         "workflows.yaml",
@@ -52,8 +48,8 @@ fn a_shelf_reads_notebooks_incantations_and_scripts() {
             ("", "Kill the port"),
             ("", "purge"),
             ("", "Undo last commit"),
-            ("regression", "Balena device aliases"),
-            ("regression", "notes"),
+            ("ops", "Device aliases"),
+            ("ops", "notes"),
         ]
     );
 
@@ -163,17 +159,17 @@ fn search_needs_every_word_and_ranks_titles_first() {
         modified: None,
     };
     let pages = vec![
-        page("Regression desknote", "balena tunnel to the device"),
-        page("Balena device aliases", "alias edens6=..."),
+        page("Release desknote", "ssh tunnel to the device"),
+        page("Device aliases", "alias lab1=..."),
         page("Neovim", "nothing here"),
     ];
-    assert_eq!(search(&pages, "balena"), [1, 0]);
-    assert_eq!(search(&pages, "BALENA tunnel"), [0]);
+    assert_eq!(search(&pages, "device"), [1, 0]);
+    assert_eq!(search(&pages, "DEVICE tunnel"), [0]);
     assert_eq!(search(&pages, "  "), [0, 1, 2]);
     assert!(search(&pages, "nowhere").is_empty());
     assert_eq!(
         hit_line(&pages[0], "tunnel").as_deref(),
-        Some("balena tunnel to the device")
+        Some("ssh tunnel to the device")
     );
     assert_eq!(hit_line(&pages[0], ""), None);
 }
@@ -224,8 +220,8 @@ fn a_private_shelf_is_not_listed_again_in_the_global_one() {
 #[test]
 fn inscribing_writes_a_castable_incantation() {
     let shelf = tempfile::tempdir().unwrap();
-    let command = "balena device ssh {{RTK_UUID}} --port 22222 --verbose --tty extra";
-    let first = inscribe(shelf.path(), command, Some("/tmp/rtk"), now()).unwrap();
+    let command = "ssh {{HOST}} -p 2222 -o StrictHostKeyChecking=no uptime extra";
+    let first = inscribe(shelf.path(), command, Some("/tmp/lab"), now()).unwrap();
     let second = inscribe(shelf.path(), command, None, now()).unwrap();
     assert_eq!(first.parent().unwrap(), shelf.path().join("inscribed"));
     assert_ne!(first, second, "a second inscription gets its own file");
@@ -245,13 +241,13 @@ fn inscribing_writes_a_castable_incantation() {
     assert_eq!(workflow.content(), command);
     assert_eq!(
         workflow.name(),
-        "balena device ssh {{RTK_UUID}} --port 22222…"
+        "ssh {{HOST}} -p 2222 -o StrictHostKeyChecking=no…"
     );
     assert_eq!(
         workflow.description().map(String::as_str),
-        Some("Inscribed from /tmp/rtk on 2026-11-19")
+        Some("Inscribed from /tmp/lab on 2026-11-19")
     );
-    assert_eq!(workflow.arguments()[0].name(), "RTK_UUID");
+    assert_eq!(workflow.arguments()[0].name(), "HOST");
 }
 
 #[test]

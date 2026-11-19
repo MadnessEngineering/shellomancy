@@ -67,7 +67,7 @@ pub enum PageKind {
 pub struct Page {
     pub path: PathBuf,
     pub shelf: Shelf,
-    /// The folder under the shelf (`regression/balena`), empty at its top.
+    /// The folder under the shelf (`ops/devices`), empty at its top.
     pub folder: String,
     pub title: String,
     pub kind: PageKind,
@@ -373,7 +373,7 @@ fn notebook_title(text: &str) -> Option<String> {
         .filter(|title| !title.is_empty())
 }
 
-/// `balena-device-aliases.md` -> `balena device aliases`.
+/// `device-aliases.md` -> `device aliases`.
 fn title_from_path(path: &Path) -> String {
     let stem = path
         .file_stem()
