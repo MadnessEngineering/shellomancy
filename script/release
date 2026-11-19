@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+#
+# Shellomancy: build a release and put it on GitHub where the in-app updater
+# finds it.
+#
+#   script/release                 # build, check, and create a DRAFT release
+#   script/release --publish       # ...and publish it (updaters see it)
+#   script/release --skip-build    # reuse the last release build in target/
+#   script/release --dry-run       # build and check, write the assets, stop
+#
+# A release is one GitHub release tagged with a version like
+# v0.2026.11.19.17.05.oss_00 (UTC), holding:
+#   Shellomancy-arm64.dmg         the app (Apple Silicon)
+#   Shellomancy-arm64.dmg.sha256  its checksum, checked before it's mounted
+#   channel_versions.json         {"stable": {"version": "<tag>"}, ...}
+# The updater reads releases/latest/download/channel_versions.json, which
+# GitHub points at the newest published (not draft) release.
+#
+# Signing: the app is signed by `script/bundle --selfsign` (an Apple
+# Development identity if there is one, else "Shellomancy Local Signing").
+# An installed copy only accepts an update signed the same way as itself, so
+# every release must be signed with the same identity. Set
+# SHELLOMANCY_RELEASE_TEAM_ID to an Apple team id to also bake in trust for
+# releases signed by that team (Developer ID). Ad hoc builds are refused.
+#
+# Needs: gh (signed in), create-dmg (brew install create-dmg), and cargo-about
+# (script/install_cargo_release_deps) for the third-party licenses file.
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+REPO="MadnessEngineering/shellomancy"
+DMG_NAME="Shellomancy-arm64.dmg"
+PUBLISH=false
+BUILD=true
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --publish) PUBLISH=true; shift ;;
+    --skip-build) BUILD=false; shift ;;
+    --dry-run) DRY_RUN=true; shift ;;
+    -h|--help) sed -n '2,29p' "$0"; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
+
+fail() { echo "release: $*" >&2; exit 1; }
+
+# --- Preflight -------------------------------------------------------------
+
+[[ "$(uname -s)" == "Darwin" ]] || fail "builds the macOS app; run it on a Mac."
+command -v create-dmg > /dev/null || fail "create-dmg is missing: brew install create-dmg"
+command -v cargo-about > /dev/null \
+  || fail "cargo-about is missing (it writes the licenses file): script/install_cargo_release_deps"
+if [[ $DRY_RUN == false ]]; then
+  command -v gh > /dev/null || fail "gh is missing: brew install gh"
+  gh auth status > /dev/null 2>&1 || fail "gh isn't signed in: gh auth login"
+fi
+
+# A release is a commit anyone can check out: nothing uncommitted, and pushed.
+git diff --quiet && git diff --cached --quiet \
+  || fail "the working tree has changes; commit or stash them first."
+COMMIT="$(git rev-parse HEAD)"
+git fetch --quiet origin
+git branch -r --contains "$COMMIT" | grep -q . \
+  || fail "HEAD ($COMMIT) isn't pushed; push it first."
+
+TAG="v0.$(date -u +%Y.%m.%d.%H.%M).oss_00"
+OUT="target/release-assets/$TAG"
+mkdir -p "$OUT"
+echo "release: $TAG from ${COMMIT:0:8}"
+
+# --- Build -----------------------------------------------------------------
+
+STAMP="$OUT/.build-started"
+touch "$STAMP"
+if [[ $BUILD == true ]]; then
+  ./script/bundle --channel oss --release-tag "$TAG" --arch aarch64 \
+    --dmg-name-suffix arm64 --selfsign
+  BUILT="$(find target -name "$DMG_NAME" -newer "$STAMP" -type f | head -n 1)"
+else
+  BUILT="$(find target -name "$DMG_NAME" -not -path "target/release-assets/*" -type f \
+    -exec ls -t {} + 2> /dev/null | head -n 1)"
+fi
+[[ -n "$BUILT" && -f "$BUILT" ]] || fail "no $DMG_NAME was built."
+cp "$BUILT" "$OUT/$DMG_NAME"
+
+# --- Check what was built --------------------------------------------------
+
+MOUNT="$(mktemp -d)/mnt"
+mkdir -p "$MOUNT"
+hdiutil attach -nobrowse -noautoopen -readonly -mountpoint "$MOUNT" "$OUT/$DMG_NAME" > /dev/null
+trap 'hdiutil detach "$MOUNT" -quiet || true' EXIT
+APP="$MOUNT/Shellomancy.app"
+[[ -d "$APP" ]] || fail "the DMG has no Shellomancy.app at its root."
+codesign -v --deep --strict "$APP" || fail "Shellomancy.app's signature doesn't verify."
+REQUIREMENT="$(codesign -d -r- "$APP" 2>&1 | sed -n 's/^designated => //p')"
+[[ -n "$REQUIREMENT" ]] || fail "couldn't read the app's designated requirement."
+[[ "$REQUIREMENT" != cdhash* ]] \
+  || fail "the app is signed ad hoc, so installed copies couldn't verify it. Run script/setup_local_signing (or install an Apple identity) and build again."
+WARP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :WarpVersion' "$APP/Contents/Info.plist" 2> /dev/null || true)"
+if [[ $BUILD == true && "$WARP_VERSION" != "$TAG" ]]; then
+  fail "the app says it's version '$WARP_VERSION', not $TAG."
+fi
+if [[ $BUILD == false ]]; then
+  # A reused build keeps the version it was built with.
+  [[ -n "$WARP_VERSION" ]] || fail "the reused build has no version; build it with script/release."
+  TAG="$WARP_VERSION"
+fi
+echo "release: signed by: $REQUIREMENT"
+hdiutil detach "$MOUNT" -quiet
+trap - EXIT
+
+# --- Assets ----------------------------------------------------------------
+
+(cd "$OUT" && shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256")
+cat > "$OUT/channel_versions.json" << JSON
+{
+  "dev": { "version": "$TAG" },
+  "preview": { "version": "$TAG" },
+  "stable": { "version": "$TAG" }
+}
+JSON
+echo "release: assets in $OUT"
+
+if [[ $DRY_RUN == true ]]; then
+  echo "release: dry run; nothing uploaded."
+  exit 0
+fi
+
+# --- GitHub ----------------------------------------------------------------
+
+NOTES="$(git log -1 --format='Built from %h: %s' "$COMMIT")"
+DRAFT_FLAG=(--draft)
+[[ $PUBLISH == true ]] && DRAFT_FLAG=()
+gh release create "$TAG" \
+  "$OUT/$DMG_NAME" "$OUT/$DMG_NAME.sha256" "$OUT/channel_versions.json" \
+  --repo "$REPO" --target "$COMMIT" --title "Shellomancy $TAG" \
+  --notes "$NOTES" "${DRAFT_FLAG[@]+"${DRAFT_FLAG[@]}"}"
+
+if [[ $PUBLISH == true ]]; then
+  echo "release: published $TAG; installed copies will find it."
+else
+  echo "release: drafted $TAG. Publish it on GitHub (or: gh release edit $TAG --repo $REPO --draft=false) for updaters to see it."
+fi

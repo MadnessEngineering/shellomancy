@@ -26,6 +26,12 @@ pub async fn fetch_channel_versions(
             .context("Failed to parse channel versions JSON");
     }
 
+    // Shellomancy has no Warp server: the latest GitHub release carries the
+    // versions file.
+    if ChannelState::channel() == Channel::Oss {
+        return fetch_oss_channel_versions().await;
+    }
+
     let channel_versions = server_api
         .fetch_channel_versions(include_changelogs, is_daily)
         .await
@@ -46,6 +52,34 @@ pub async fn fetch_channel_versions(
             fetch_channel_versions_from_json_storage(server_api.http_client(), nonce).await
         }
     }
+}
+
+/// Where Shellomancy's latest release keeps its versions file (GitHub
+/// redirects `latest/download` to the newest release's asset).
+pub fn oss_channel_versions_url(releases_base_url: &str) -> String {
+    format!("{releases_base_url}/latest/download/channel_versions.json")
+}
+
+async fn fetch_oss_channel_versions() -> Result<ChannelVersions> {
+    let url = oss_channel_versions_url(&ChannelState::releases_base_url());
+    log::info!("Fetching Shellomancy's channel versions from {url}");
+    // No Warp headers or credentials: this goes to GitHub.
+    let res = http_client::Client::new_external()
+        .get(&url)
+        .timeout(FETCH_CHANNEL_VERSIONS_TIMEOUT)
+        .send()
+        .await?;
+    anyhow::ensure!(
+        res.status().is_success(),
+        "No Shellomancy release to update from ({} from {url})",
+        res.status()
+    );
+    let versions: ChannelVersions = res
+        .json()
+        .await
+        .context("Failed to parse Shellomancy's channel_versions.json")?;
+    log::info!("Received Shellomancy's channel versions: {versions}");
+    Ok(versions)
 }
 
 // Synchronously fetches updated Warp [`ChannelVersions`] from GCP JSON storage. This will soon

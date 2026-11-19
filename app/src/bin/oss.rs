@@ -4,7 +4,14 @@
 
 use anyhow::Result;
 use warp_core::AppId;
-use warp_core::channel::{Channel, ChannelConfig, ChannelState, OzConfig, WarpServerConfig};
+use warp_core::channel::{
+    AutoupdateConfig, Channel, ChannelConfig, ChannelState, OzConfig, WarpServerConfig,
+};
+use warp_core::features::FeatureFlag;
+
+/// Where Shellomancy's releases live: each tag's assets are
+/// `channel_versions.json`, `Shellomancy-arm64.dmg` and its `.sha256`.
+const RELEASES_URL: &str = "https://github.com/MadnessEngineering/shellomancy/releases";
 
 // Simple wrapper around warp::run() for Shellomancy (the Warp OSS channel, rebranded).
 fn main() -> Result<()> {
@@ -17,14 +24,26 @@ fn main() -> Result<()> {
             oz_config: OzConfig::offline(),
             telemetry_config: None,
             crash_reporting_config: None,
-            autoupdate_config: None,
+            // The only network call Shellomancy makes on its own, and only
+            // when asked (Check for updates) or allowed (Settings > Account).
+            autoupdate_config: Some(AutoupdateConfig {
+                releases_base_url: RELEASES_URL.into(),
+                show_autoupdate_menu_items: true,
+            }),
             mcp_static_config: None,
         },
     );
     if cfg!(debug_assertions) {
         state = state.with_additional_features(warp_core::features::DEBUG_FLAGS);
     }
-    state = state.with_disabled_features(warp_core::channel::OFFLINE_DISABLED_FEATURES);
+    // Offline, except that updates come from our GitHub releases. (The TUI
+    // keeps the whole list: its updater still talks to Warp's server.)
+    let disabled: Vec<FeatureFlag> = warp_core::channel::OFFLINE_DISABLED_FEATURES
+        .iter()
+        .copied()
+        .filter(|flag| *flag != FeatureFlag::Autoupdate)
+        .collect();
+    state = state.with_disabled_features(&disabled);
     ChannelState::set(state);
 
     warp::run()

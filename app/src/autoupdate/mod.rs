@@ -186,7 +186,9 @@ impl AutoupdateState {
             match request {
                 RequestType::ManualCheck => return Some(request),
                 RequestType::Poll | RequestType::DailyCheck => {
-                    if AppExecutionMode::as_ref(ctx).can_autoupdate() {
+                    if AppExecutionMode::as_ref(ctx).can_autoupdate()
+                        && automatic_checks_allowed(ctx)
+                    {
                         return Some(request);
                     }
                 }
@@ -779,7 +781,9 @@ async fn fetch_version(
         Channel::Stable => versions.stable,
         Channel::Preview => versions.preview,
         Channel::Dev => versions.dev,
-        Channel::Integration | Channel::Local | Channel::Oss => {
+        // Shellomancy's releases file lists its one version under every key.
+        Channel::Oss => versions.stable,
+        Channel::Integration | Channel::Local => {
             // These channels don't ship release artifacts, so there's no
             // version to fetch. This branch is normally unreachable because
             // `AutoupdateState::register` gates the poll loop on the
@@ -787,9 +791,7 @@ async fn fetch_version(
             // can end up with `Autoupdate` enabled while running on one of
             // these channels. Return an error rather than panicking so the
             // poll loop just logs and bails.
-            anyhow::bail!(
-                "Local, integration, and open-source channel binaries don't support autoupdate"
-            );
+            anyhow::bail!("Local and integration channel binaries don't support autoupdate");
         }
     };
     let version_info = channel_version.version_info();
@@ -1139,6 +1141,19 @@ pub fn is_incoming_version_past_current(version: Option<&str>) -> bool {
     installed_version.is_some_and(|curr_version| incoming_version > curr_version)
 }
 
+/// Shellomancy checks on its own only when Settings > Account allows it;
+/// Check for updates always works. Warp's channels always poll.
+fn automatic_checks_allowed(ctx: &AppContext) -> bool {
+    use crate::settings::madness_sync::MadnessSyncSettings;
+    use settings::Setting as _;
+
+    ChannelState::channel() != Channel::Oss
+        || (ctx.has_singleton_model::<MadnessSyncSettings>()
+            && *MadnessSyncSettings::as_ref(ctx)
+                .check_for_updates_automatically
+                .value())
+}
+
 /// Returns the base URL that contains release assets for the given version
 /// of this app bundle.
 fn release_assets_directory_url(channel: Channel, version: &str) -> String {
@@ -1151,8 +1166,10 @@ fn release_assets_directory_url(channel: Channel, version: &str) -> String {
             format!("{releases_base_url}/preview/{version}")
         }
         Channel::Dev => format!("{releases_base_url}/dev/{version}"),
-        Channel::Local | Channel::Integration | Channel::Oss => {
-            unreachable!("local/integration/oss autoupdate not supported");
+        // A GitHub release's assets: <releases>/download/<tag>/<file>.
+        Channel::Oss => format!("{releases_base_url}/download/{version}"),
+        Channel::Local | Channel::Integration => {
+            unreachable!("local/integration autoupdate not supported");
         }
     }
 }

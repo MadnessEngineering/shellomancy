@@ -35,4 +35,5 @@ Status as of 2026-10-31.
 ## Distribution
 
 - **Redistributing a built binary is an open question.** Five of Warp's git dependencies (`command-corrections`, `session-sharing-protocol`, `warp-command-signatures`, `warp-completion-metadata`, `warp-workflows`) declare no license yet (`about.toml`). Building from source for yourself is unaffected.
-- **No releases, no installer, no auto-update.** Build from source ([README](../README.md#getting-it)).
+- **No releases yet.** `script/release` builds one and drafts it on GitHub, and the app can update itself from published releases ([building.md](building.md#releasing)). None of that has run end to end: no release has been published, so the updater has only been unit-tested. Until then, build from source ([README](../README.md#getting-it)).
+- **First install of a downloaded release.** A release signed with "Shellomancy Local Signing" isn't notarized, so macOS blocks it on first open (System Settings > Privacy & Security > Open Anyway, or `xattr -dr com.apple.quarantine /Applications/Shellomancy.app`). An Apple Developer ID would fix that; not set up yet.

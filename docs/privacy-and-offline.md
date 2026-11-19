@@ -7,7 +7,7 @@ Shellomancy is built to never contact Warp's servers and never send telemetry or
 | What | Upstream behavior (logged out) | Shellomancy | Where |
 |---|---|---|---|
 | Warp server, realtime and Oz URLs | `app.warp.dev`, `rtc.app.warp.dev`, `oz.warp.dev` | `127.0.0.1:9` (a closed loopback port, refused instantly); session-sharing URL unset | `WarpServerConfig::offline`, `OzConfig::offline` in `crates/warp_core/src/channel/config.rs` |
-| Update check | `GET /client_version` every 10 minutes in release builds | Off (`Autoupdate` flag forced off) | `OFFLINE_DISABLED_FEATURES` |
+| Update check | `GET /client_version` every 10 minutes in release builds | Only when you click Check for updates, or every 10 minutes if Settings > Account > Check for updates automatically is on (off by default). It asks GitHub, not Warp: `github.com/MadnessEngineering/shellomancy/releases/latest/download/channel_versions.json`, then the DMG and its `.sha256`, with no Warp headers or credentials. An update installs only if it's signed the same way as the running app. | `app/src/bin/oss.rs`, `app/src/autoupdate/channel_versions.rs`, `app/src/autoupdate/mac.rs` |
 | Changelog | Fetched at window creation in release builds | Off (`Changelog`) | same |
 | First-run onboarding | Queries Warp's public model list | Off (`AgentOnboarding`, `AccountFirstOnboarding`); first launch goes straight to a terminal | same |
 | Launch pop-ups for Warp products | Shown once | Off | same |

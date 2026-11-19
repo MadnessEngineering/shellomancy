@@ -1,0 +1,4 @@
+[
+ {"key": "shellomancy.settings.updates.automatic", "standard": "Check for updates automatically", "shellomancer": "Watch for new releases"},
+ {"key": "shellomancy.settings.updates.automaticNote", "standard": "Asks GitHub for a new Shellomancy release now and then. Off by default; Check for updates always works. Updates install only if they're signed the same way as this copy.", "shellomancer": "Asks GitHub for a new Shellomancy release now and then. Off by default; Check for updates always works. Only a release sealed the same way as this copy is let in."}
+]

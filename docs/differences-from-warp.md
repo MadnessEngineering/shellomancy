@@ -32,7 +32,8 @@ Regenerate the brand assets with [`script/shellomancy_brand`](../script/shelloma
 | Difference | Commit | Checked by |
 |---|---|---|
 | Server and Oz URLs point at a closed loopback port (`127.0.0.1:9`), so nothing reaches Warp's servers; login, Warp AI, Drive and session sharing are unavailable | `65831e03` | unit tests |
-| Forced off: auto-update, changelog, agent onboarding, account-first onboarding, Warp's launch pop-ups, Warp-hosted SSH remote server | `65831e03` | unit tests |
+| Updates from our GitHub releases instead of Warp's: manual check, automatic checks off by default, DMG checked against its published SHA-256, installed only if signed like the running app | 2026-11-19 | unit tests; no release published yet |
+| Forced off: changelog, agent onboarding, account-first onboarding, Warp's launch pop-ups, Warp-hosted SSH remote server | `65831e03` | unit tests |
 | Forced off: crash reporting and handoff checkpoints (turned on by release bundles) | `e47e390b` | unit tests |
 | Telemetry is never sent (no destination, and an early return in the send path) | `65831e03` | `cargo check` |
 | The loopback install-detection server that `*.warp.dev` pages query is not started | `6a4cb483` | `cargo check` |

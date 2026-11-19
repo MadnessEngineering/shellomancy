@@ -304,22 +304,85 @@ async fn is_directory_writable(directory: &Path) -> Result<bool> {
     Ok(needs_authorization)
 }
 
-/// Verifies that the staged bundle path has a valid macOS code signature, and that its
-/// team identifier matches Warp's team identifier.
-async fn verify_code_signature(component: &str, path: &Path) -> Result<()> {
-    // Verify the signature of the staged update bundle with team identifier
+/// The bundle id every Shellomancy build is signed with.
+const SHELLOMANCY_BUNDLE_ID: &str = "cc.madnessinteractive.shellomancy";
+
+/// The code-signing requirement an update has to meet.
+///
+/// Warp's channels: signed by Warp's Apple team. Shellomancy: signed the same
+/// way as the app that's running (its designated requirement), or by the Apple
+/// team a release was built to trust (`SHELLOMANCY_RELEASE_TEAM_ID` at build
+/// time), so builds signed with a Developer ID can follow local-key ones.
+async fn update_requirement(channel: Channel) -> Result<String> {
+    if channel != Channel::Oss {
+        return Ok(format!(
+            "certificate leaf[subject.OU] = \"{}\"",
+            warp_core::macos::APPLE_TEAM_ID
+        ));
+    }
+    let bundle = get_bundle_path()?;
+    let output = Command::new("/usr/bin/codesign")
+        .args(["-d", "-r-"])
+        .arg(&bundle)
+        .output()
+        .await?;
+    ensure!(
+        output.status.success(),
+        "Couldn't read this app's own code signature: {output:?}"
+    );
+    // codesign has printed the requirement on stdout or stderr, by version.
+    let printed = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let own = designated_requirement(&printed)
+        .ok_or_else(|| anyhow!("This app's code signature has no designated requirement"))?;
+    oss_update_requirement(own, option_env!("SHELLOMANCY_RELEASE_TEAM_ID"))
+}
+
+/// The requirement on the `designated => ...` line of `codesign -d -r-`.
+pub(super) fn designated_requirement(printed: &str) -> Option<&str> {
+    printed
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("designated => "))
+        .map(str::trim)
+        .filter(|requirement| !requirement.is_empty())
+}
+
+/// What a Shellomancy update must satisfy, given the running app's own
+/// requirement and the release team (if any). An ad hoc build is pinned to
+/// its own exact code, so nothing else can ever pass: refuse plainly.
+pub(super) fn oss_update_requirement(own: &str, team: Option<&str>) -> Result<String> {
+    ensure!(
+        !own.starts_with("cdhash"),
+        "This build is signed ad hoc, so it can't tell a genuine update from a fake one. \
+         Install a signed release to get updates."
+    );
+    let team = team
+        .map(str::trim)
+        .filter(|team| !team.is_empty() && team.chars().all(|c| c.is_ascii_alphanumeric()));
+    Ok(match team {
+        Some(team) => format!(
+            "({own}) or (anchor apple generic and identifier \"{SHELLOMANCY_BUNDLE_ID}\" \
+             and certificate leaf[subject.OU] = \"{team}\")"
+        ),
+        None => own.to_owned(),
+    })
+}
+
+/// Verifies that the staged bundle path has a valid macOS code signature that
+/// meets `requirement` (see [`update_requirement`]).
+async fn verify_code_signature(component: &str, path: &Path, requirement: &str) -> Result<()> {
     let codesign_verify_output = Command::new("/usr/bin/codesign")
         .arg("-v")
-        .arg(format!(
-            "-R=certificate leaf[subject.OU] = \"{}\"",
-            warp_core::macos::APPLE_TEAM_ID
-        ))
+        .arg(format!("-R={requirement}"))
         .arg(path)
         .output()
         .await?;
     ensure!(
         codesign_verify_output.status.success(),
-        "Failed to verify code signature for {component} with team identifier: {codesign_verify_output:?}"
+        "Failed to verify code signature for {component} against {requirement}: {codesign_verify_output:?}"
     );
 
     safe_info!(
@@ -532,6 +595,9 @@ async fn download_and_extract_binary(
     log::info!("Creating download dir {:?}", &download_dir);
     async_fs::create_dir_all(&download_dir).await?;
 
+    // Know what a genuine update looks like before fetching one.
+    let requirement = update_requirement(channel).await?;
+
     let dmg_path = download_dmg(&channel, version_info, update_id, client).await?;
 
     // Mount the downloaded dmg so we can copy out the binary.
@@ -554,8 +620,8 @@ async fn download_and_extract_binary(
     let executable_path_buf = target.join(executable_path(channel));
     let verification_start = Instant::now();
     future::try_zip(
-        verify_code_signature("bundle", &target),
-        verify_code_signature("executable", executable_path_buf.as_path()),
+        verify_code_signature("bundle", &target, &requirement),
+        verify_code_signature("executable", executable_path_buf.as_path(), &requirement),
     )
     .await?;
 
@@ -639,6 +705,14 @@ async fn download_dmg(
     // TODO: Use a streaming fetch and and provide an api for tracking progress
     let update_url = update_url(*channel, &version_info.version);
     log::info!("Fetching new dmg at {update_url}");
+    // Shellomancy's releases are on GitHub: no Warp headers or credentials.
+    let external;
+    let client = if *channel == Channel::Oss {
+        external = http_client::Client::new_external();
+        &external
+    } else {
+        client
+    };
     let res = client
         .get(&update_url)
         .timeout(Duration::from_secs(DMG_TIMEOUT_S))
@@ -657,7 +731,60 @@ async fn download_dmg(
     file.sync_data().await?;
 
     log::info!("Wrote DMG to tempfile at {:?}", &dmg_file);
+    if *channel == Channel::Oss {
+        verify_dmg_checksum(client, &update_url, &dmg_file).await?;
+    }
     Ok(dmg_file)
+}
+
+/// Checks a downloaded DMG against the `<dmg>.sha256` published beside it,
+/// before anything mounts it.
+async fn verify_dmg_checksum(
+    client: &http_client::Client,
+    update_url: &str,
+    dmg_file: &Path,
+) -> Result<()> {
+    use futures_lite::AsyncReadExt as _;
+    use sha2::{Digest as _, Sha256};
+
+    let checksum_url = format!("{update_url}.sha256");
+    let res = client
+        .get(&checksum_url)
+        .timeout(Duration::from_secs(30))
+        .send()
+        .await?;
+    ensure!(
+        res.status().is_success(),
+        "No checksum published for the update ({} from {checksum_url})",
+        res.status()
+    );
+    let published = res.text().await?;
+    let expected = expected_sha256(&published)
+        .ok_or_else(|| anyhow!("The update's checksum file is malformed: {published:?}"))?;
+
+    let mut file = async_fs::File::open(dmg_file).await?;
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0u8; 1 << 20];
+    loop {
+        let read = file.read(&mut buffer).await?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    let actual = hex::encode(hasher.finalize());
+    ensure!(
+        actual == expected,
+        "The downloaded update doesn't match its checksum (expected {expected}, got {actual})"
+    );
+    log::info!("Update checksum matches ({actual})");
+    Ok(())
+}
+
+/// The hash in a `shasum -a 256` line (`<hex>  <file>`), lowercased.
+pub(super) fn expected_sha256(published: &str) -> Option<String> {
+    let hash = published.split_whitespace().next()?.to_ascii_lowercase();
+    (hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit())).then_some(hash)
 }
 
 fn get_download_dir(update_id: &str) -> PathBuf {
@@ -734,7 +861,8 @@ fn app_name_prefix(channel: Channel) -> &'static str {
         Channel::Local => "warp",
         Channel::Integration => "integration",
         Channel::Dev => "WarpDev",
-        Channel::Oss => "warp-oss",
+        // The bundle script names the app and its DMG after the product.
+        Channel::Oss => "Shellomancy",
     }
 }
 
@@ -756,3 +884,7 @@ fn executable_path(channel: Channel) -> String {
         executable_name(channel).to_owned()
     }
 }
+
+#[cfg(test)]
+#[path = "mac_tests.rs"]
+mod tests;

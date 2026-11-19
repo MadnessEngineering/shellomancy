@@ -20,10 +20,28 @@ fn initialize_app(app: &mut App) -> ModelHandle<AutoupdateState> {
     app.add_model(|_| AutoupdateState::new(server_api))
 }
 
+/// Settings, with Shellomancy's automatic update checks on or off.
+fn initialize_settings(app: &mut App, automatic_checks: bool) {
+    use settings::Setting as _;
+
+    use crate::settings::madness_sync::MadnessSyncSettings;
+
+    crate::test_util::settings::initialize_settings_for_tests(app);
+    app.update(|ctx| {
+        MadnessSyncSettings::handle(ctx).update(ctx, |settings, ctx| {
+            settings
+                .check_for_updates_automatically
+                .set_value(automatic_checks, ctx)
+                .expect("setting is registered");
+        });
+    });
+}
+
 #[test]
 fn test_queueing_behavior() {
     App::test((), |mut app| async move {
-        app.add_singleton_model(|ctx| AppExecutionMode::new(ExecutionMode::App, false, ctx));
+        // Automatic checks on, so polls and daily checks run on every channel.
+        initialize_settings(&mut app, true);
         let autoupdate_state = initialize_app(&mut app);
 
         app.update_model(&autoupdate_state, |autoupdate, ctx| {
@@ -62,6 +80,29 @@ fn test_queueing_behavior() {
                 Some(RequestType::ManualCheck)
             );
             assert_eq!(autoupdate.request_queue.len(), 0);
+        });
+    });
+}
+
+#[test]
+fn shellomancy_checks_on_its_own_only_when_allowed() {
+    App::test((), |mut app| async move {
+        // The default: automatic checks off.
+        initialize_settings(&mut app, false);
+        let autoupdate_state = initialize_app(&mut app);
+
+        app.update_model(&autoupdate_state, |autoupdate, ctx| {
+            autoupdate.polling_started = true;
+            autoupdate.request_queue.push_back(RequestType::Poll);
+            autoupdate.request_queue.push_back(RequestType::DailyCheck);
+            autoupdate.request_queue.push_back(RequestType::ManualCheck);
+            let expected = if ChannelState::channel() == Channel::Oss {
+                // Polls and daily checks are dropped; Check for updates runs.
+                Some(RequestType::ManualCheck)
+            } else {
+                Some(RequestType::Poll)
+            };
+            assert_eq!(autoupdate.get_next_request(ctx), expected);
         });
     });
 }

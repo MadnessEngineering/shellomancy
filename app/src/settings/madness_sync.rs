@@ -119,6 +119,17 @@ define_settings_group!(MadnessSyncSettings, settings: [
         toml_path: "madness.log_commits",
         description: "Whether the Mana Bar's Log mixes in the focused repo's git commits.",
     },
+    check_for_updates_automatically: MadnessCheckForUpdatesAutomatically {
+        type: bool,
+        default: false,
+        supported_platforms: SupportedPlatforms::DESKTOP,
+        sync_to_cloud: SyncToCloud::Never,
+        surface: settings::SettingSurfaces::GUI,
+        private: false,
+        storage_key: "MadnessCheckForUpdatesAutomatically",
+        toml_path: "madness.check_for_updates_automatically",
+        description: "Whether Shellomancy checks GitHub for a new release on its own (Check for updates always works).",
+    },
     // What was last synced and when each value changed, as JSON. Not a
     // user-visible setting.
     state: MadnessSyncState {

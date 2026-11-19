@@ -89,7 +89,22 @@ brew install create-dmg      # the bundle script always builds a DMG
 ./script/bundle --channel oss --selfsign --nouniversal
 ```
 
-This uses the `release-lto` profile and the `release_bundle` feature. `release_bundle` turns on Warp's auto-update, changelog, crash-reporting, handoff-checkpoint and SSH-remote-server flags, but Shellomancy forces those off again at startup (`OFFLINE_DISABLED_FEATURES`), so a release bundle stays offline. Not verified.
+This uses the `release-lto` profile and the `release_bundle` feature. `release_bundle` turns on Warp's auto-update, changelog, crash-reporting, handoff-checkpoint and SSH-remote-server flags. Shellomancy forces the others off again at startup (`OFFLINE_DISABLED_FEATURES`); auto-update stays on, pointed at our GitHub releases (see [Releasing](#releasing)). Not verified.
+
+## Releasing
+
+```sh
+brew install create-dmg
+./script/install_cargo_release_deps   # cargo-about, for the licenses file
+./script/release                      # build, check, draft a GitHub release
+./script/release --publish            # ...or publish it straight away
+```
+
+`script/release` needs a clean, pushed commit. It tags the build with the UTC time (`v0.2026.11.19.17.05.oss_00`), builds an Apple Silicon release bundle, checks that the app is signed (not ad hoc) and carries that version, then uploads three assets: `Shellomancy-arm64.dmg`, `Shellomancy-arm64.dmg.sha256` and `channel_versions.json`. A draft is invisible to updaters until it's published. `--dry-run` stops before uploading. It has not been run yet.
+
+How an installed copy updates: Check for updates (or the automatic check, off by default) reads `releases/latest/download/channel_versions.json`. If that version is newer, it downloads the DMG, checks it against the `.sha256`, and installs it only if the new app is signed the same way as the running one (its designated requirement). So **every release has to be signed with the same identity**, and an ad hoc build can't update at all.
+
+To move to an Apple Developer ID later without stranding installed copies, build one release with `SHELLOMANCY_RELEASE_TEAM_ID=<team id>` set while still signing with the old identity: copies built from it also trust releases signed by that team. A copy built before then accepts only its own signer, so it would need one manual reinstall.
 
 ## Signing and the Keychain
 

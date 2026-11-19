@@ -144,6 +144,8 @@ pub enum MainPageAction {
     SetTodoOpenTarget(TodoOpenTarget),
     /// Shellomancy: whether the Mana Bar's Log mixes in git commits.
     ToggleLogCommits,
+    /// Shellomancy: whether it checks GitHub for releases on its own.
+    ToggleAutomaticUpdateChecks,
     #[cfg(not(target_family = "wasm"))]
     RefreshIapCredentials,
 }
@@ -273,6 +275,16 @@ impl TypedActionView for MainSettingsPageView {
                     SettingsSync::handle(ctx).update(ctx, |sync, ctx| sync.sync_now(ctx));
                 }
             }
+            MainPageAction::ToggleAutomaticUpdateChecks => {
+                MadnessSyncSettings::handle(ctx).update(ctx, |settings, ctx| {
+                    report_if_error!(
+                        settings
+                            .check_for_updates_automatically
+                            .toggle_and_save_value(ctx)
+                    );
+                });
+                ctx.notify();
+            }
             MainPageAction::ToggleLogCommits => {
                 MadnessSyncSettings::handle(ctx).update(ctx, |settings, ctx| {
                     report_if_error!(settings.log_commits.toggle_and_save_value(ctx));
@@ -380,6 +392,7 @@ impl MainSettingsPageView {
             widgets.push(Box::new(MadnessAccountWidget::default()));
             widgets.push(Box::new(MadnessSettingsSyncWidget::default()));
             widgets.push(Box::new(TodoOpenTargetWidget::default()));
+            widgets.push(Box::new(AutomaticUpdatesWidget::default()));
             widgets.push(Box::new(DividerWidget {}));
         } else {
             widgets.push(Box::new(AccountWidget::default()));
@@ -1189,6 +1202,53 @@ impl SettingsWidget for TodoOpenTargetWidget {
     }
 }
 
+/// Shellomancy: whether it checks GitHub for a new release on its own. Off by
+/// default (Shellomancy stays offline unless asked); Check for updates always
+/// works.
+#[derive(Default)]
+struct AutomaticUpdatesWidget {
+    switch_state: SwitchStateHandle,
+}
+
+impl SettingsWidget for AutomaticUpdatesWidget {
+    type View = MainSettingsPageView;
+
+    fn search_terms(&self) -> &str {
+        "update updates automatic check release github version"
+    }
+
+    fn render(
+        &self,
+        _view: &Self::View,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        let on = *MadnessSyncSettings::as_ref(app)
+            .check_for_updates_automatically
+            .value();
+        let switch = appearance
+            .ui_builder()
+            .switch(self.switch_state.clone())
+            .check(on)
+            .build()
+            .on_click(|ctx, _, _| {
+                ctx.dispatch_typed_action(MainPageAction::ToggleAutomaticUpdateChecks)
+            })
+            .finish();
+        Container::new(render_body_item::<MainPageAction>(
+            madness_themes::t("shellomancy.settings.updates.automatic").to_owned(),
+            None,
+            LocalOnlyIconState::Hidden,
+            ToggleState::Enabled,
+            appearance,
+            switch,
+            Some(madness_themes::t("shellomancy.settings.updates.automaticNote").to_owned()),
+        ))
+        .with_margin_top(16.)
+        .finish()
+    }
+}
+
 fn ctx_has_sync(app: &AppContext) -> bool {
     app.has_singleton_model::<SettingsSync>()
 }
@@ -1415,7 +1475,7 @@ impl VersionInfoWidget {
         }
 
         let (status_content, call_to_action_content) =
-            // Shellomancy: there's no update server; Autoupdate is off offline.
+            // Shellomancy: updates come from our GitHub releases (bin/oss.rs).
             if ContextFlag::PromptForVersionUpdates.is_enabled()
                 && FeatureFlag::Autoupdate.is_enabled()
             {
@@ -1451,7 +1511,7 @@ impl VersionInfoWidget {
                             color: ansi_red,
                         }),
                         Some(CallToActionContent {
-                            text: "Relaunch Warp",
+                            text: "Relaunch Shellomancy",
                             action: MainPageAction::Relaunch,
                         }),
                     ),
@@ -1468,28 +1528,28 @@ impl VersionInfoWidget {
                             color: faded_text_color,
                         }),
                         Some(CallToActionContent {
-                            text: "Relaunch Warp",
+                            text: "Relaunch Shellomancy",
                             action: MainPageAction::Relaunch,
                         }),
                     ),
                     AutoupdateStage::UnableToUpdateToNewVersion { .. } => (
                         Some(StatusContent {
-                            text: "A new version of Warp is available but can't be installed",
+                            text: "A new version of Shellomancy is available but can't be installed",
                             color: ansi_red,
                         }),
                         Some(CallToActionContent {
-                            text: "Update Warp manually",
+                            text: "Update Shellomancy manually",
                             // note: the handler for this action is a no-op
                             action: MainPageAction::DownloadUpdate,
                         }),
                     ),
                     AutoupdateStage::UnableToLaunchNewVersion { .. } => (
                         Some(StatusContent {
-                            text: "A new version of Warp is installed but can't be launched.",
+                            text: "A new version of Shellomancy is installed but can't be launched.",
                             color: ansi_red,
                         }),
                         Some(CallToActionContent {
-                            text: "Update Warp manually",
+                            text: "Update Shellomancy manually",
                             // note: the handler for this action is a no-op
                             action: MainPageAction::DownloadUpdate,
                         }),
