@@ -92,8 +92,14 @@ if $BUILD; then
   # No cargo-about locally, so skip the third-party licenses file. Builds run
   # at low priority with fewer parallel jobs (override CARGO_BUILD_JOBS) so
   # the machine stays usable meanwhile.
+  # Stamp the build with the time it was made (UTC), in the plist only so it
+  # doesn't recompile anything: the About page shows it, and Check for
+  # updates compares it with the releases (a newer release replaces it).
+  VERSION_TAG="v0.$(date -u +%Y.%m.%d.%H.%M).local_00"
+  echo "install_local: version $VERSION_TAG"
   (cd "$REPO" && NO_LICENSES=1 CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-6}" \
-    nice -n 10 ./script/bundle --channel oss --debug --nouniversal --selfsign --nodmg)
+    nice -n 10 ./script/bundle --channel oss --debug --nouniversal --selfsign --nodmg \
+    --version-tag "$VERSION_TAG")
 fi
 if [[ ! -x "$BUILT/Contents/MacOS/warp-oss" ]]; then
   echo "install_local: no build at $BUILT" >&2

@@ -56,6 +56,8 @@ Every bundle build leaves a `Shellomancy.app` under `target/` (`osx/` and `dmg/`
 
 Only one install builds at a time, and the newest wins: starting `install_local` stops an older one that's still building (with its cargo and rustc). The build runs at low priority (`nice`) with 6 parallel jobs (override with `CARGO_BUILD_JOBS`) so the machine stays usable, and after a successful install it deletes incremental-compile caches older than a week. Other cargo commands on the same `target/` already wait their turn on cargo's lock.
 
+Each build is stamped with the time it was made, as `v0.YYYY.MM.DD.HH.MM.local_00` (UTC), in its Info.plist only (`script/macos/bundle --version-tag`). The app reads it at runtime, so the tag changing every build doesn't recompile the crates above `warp_core`. The About page shows it, and Check for updates compares it with the published releases: a release made after the build replaces it, if both are signed with the same identity.
+
 `target/` grows large (145 GB on 2026-11-18, about half of it stale incremental caches and old crate builds). `cargo clean` reclaims all of it at the cost of a full rebuild.
 
 It installs a debug build, but Warp's dogfood features (memory stats under every block, debug menus) stay off on Shellomancy unless you launch with `SHELLOMANCY_DEBUG=1`, e.g. `SHELLOMANCY_DEBUG=1 open /Applications/Shellomancy.app`.

@@ -397,9 +397,13 @@ impl ChannelState {
         *APP_VERSION.lock() = version;
     }
 
+    /// The release tag compiled in (`GIT_RELEASE_TAG`), or else the one
+    /// stamped into the running bundle's Info.plist (`WarpVersion`).
+    /// Shellomancy's local builds stamp only the plist, so a new tag on every
+    /// install doesn't recompile everything that depends on this crate.
     #[cfg(not(feature = "test-util"))]
     pub fn app_version() -> Option<&'static str> {
-        option_env!("GIT_RELEASE_TAG")
+        option_env!("GIT_RELEASE_TAG").or_else(bundle_version)
     }
 
     pub fn sentry_url() -> Cow<'static, str> {
@@ -475,6 +479,36 @@ fn derive_http_origin_from_ws_url(ws_url: &str) -> Option<String> {
         origin.push_str(&format!(":{port}"));
     }
     Some(origin)
+}
+
+/// The `WarpVersion` in the running app bundle's Info.plist, read once.
+#[cfg(not(feature = "test-util"))]
+fn bundle_version() -> Option<&'static str> {
+    static VERSION: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    VERSION.get_or_init(read_bundle_version).as_deref()
+}
+
+/// `<bundle>/Contents/MacOS/<exe>` -> `<bundle>/Contents/Info.plist`.
+#[cfg(not(feature = "test-util"))]
+fn read_bundle_version() -> Option<String> {
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    let exe = std::env::current_exe().ok()?;
+    let contents = exe.parent()?.parent()?;
+    let plist = std::fs::read_to_string(contents.join("Info.plist")).ok()?;
+    plist_warp_version(&plist)
+}
+
+/// The string after `<key>WarpVersion</key>` in an XML plist, if it looks
+/// like a release tag (`v...`).
+#[cfg(not(feature = "test-util"))]
+fn plist_warp_version(plist: &str) -> Option<String> {
+    const KEY: &str = "<key>WarpVersion</key>";
+    let after_key = &plist[plist.find(KEY)? + KEY.len()..];
+    let value = after_key.trim_start().strip_prefix("<string>")?;
+    let version = value[..value.find("</string>")?].trim();
+    (version.starts_with('v') && !version.contains('<')).then(|| version.to_owned())
 }
 
 #[cfg(all(test, not(feature = "test-util")))]

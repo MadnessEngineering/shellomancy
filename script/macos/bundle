@@ -328,6 +328,20 @@ while (( "$#" )); do
         exit 1
       fi
       ;;
+    # Shellomancy: stamp a version into Info.plist only (WarpVersion and the
+    # bundle version), without compiling it in. The app reads it at runtime,
+    # so local builds can carry a fresh tag without recompiling every crate
+    # that depends on warp_core. --release-tag (compiled in) wins if both are set.
+    --version-tag)
+      if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
+        echo "Stamping Info.plist with version $2"
+        export PLIST_VERSION_TAG=$2
+        shift 2
+      else
+        echo "Error: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
     # Read codesigning passwords from environment variables instead of GCP secret manager
     --read-passwords-from-env)
         echo "Reading codesigning passwords from env."
