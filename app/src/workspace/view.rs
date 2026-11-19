@@ -24912,6 +24912,22 @@ impl TypedActionView for Workspace {
                         .update(ctx, |sync, ctx| sync.sync_now(ctx));
                 }
             }
+            OpenTabWithCommand {
+                command,
+                cwd,
+                title,
+            } => {
+                // A folder that's gone falls back to the usual new-tab folder.
+                let cwd = cwd.clone().filter(|cwd| cwd.is_dir());
+                self.add_terminal_tab_with_startup_command(
+                    Some(command.clone()),
+                    cwd,
+                    title.clone(),
+                    None,
+                    true,
+                    ctx,
+                );
+            }
             ChangeCursor(cursor) => self.change_cursor(*cursor, ctx),
             ToggleErrorUnderlining => self.toggle_error_underlining(ctx),
             ToggleSyntaxHighlighting => self.toggle_syntax_highlighting(ctx),

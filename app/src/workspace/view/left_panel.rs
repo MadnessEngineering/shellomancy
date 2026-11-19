@@ -1297,6 +1297,15 @@ impl LeftPanelView {
             .focused_repo(pane_group.id());
         let project =
             crate::mana_bar::api::project_name(repo.as_ref().and_then(|repo| repo.file_name()));
+        // An agent tab opened from the Mana Bar starts in this repo.
+        let root = match &repo {
+            Some(warp_util::local_or_remote_path::LocalOrRemotePath::Local(root)) => {
+                Some(root.to_path_buf())
+            }
+            _ => None,
+        };
+        self.mana_bar_view
+            .update(ctx, |view, _| view.set_repo_root(root));
         // A repo with submodules (the lab root) also covers each submodule's
         // project. Only local repos have a .gitmodules we can read.
         let project = project.map(|project| {

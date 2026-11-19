@@ -1,0 +1,9 @@
+[
+ {"key": "shellomancy.manaBar.agentShort", "standard": "agent", "shellomancer": "familiar"},
+ {"key": "shellomancy.manaBar.openAgent", "standard": "send to agent", "shellomancer": "send a familiar"},
+ {"key": "shellomancy.settings.manaBar.openTarget", "standard": "Open todos from the Mana Bar", "shellomancer": "Open todos from the Mana Bar"},
+ {"key": "shellomancy.settings.manaBar.openTargetNote", "standard": "Where a todo's open button goes. In place unrolls a quest's todo under its row; Agent tab starts claude on the todo in a new tab, in the focused terminal's repo.", "shellomancer": "Where a todo's open button leads. In place unrolls a quest's todo under its row; Agent tab sends a familiar (claude) after it in a new tab, in the focused terminal's repo."},
+ {"key": "shellomancy.settings.manaBar.openInPlace", "standard": "In place", "shellomancer": "In place"},
+ {"key": "shellomancy.settings.manaBar.openBrowser", "standard": "Browser", "shellomancer": "Browser"},
+ {"key": "shellomancy.settings.manaBar.openAgentTab", "standard": "Agent tab", "shellomancer": "Familiar tab"}
+]

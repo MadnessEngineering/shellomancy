@@ -195,33 +195,35 @@ pub fn parse_todos(reply: &Value) -> Vec<Todo> {
         .as_array()
         .into_iter()
         .flatten()
-        .filter_map(|todo| {
-            let id = text(&todo["id"])?;
-            let status = text(&todo["status"]).unwrap_or_else(|| "pending".to_owned());
-            is_active(&status).then(|| Todo {
-                id,
-                description: text(&todo["description"]).unwrap_or_default(),
-                project: text(&todo["project"]).unwrap_or_default(),
-                priority: Priority::parse(todo["priority"].as_str().unwrap_or_default()),
-                status,
-                created_at: timestamp(&todo["created_at"]),
-                tags: tags_of(&todo["tags"])
-                    .into_iter()
-                    .chain(tags_of(&todo["metadata"]["tags"]))
-                    .fold(Vec::new(), |mut tags, tag| {
-                        if !tags.contains(&tag) {
-                            tags.push(tag);
-                        }
-                        tags
-                    }),
-                updated_at: log_timestamp(&todo["updated_at"]),
-                notes: text(&todo["notes"]),
-                target_agent: text(&todo["target_agent"]),
-                ticket: text(&todo["ticket"]),
-                extra: metadata_details(&todo["metadata"]),
-            })
-        })
+        .filter_map(parse_todo)
+        .filter(|todo| is_active(&todo.status))
         .collect()
+}
+
+/// One todo document, done or not (a `GET /api/todos/:id` reply is one).
+pub fn parse_todo(todo: &Value) -> Option<Todo> {
+    Some(Todo {
+        id: text(&todo["id"])?,
+        description: text(&todo["description"]).unwrap_or_default(),
+        project: text(&todo["project"]).unwrap_or_default(),
+        priority: Priority::parse(todo["priority"].as_str().unwrap_or_default()),
+        status: text(&todo["status"]).unwrap_or_else(|| "pending".to_owned()),
+        created_at: timestamp(&todo["created_at"]),
+        tags: tags_of(&todo["tags"])
+            .into_iter()
+            .chain(tags_of(&todo["metadata"]["tags"]))
+            .fold(Vec::new(), |mut tags, tag| {
+                if !tags.contains(&tag) {
+                    tags.push(tag);
+                }
+                tags
+            }),
+        updated_at: log_timestamp(&todo["updated_at"]),
+        notes: text(&todo["notes"]),
+        target_agent: text(&todo["target_agent"]),
+        ticket: text(&todo["ticket"]),
+        extra: metadata_details(&todo["metadata"]),
+    })
 }
 
 /// Todos in the order the panel lists them (priority, then status, then
@@ -594,6 +596,16 @@ pub fn activity_url(project: Option<&str>) -> Url {
     api_url("/todos/activity", &params)
 }
 
+/// `GET /api/todos/:id`.
+pub fn todo_url(id: &str) -> Url {
+    let mut url =
+        Url::parse(&format!("{MADNESS_API_ROOT}/todos")).expect("the API root is a valid URL");
+    url.path_segments_mut()
+        .expect("the API root is a base URL")
+        .push(id);
+    url
+}
+
 /// `POST /api/todos/:id/complete`.
 pub fn complete_url(id: &str) -> Url {
     let mut url =
@@ -641,6 +653,25 @@ pub async fn fetch_lessons(key: String) -> Result<Vec<Lesson>, String> {
     get_json(&key, lessons_url())
         .await
         .map(|reply| parse_lessons(&reply))
+}
+
+/// One todo by id, whatever its status.
+pub async fn fetch_todo(key: String, id: String) -> Result<Todo, String> {
+    let reply = get_json(&key, todo_url(&id)).await?;
+    parse_todo(&reply).ok_or_else(|| "the reply had no todo in it".to_owned())
+}
+
+/// The command that hands a todo to Claude Code in a new tab. Only the id goes
+/// on the command line (no quoting to get wrong); the agent reads the rest
+/// with Omnispindle's get_todo.
+pub fn agent_command(id: &str) -> String {
+    let id: String = id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .collect();
+    format!(
+        "claude 'Work on Omnispindle todo {id}: read it with get_todo first, then follow its notes.'"
+    )
 }
 
 /// Marks a todo done; the error is a message ready to show.

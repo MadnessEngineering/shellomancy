@@ -47,7 +47,7 @@ use crate::madness_account::{MADNESS_KEYS_URL, MadnessAccount, MadnessAccountSta
 use crate::madness_sync::{SettingsSync, SyncStatus};
 use crate::server::ids::ServerId;
 use crate::settings::cloud_preferences::CloudPreferencesSettings;
-use crate::settings::madness_sync::MadnessSyncSettings;
+use crate::settings::madness_sync::{MadnessSyncSettings, TodoOpenTarget};
 use crate::workspace::WorkspaceAction;
 use crate::workspaces::update_manager::TeamUpdateManager;
 use crate::workspaces::user_workspaces::UserWorkspaces;
@@ -140,6 +140,8 @@ pub enum MainPageAction {
     MadnessSyncNow,
     /// Shellomancy: how often settings sync checks madnessinteractive.cc.
     SetMadnessSyncInterval(u32),
+    /// Shellomancy: where a todo opens from the Mana Bar.
+    SetTodoOpenTarget(TodoOpenTarget),
     #[cfg(not(target_family = "wasm"))]
     RefreshIapCredentials,
 }
@@ -269,6 +271,15 @@ impl TypedActionView for MainSettingsPageView {
                     SettingsSync::handle(ctx).update(ctx, |sync, ctx| sync.sync_now(ctx));
                 }
             }
+            MainPageAction::SetTodoOpenTarget(target) => {
+                let target = *target;
+                MadnessSyncSettings::handle(ctx).update(ctx, |settings, ctx| {
+                    if let Err(err) = settings.todo_open_target.set_value(target, ctx) {
+                        log::warn!("Failed to set where todos open: {err:?}");
+                    }
+                });
+                ctx.notify();
+            }
             MainPageAction::SetMadnessSyncInterval(minutes) => {
                 let minutes = *minutes;
                 MadnessSyncSettings::handle(ctx).update(ctx, |settings, ctx| {
@@ -360,6 +371,7 @@ impl MainSettingsPageView {
             });
             widgets.push(Box::new(MadnessAccountWidget::default()));
             widgets.push(Box::new(MadnessSettingsSyncWidget::default()));
+            widgets.push(Box::new(TodoOpenTargetWidget::default()));
             widgets.push(Box::new(DividerWidget {}));
         } else {
             widgets.push(Box::new(AccountWidget::default()));
@@ -1069,6 +1081,81 @@ impl SettingsWidget for MadnessSettingsSyncWidget {
         Container::new(column.finish())
             .with_margin_top(16.)
             .finish()
+    }
+}
+
+/// Shellomancy: where a todo opens from the Mana Bar, as three buttons.
+#[derive(Default)]
+struct TodoOpenTargetWidget {
+    buttons: [MouseStateHandle; TodoOpenTarget::ALL.len()],
+}
+
+impl SettingsWidget for TodoOpenTargetWidget {
+    type View = MainSettingsPageView;
+
+    fn search_terms(&self) -> &str {
+        "mana bar todo open browser in place agent tab claude edit dashboard"
+    }
+
+    fn render(
+        &self,
+        _view: &Self::View,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        let theme = appearance.theme();
+        let ui = appearance.ui_builder();
+        let current = *MadnessSyncSettings::as_ref(app).todo_open_target.value();
+        let mut choices = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
+        for (target, mouse) in TodoOpenTarget::ALL.iter().zip(&self.buttons) {
+            let target = *target;
+            let variant = if target == current {
+                ButtonVariant::Accent
+            } else {
+                ButtonVariant::Secondary
+            };
+            choices.add_child(
+                Container::new(
+                    ui.button(variant, mouse.clone())
+                        .with_text_label(madness_themes::t(target.voice_key()).to_owned())
+                        .build()
+                        .on_click(move |ctx, _, _| {
+                            ctx.dispatch_typed_action(MainPageAction::SetTodoOpenTarget(target));
+                        })
+                        .finish(),
+                )
+                .with_margin_right(6.)
+                .finish(),
+            );
+        }
+        let label = ui
+            .span(madness_themes::t("shellomancy.settings.manaBar.openTarget").to_owned())
+            .build()
+            .finish();
+        let note = ui
+            .wrappable_text(
+                madness_themes::t("shellomancy.settings.manaBar.openTargetNote").to_owned(),
+                true,
+            )
+            .with_style(UiComponentStyles {
+                font_color: Some(theme.sub_text_color(theme.background()).into_solid()),
+                ..Default::default()
+            })
+            .build()
+            .finish();
+        Container::new(
+            Flex::column()
+                .with_child(label)
+                .with_child(Container::new(note).with_margin_top(4.).finish())
+                .with_child(
+                    Container::new(choices.finish())
+                        .with_margin_top(8.)
+                        .finish(),
+                )
+                .finish(),
+        )
+        .with_margin_top(16.)
+        .finish()
     }
 }
 

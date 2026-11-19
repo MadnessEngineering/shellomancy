@@ -570,3 +570,34 @@ fn a_todo_marked_done_counts_in_every_quest_that_lists_it() {
     assert!(quest.next_ids.is_empty());
     assert_eq!(quests[1].completed, 0);
 }
+
+#[test]
+fn one_todo_parses_whatever_its_status() {
+    let todo = parse_todo(&json!({
+        "_id": "x", "id": "t1", "status": "review", "description": "Sign in",
+        "notes": "done in f92c", "metadata": {"tags": ["mana-bar"], "quest_id": "q1"}
+    }))
+    .unwrap();
+    assert_eq!(todo.status, "review");
+    assert_eq!(todo.notes.as_deref(), Some("done in f92c"));
+    assert_eq!(todo.tags, vec!["mana-bar".to_owned()]);
+    assert_eq!(parse_todo(&json!({"status": "pending"})), None);
+    // The list still drops the done ones.
+    assert!(parse_todos(&json!({"todos": [{"id": "t1", "status": "completed"}]})).is_empty());
+}
+
+#[test]
+fn todo_url_puts_the_id_in_the_path() {
+    assert_eq!(
+        todo_url("a/b").as_str(),
+        "https://madnessinteractive.cc/api/todos/a%2Fb"
+    );
+}
+
+#[test]
+fn agent_command_carries_only_a_clean_id() {
+    assert_eq!(
+        agent_command("e43ea974-5547'; rm -rf ~"),
+        "claude 'Work on Omnispindle todo e43ea974-5547rm-rf: read it with get_todo first, then follow its notes.'"
+    );
+}

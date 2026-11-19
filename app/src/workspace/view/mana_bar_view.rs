@@ -9,9 +9,11 @@
 //! only decides which project to ask about and polls while it's on screen.
 
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use ::settings::Setting;
 use parking_lot::RwLock;
 
 use pathfinder_color::ColorU;
@@ -38,6 +40,7 @@ use crate::editor::{
 };
 use crate::mana_bar::api::{self, DASHBOARD_URL};
 use crate::mana_bar::{Fetch, List, ManaBar, ManaBarEvent, ProjectKey};
+use crate::settings::madness_sync::{MadnessSyncSettings, TodoOpenTarget};
 use crate::settings_view::SettingsSection;
 use crate::ui_components::buttons::icon_button;
 use crate::util::bindings::CustomAction;
@@ -154,6 +157,11 @@ pub enum ManaBarAction {
         button: String,
         text: String,
     },
+    /// Unrolls (or rolls up) a quest row's todo in place, fetching it.
+    ToggleTodoRow {
+        row: String,
+        id: String,
+    },
     /// Cmd-C: copies the text selected in the panel.
     CopySelectedText,
     /// A selection started; take focus so cmd-C reaches the panel.
@@ -204,6 +212,14 @@ pub struct ManaBarView {
     /// Per-row mouse states, keyed like `todo:<id>`.
     row_mouse: HashMap<String, MouseStateHandle>,
     completing: HashSet<String>,
+    /// Where todos open (Settings > Account), kept in step with the setting.
+    open_target: TodoOpenTarget,
+    /// The focused terminal's repo, where an agent tab starts.
+    repo_root: Option<PathBuf>,
+    /// Quest rows unrolled in place, keyed like their buttons (`qt:<q>:<t>`).
+    open_rows: HashSet<String>,
+    /// Todos fetched for rows unrolled in place: `None` while loading.
+    todo_details: HashMap<String, Option<Result<api::Todo, String>>>,
     visible: bool,
     /// Bumped to cancel a scheduled poll.
     poll_generation: u64,
@@ -247,6 +263,18 @@ impl ManaBarView {
                 }
             });
         }
+        let open_target = if ctx.has_singleton_model::<MadnessSyncSettings>() {
+            ctx.subscribe_to_model(&MadnessSyncSettings::handle(ctx), |me, settings, _, ctx| {
+                let target = *settings.as_ref(ctx).todo_open_target.value();
+                if me.open_target != target {
+                    me.open_target = target;
+                    ctx.notify();
+                }
+            });
+            *MadnessSyncSettings::as_ref(ctx).todo_open_target.value()
+        } else {
+            TodoOpenTarget::default()
+        };
         Self {
             project: None,
             all_projects: false,
@@ -264,6 +292,10 @@ impl ManaBarView {
             header_mouse: Default::default(),
             row_mouse: HashMap::new(),
             completing: HashSet::new(),
+            open_target,
+            repo_root: None,
+            open_rows: HashSet::new(),
+            todo_details: HashMap::new(),
             visible: false,
             poll_generation: 0,
         }
@@ -280,6 +312,11 @@ impl ManaBarView {
             self.ensure_loaded(ctx);
         }
         ctx.notify();
+    }
+
+    /// The focused terminal's repo folder changed (an agent tab starts there).
+    pub fn set_repo_root(&mut self, root: Option<PathBuf>) {
+        self.repo_root = root;
     }
 
     /// The panel is shown or hidden; it only fetches and polls while shown.
@@ -365,8 +402,14 @@ impl ManaBarView {
                         .iter()
                         .flat_map(|chain| &chain.todos)
                         .flat_map(|todo| {
-                            let key = quest_todo_key(&quest.id, &todo.id);
-                            BUTTON_SLOTS.map(|slot| format!("{key}|{slot}"))
+                            let row = quest_todo_key(&quest.id, &todo.id);
+                            let detail = quest_detail_key(&quest.id, &todo.id);
+                            BUTTON_SLOTS
+                                .into_iter()
+                                .flat_map(move |slot| {
+                                    [format!("{row}|{slot}"), format!("{detail}|{slot}")]
+                                })
+                                .collect::<Vec<_>>()
                         })
                         .collect()
                 } else {
@@ -396,6 +439,22 @@ impl ManaBarView {
 
     fn row_mouse(&self, key: &str) -> MouseStateHandle {
         self.row_mouse.get(key).cloned().unwrap_or_default()
+    }
+
+    /// Fetches a todo for a row unrolled in place.
+    fn fetch_todo_detail(&mut self, id: &str, ctx: &mut ViewContext<Self>) {
+        if matches!(self.todo_details.get(id), Some(None)) {
+            return;
+        }
+        let Some(key) = crate::mana_bar::api_key(ctx) else {
+            return;
+        };
+        self.todo_details.insert(id.to_owned(), None);
+        let id = id.to_owned();
+        let _ = ctx.spawn(api::fetch_todo(key, id.clone()), move |me, result, ctx| {
+            me.todo_details.insert(id, Some(result));
+            ctx.notify();
+        });
     }
 
     fn mark_done(&mut self, id: &str, ctx: &mut ViewContext<Self>) {
@@ -435,6 +494,15 @@ impl ManaBarView {
                 me.completing.remove(&id);
                 let toast = match result {
                     Ok(()) => {
+                        // An unrolled row shows the status as it was; fetch again.
+                        if me.todo_details.remove(&id).is_some()
+                            && me
+                                .open_rows
+                                .iter()
+                                .any(|row| row.ends_with(&format!(":{id}")))
+                        {
+                            me.fetch_todo_detail(&id, ctx);
+                        }
                         ManaBar::handle(ctx).update(ctx, |mana_bar, ctx| {
                             mana_bar.todo_completed(&id, &project, ctx)
                         });
@@ -495,6 +563,13 @@ impl TypedActionView for ManaBarView {
                     if card.starts_with("quest:") {
                         self.sync_row_mouse_states(ctx);
                     }
+                }
+                ctx.notify();
+            }
+            ManaBarAction::ToggleTodoRow { row, id } => {
+                if !self.open_rows.remove(row) {
+                    self.open_rows.insert(row.clone());
+                    self.fetch_todo_detail(id, ctx);
                 }
                 ctx.notify();
             }
@@ -812,11 +887,7 @@ impl ManaBarView {
                     details,
                     blocks,
                     changes_text(&entry.changes),
-                    vec![self.open_button(
-                        &card_key,
-                        api::todo_page_url(&entry.todo_id),
-                        appearance,
-                    )],
+                    vec![self.todo_open_button(&card_key, &entry.todo_id, None, appearance)],
                     appearance,
                 ));
             }
@@ -1051,33 +1122,13 @@ impl ManaBarView {
         let card_key = format!("todo:{}", todo.id);
         let mut unrolled = None;
         if self.expanded.contains(&card_key) {
-            let mut details = vec![
-                Detail::copyable("id", todo.id.clone(), "id"),
-                Detail::new("project", todo.project.clone()),
-                Detail::new("status", todo.status.clone()),
-                Detail::new("priority", format!("{:?}", todo.priority)),
-                Detail::new(
-                    "target_agent",
-                    todo.target_agent.clone().unwrap_or_default(),
-                ),
-                Detail::new("created_at", when_label(todo.created_at, now)),
-                Detail::new("updated_at", when_label(todo.updated_at, now)),
-                Detail::new("ticket", todo.ticket.clone().unwrap_or_default()),
-                Detail::new("notes", todo.notes.clone().unwrap_or_default()),
-            ];
-            for (field, value) in &todo.extra {
-                details.push(if field == "quest_id" {
-                    Detail::copyable(field, value.clone(), "ref")
-                } else {
-                    Detail::new(field, value.clone())
-                });
-            }
+            let details = todo_details(todo, now);
             unrolled = Some(self.render_unrolled(
                 &card_key,
                 details,
                 vec![],
                 String::new(),
-                vec![self.open_button(&card_key, api::todo_page_url(&todo.id), appearance)],
+                vec![self.todo_open_button(&card_key, &todo.id, None, appearance)],
                 appearance,
             ));
         }
@@ -1341,15 +1392,9 @@ impl ManaBarView {
             let mut buttons = Flex::row()
                 .with_child(self.copy_button(&card, "id", todo.id.clone(), appearance))
                 .with_child(
-                    Container::new(self.term_button(
-                        &card,
-                        "open",
-                        "↗",
-                        ManaBarAction::OpenUrl(api::todo_page_url(&todo.id)),
-                        appearance,
-                    ))
-                    .with_margin_left(2.)
-                    .finish(),
+                    Container::new(self.todo_open_button(&card, &todo.id, Some(&card), appearance))
+                        .with_margin_left(2.)
+                        .finish(),
                 );
             if !todo.is_done() && !todo.is_cancelled() {
                 let done: Box<dyn Element> = if self.completing.contains(&todo.id) {
@@ -1371,7 +1416,49 @@ impl ManaBarView {
                     .finish(),
             );
         }
-        Container::new(row.finish()).with_margin_bottom(2.).finish()
+        let row = Container::new(row.finish()).with_margin_bottom(2.).finish();
+        if !self.open_rows.contains(&card) {
+            return row;
+        }
+        Flex::column()
+            .with_child(row)
+            .with_child(
+                Container::new(self.render_row_detail(quest, todo, appearance))
+                    .with_margin_left(16.)
+                    .with_margin_bottom(6.)
+                    .finish(),
+            )
+            .finish()
+    }
+
+    /// A quest row's todo unrolled in place: every field, fetched by id.
+    fn render_row_detail(
+        &self,
+        quest: &api::Quest,
+        todo: &api::QuestTodo,
+        appearance: &Appearance,
+    ) -> Box<dyn Element> {
+        let key = quest_detail_key(&quest.id, &todo.id);
+        match self.todo_details.get(&todo.id) {
+            Some(Some(Ok(full))) => self.render_unrolled(
+                &key,
+                todo_details(full, chrono::Utc::now().timestamp()),
+                vec![],
+                String::new(),
+                vec![self.open_button(&key, api::todo_page_url(&todo.id), appearance)],
+                appearance,
+            ),
+            Some(Some(Err(error))) => mono(
+                madness_themes::tf("shellomancy.manaBar.error", &[("error", error)]),
+                MonoTone::Color(appearance.theme().terminal_colors().normal.red.into()),
+                appearance,
+            ),
+            _ => mono(
+                madness_themes::t("shellomancy.manaBar.loading").to_owned(),
+                MonoTone::Dim,
+                appearance,
+            ),
+        }
     }
 
     fn render_lessons(
@@ -1637,13 +1724,14 @@ impl ManaBarView {
         )
     }
 
-    /// A bracketed monospace button, like `[open ↗]`.
-    fn term_button(
+    /// A bracketed monospace button, like `[open ↗]`. Its action can be the
+    /// panel's or the workspace's (an agent tab).
+    fn term_button<A: warpui::Action + Clone>(
         &self,
         card: &str,
         slot: &str,
         label: &str,
-        action: ManaBarAction,
+        action: A,
         appearance: &Appearance,
     ) -> Box<dyn Element> {
         let theme = appearance.theme();
@@ -1672,6 +1760,64 @@ impl ManaBarView {
         .with_cursor(Cursor::PointingHand)
         .on_click(move |ctx, _, _| ctx.dispatch_typed_action(action.clone()))
         .finish()
+    }
+
+    /// Opens a todo where Settings > Account says: its page, an agent tab,
+    /// or (for a quest's `row`) unrolled in place. Rows get short labels.
+    fn todo_open_button(
+        &self,
+        card: &str,
+        id: &str,
+        row: Option<&str>,
+        appearance: &Appearance,
+    ) -> Box<dyn Element> {
+        let short = row.is_some();
+        match (self.open_target, row) {
+            (TodoOpenTarget::AgentTab, _) => {
+                let short_id: String = id.chars().take(8).collect();
+                let label = if short {
+                    madness_themes::t("shellomancy.manaBar.agentShort")
+                } else {
+                    madness_themes::t("shellomancy.manaBar.openAgent")
+                };
+                self.term_button(
+                    card,
+                    "open",
+                    label,
+                    WorkspaceAction::OpenTabWithCommand {
+                        command: api::agent_command(id),
+                        cwd: self.repo_root.clone(),
+                        title: Some(madness_themes::tf(
+                            "shellomancy.agentTab.todoShort",
+                            &[("id", &short_id)],
+                        )),
+                    },
+                    appearance,
+                )
+            }
+            (TodoOpenTarget::InPlace, Some(row)) => self.term_button(
+                card,
+                "open",
+                if self.open_rows.contains(row) {
+                    "▴"
+                } else {
+                    "▾"
+                },
+                ManaBarAction::ToggleTodoRow {
+                    row: row.to_owned(),
+                    id: id.to_owned(),
+                },
+                appearance,
+            ),
+            _ if short => self.term_button(
+                card,
+                "open",
+                "↗",
+                ManaBarAction::OpenUrl(api::todo_page_url(id)),
+                appearance,
+            ),
+            _ => self.open_button(card, api::todo_page_url(id), appearance),
+        }
     }
 
     fn open_button(&self, card: &str, url: String, appearance: &Appearance) -> Box<dyn Element> {
@@ -1748,6 +1894,33 @@ fn changes_block(changes: &[api::Change], appearance: &Appearance) -> Box<dyn El
         }
     }
     lines.finish()
+}
+
+/// A todo's fields as an unrolled card lists them.
+fn todo_details(todo: &api::Todo, now: i64) -> Vec<Detail> {
+    let mut details = vec![
+        Detail::copyable("id", todo.id.clone(), "id"),
+        Detail::new("project", todo.project.clone()),
+        Detail::new("status", todo.status.clone()),
+        Detail::new("priority", format!("{:?}", todo.priority)),
+        Detail::new(
+            "target_agent",
+            todo.target_agent.clone().unwrap_or_default(),
+        ),
+        Detail::new("created_at", when_label(todo.created_at, now)),
+        Detail::new("updated_at", when_label(todo.updated_at, now)),
+        Detail::new("ticket", todo.ticket.clone().unwrap_or_default()),
+        Detail::new("tags", todo.tags.join(", ")),
+        Detail::new("notes", todo.notes.clone().unwrap_or_default()),
+    ];
+    for (field, value) in &todo.extra {
+        details.push(if field == "quest_id" {
+            Detail::copyable(field, value.clone(), "ref")
+        } else {
+            Detail::new(field, value.clone())
+        });
+    }
+    details
 }
 
 /// What `[copy all]` copies: each non-blank field as `field: value`, then
@@ -1844,6 +2017,11 @@ pub fn when_label(at: i64, now: i64) -> String {
 /// The button key prefix for a todo inside a quest card.
 fn quest_todo_key(quest_id: &str, todo_id: &str) -> String {
     format!("qt:{quest_id}:{todo_id}")
+}
+
+/// The button key prefix for a quest row's todo unrolled in place.
+fn quest_detail_key(quest_id: &str, todo_id: &str) -> String {
+    format!("qd:{quest_id}:{todo_id}")
 }
 
 /// How a quest's todo looks: its glyph, the glyph's tone and the text's.

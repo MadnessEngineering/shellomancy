@@ -1,8 +1,56 @@
 //! Shellomancy: settings sync through Inventorium (madnessinteractive.cc).
 //!
 //! Everything here is off by default. See `crate::madness_sync`.
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use settings::macros::define_settings_group;
 use settings::{SupportedPlatforms, SyncToCloud};
+
+/// Where a todo goes when you open it from the Mana Bar. The dashboard's
+/// `ui.todoEditBehavior` picks between editing in place and the todo's own
+/// page; a terminal can also hand the todo to an agent.
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    Default,
+    JsonSchema,
+    settings_value::SettingsValue,
+)]
+#[schemars(
+    description = "Where a todo opens from the Mana Bar.",
+    rename_all = "snake_case"
+)]
+pub enum TodoOpenTarget {
+    /// A quest's todo unrolls under its row with all its fields; cards
+    /// already unroll, so their open button goes to the site.
+    InPlace,
+    /// The todo's page on madnessinteractive.cc.
+    #[default]
+    Browser,
+    /// A new tab running `claude` on the todo.
+    AgentTab,
+}
+
+impl TodoOpenTarget {
+    pub const ALL: [TodoOpenTarget; 3] = [
+        TodoOpenTarget::InPlace,
+        TodoOpenTarget::Browser,
+        TodoOpenTarget::AgentTab,
+    ];
+
+    pub fn voice_key(self) -> &'static str {
+        match self {
+            TodoOpenTarget::InPlace => "shellomancy.settings.manaBar.openInPlace",
+            TodoOpenTarget::Browser => "shellomancy.settings.manaBar.openBrowser",
+            TodoOpenTarget::AgentTab => "shellomancy.settings.manaBar.openAgentTab",
+        }
+    }
+}
 
 define_settings_group!(MadnessSyncSettings, settings: [
     enabled: MadnessSettingsSyncEnabled {
@@ -48,6 +96,17 @@ define_settings_group!(MadnessSyncSettings, settings: [
         storage_key: "MadnessSyncIntervalMinutes",
         toml_path: "madness.sync_interval_minutes",
         description: "How often, in minutes, settings sync checks madnessinteractive.cc for changes (1 to 1440).",
+    },
+    todo_open_target: TodoOpenTargetSetting {
+        type: TodoOpenTarget,
+        default: TodoOpenTarget::Browser,
+        supported_platforms: SupportedPlatforms::DESKTOP,
+        sync_to_cloud: SyncToCloud::Never,
+        surface: settings::SettingSurfaces::GUI,
+        private: false,
+        storage_key: "MadnessTodoOpenTarget",
+        toml_path: "madness.todo_open_target",
+        description: "Where a todo opens from the Mana Bar: in_place, browser or agent_tab.",
     },
     // What was last synced and when each value changed, as JSON. Not a
     // user-visible setting.

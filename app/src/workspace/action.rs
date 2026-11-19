@@ -392,6 +392,13 @@ pub enum WorkspaceAction {
     ShowManaBar(crate::workspace::view::mana_bar_view::ManaBarTab),
     /// Shellomancy: settings sync checks madnessinteractive.cc right away.
     MadnessSyncNow,
+    /// Shellomancy: a new, focused terminal tab that runs `command` once its
+    /// shell starts (the Mana Bar hands a todo to an agent this way).
+    OpenTabWithCommand {
+        command: String,
+        cwd: Option<PathBuf>,
+        title: Option<String>,
+    },
     /// Toggles the right panel. This happens as an explicit action from the user.
     ToggleRightPanel,
     /// Opens the code review panel (right panel) without toggling. If already open,
@@ -1261,6 +1268,7 @@ impl WorkspaceAction {
             #[cfg(not(target_family = "wasm"))]
             ViewLogs => false,
             MadnessSyncNow => false,
+            OpenTabWithCommand { .. } => true,
             #[cfg(target_os = "macos")]
             SampleProcess => false,
             #[cfg(target_os = "macos")]
