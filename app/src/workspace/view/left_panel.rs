@@ -63,23 +63,18 @@ use crate::workspace::view::conversation_list::view::{
 use crate::workspace::view::global_search::view::{
     Event as GlobalSearchViewEvent, GlobalSearchEntryFocus, GlobalSearchView,
 };
-use crate::workspace::view::mana_bar_view::{ManaBarTab, ManaBarView};
+use crate::workspace::view::madness_tabs::{MadnessFocus, MadnessTab, MadnessTabViews};
+use crate::workspace::view::mana_bar_view::ManaBarTab;
 use crate::workspace::view::{
     LEFT_PANEL_AGENT_CONVERSATIONS_BINDING_NAME, LEFT_PANEL_GLOBAL_SEARCH_BINDING_NAME,
-    LEFT_PANEL_MANA_BAR_BINDING_NAME, LEFT_PANEL_PROJECT_EXPLORER_BINDING_NAME,
-    LEFT_PANEL_WARP_DRIVE_BINDING_NAME, OPEN_GLOBAL_SEARCH_BINDING_NAME,
-    TOGGLE_CONVERSATION_LIST_VIEW_BINDING_NAME, TOGGLE_PROJECT_EXPLORER_BINDING_NAME,
-    TOGGLE_WARP_DRIVE_BINDING_NAME,
+    LEFT_PANEL_PROJECT_EXPLORER_BINDING_NAME, LEFT_PANEL_WARP_DRIVE_BINDING_NAME,
+    OPEN_GLOBAL_SEARCH_BINDING_NAME, TOGGLE_CONVERSATION_LIST_VIEW_BINDING_NAME,
+    TOGGLE_PROJECT_EXPLORER_BINDING_NAME, TOGGLE_WARP_DRIVE_BINDING_NAME,
 };
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
 #[derive(Default)]
 struct MouseStateHandles {
-    project_explorer_button: MouseStateHandle,
-    conversation_list_view_button: MouseStateHandle,
-    global_search_button: MouseStateHandle,
-    warp_drive_button: MouseStateHandle,
-    mana_bar_button: MouseStateHandle,
     sign_in_button: MouseStateHandle,
 }
 
@@ -91,8 +86,8 @@ pub enum LeftPanelAction {
     },
     WarpDrive,
     ConversationListView,
-    /// Shellomancy: Omnispindle's todos, quests and lessons.
-    ManaBar,
+    /// Shellomancy: one of our own tabs (the Mana Bar, the Grimoire, ...).
+    Madness(MadnessTab),
     SignIn,
 }
 
@@ -106,11 +101,11 @@ pub(crate) enum ToolPanelAvailability {
 impl ToolPanelView {
     fn availability(self, app: &AppContext) -> ToolPanelAvailability {
         match self {
-            // The Mana Bar shows its own signed-out state (the Madness
-            // account, not Warp's), so it's never locked.
+            // Our tabs show their own signed-out states (the Madness
+            // account, not Warp's), so they're never locked.
             ToolPanelView::ProjectExplorer
             | ToolPanelView::GlobalSearch { .. }
-            | ToolPanelView::ManaBar => ToolPanelAvailability::Available,
+            | ToolPanelView::Madness(_) => ToolPanelAvailability::Available,
             ToolPanelView::WarpDrive => {
                 if WarpDriveSettings::is_warp_drive_available(app) {
                     ToolPanelAvailability::Available
@@ -162,8 +157,19 @@ pub enum ToolPanelView {
     },
     WarpDrive,
     ConversationListView,
-    /// Shellomancy: Omnispindle in Drive's slot.
-    ManaBar,
+    /// Shellomancy: our own tabs, after Drive's old slot.
+    Madness(MadnessTab),
+}
+
+impl ToolPanelView {
+    /// Whether two views are the same tab. GlobalSearch's focus doesn't make
+    /// it another tab; each of our Madness tabs is its own.
+    pub fn is_same_tab(self, other: ToolPanelView) -> bool {
+        match (self, other) {
+            (ToolPanelView::GlobalSearch { .. }, ToolPanelView::GlobalSearch { .. }) => true,
+            _ => self == other,
+        }
+    }
 }
 
 /// Encapsulates the active view state to enforce that all mutations go through
@@ -204,7 +210,7 @@ mod active_view_state {
         }
 
         left_panel.update_active_file_tree_subscription_state(ctx);
-        left_panel.update_mana_bar_visibility(ctx);
+        left_panel.update_madness_visibility(ctx);
     }
 }
 
@@ -224,6 +230,8 @@ pub struct ToolbeltButtonConfig {
     ///
     /// This is updated in response to [`KeybindingChangedEvent`]s.
     pub tooltip_keybinding: Option<String>,
+    /// The button's own hover state, so any number of tabs can have one.
+    pub mouse_state: MouseStateHandle,
 }
 
 pub struct LeftPanelView {
@@ -232,7 +240,8 @@ pub struct LeftPanelView {
     close_button_mouse_state: MouseStateHandle,
     warp_drive_view: ViewHandle<DrivePanel>,
     conversation_list_view: ViewHandle<ConversationListView>,
-    mana_bar_view: ViewHandle<ManaBarView>,
+    /// Shellomancy: the views of our own tabs.
+    madness_views: MadnessTabViews,
     active_view: active_view_state::ActiveViewState,
     toolbelt_buttons: Vec<ToolbeltButtonConfig>,
     active_pane_group: Option<WeakViewHandle<PaneGroup>>,
@@ -286,13 +295,13 @@ impl LeftPanelView {
                 ToolPanelView::ProjectExplorer
                 | ToolPanelView::GlobalSearch { .. }
                 | ToolPanelView::WarpDrive
-                | ToolPanelView::ManaBar,
+                | ToolPanelView::Madness(_),
                 ToolPanelAvailability::RequiresAi,
             )
             | (
                 ToolPanelView::ProjectExplorer
                 | ToolPanelView::GlobalSearch { .. }
-                | ToolPanelView::ManaBar,
+                | ToolPanelView::Madness(_),
                 ToolPanelAvailability::RequiresAccount,
             )
             | (_, ToolPanelAvailability::Available) => {
@@ -371,7 +380,7 @@ impl LeftPanelView {
         };
         let warp_drive_view = ctx.add_typed_action_view(DrivePanel::new);
         let conversation_list_view = ctx.add_typed_action_view(ConversationListView::new);
-        let mana_bar_view = ctx.add_typed_action_view(ManaBarView::new);
+        let madness_views = MadnessTabViews::new(ctx);
 
         ctx.subscribe_to_view(&warp_drive_view, |_me, _, event, ctx| {
             ctx.emit(LeftPanelEvent::WarpDrive(event.clone()));
@@ -477,13 +486,13 @@ impl LeftPanelView {
                         view.auto_expand_to_most_recent_directory(ctx);
                     }
                 });
-                me.update_mana_bar_project(ctx);
+                me.update_madness_focus(ctx);
                 ctx.notify();
             }
         });
 
-        // Shellomancy: a focus change or `cd` into another repo moves the Mana
-        // Bar to that repo's project.
+        // Shellomancy: a focus change or `cd` into another repo moves our tabs
+        // (the Mana Bar's project, the Grimoire's repo shelf) to that repo.
         ctx.subscribe_to_model(&working_directories_model, |me, _, event, ctx| {
             if let WorkingDirectoriesEvent::FocusedRepoChanged { pane_group_id, .. } = event
                 && me
@@ -492,7 +501,7 @@ impl LeftPanelView {
                     .and_then(|pane_group| pane_group.upgrade(ctx))
                     .is_some_and(|pane_group| pane_group.id() == *pane_group_id)
             {
-                me.update_mana_bar_project(ctx);
+                me.update_madness_focus(ctx);
             }
         });
 
@@ -502,7 +511,7 @@ impl LeftPanelView {
             close_button_mouse_state: Default::default(),
             warp_drive_view,
             conversation_list_view,
-            mana_bar_view,
+            madness_views,
             active_view: active_view_state::new(active_view),
             toolbelt_buttons,
             active_pane_group: None,
@@ -538,13 +547,7 @@ impl LeftPanelView {
     ) {
         // Check if the current active view is still available
         let current_view = self.active_view.get();
-        let is_current_view_available = views.iter().any(|v| {
-            // Use discriminant comparison for GlobalSearch since it has inner data
-            match (v, &current_view) {
-                (ToolPanelView::GlobalSearch { .. }, ToolPanelView::GlobalSearch { .. }) => true,
-                _ => std::mem::discriminant(v) == std::mem::discriminant(&current_view),
-            }
-        });
+        let is_current_view_available = views.iter().any(|v| v.is_same_tab(current_view));
 
         // Rebuild toolbelt buttons
         self.toolbelt_buttons = views
@@ -593,6 +596,7 @@ impl LeftPanelView {
                     render_with_active_state: false,
                     tooltip_keybinding: toolbelt_tooltip_keybinding(&tooltip_keybinding_names, ctx),
                     tooltip_keybinding_names,
+                    mouse_state: Default::default(),
                 }
             }
             ToolPanelView::GlobalSearch { .. } => {
@@ -611,6 +615,7 @@ impl LeftPanelView {
                     render_with_active_state: false,
                     tooltip_keybinding: toolbelt_tooltip_keybinding(&tooltip_keybinding_names, ctx),
                     tooltip_keybinding_names,
+                    mouse_state: Default::default(),
                 }
             }
             ToolPanelView::WarpDrive => {
@@ -627,19 +632,22 @@ impl LeftPanelView {
                     render_with_active_state: false,
                     tooltip_keybinding: toolbelt_tooltip_keybinding(&tooltip_keybinding_names, ctx),
                     tooltip_keybinding_names,
+                    mouse_state: Default::default(),
                 }
             }
-            ToolPanelView::ManaBar => {
-                let tooltip_keybinding_names = vec![LEFT_PANEL_MANA_BAR_BINDING_NAME];
+            ToolPanelView::Madness(tab) => {
+                let spec = tab.spec();
+                let tooltip_keybinding_names = vec![spec.binding_name];
 
                 ToolbeltButtonConfig {
-                    icon: Icon::Lightning,
+                    icon: spec.icon,
                     active_icon: None,
-                    tooltip_text: madness_themes::t("shellomancy.manaBar.title").to_owned(),
-                    action: LeftPanelAction::ManaBar,
+                    tooltip_text: tab.title().to_owned(),
+                    action: LeftPanelAction::Madness(*tab),
                     render_with_active_state: false,
                     tooltip_keybinding: toolbelt_tooltip_keybinding(&tooltip_keybinding_names, ctx),
                     tooltip_keybinding_names,
+                    mouse_state: Default::default(),
                 }
             }
             ToolPanelView::ConversationListView => {
@@ -656,6 +664,7 @@ impl LeftPanelView {
                     render_with_active_state: false,
                     tooltip_keybinding: toolbelt_tooltip_keybinding(&tooltip_keybinding_names, ctx),
                     tooltip_keybinding_names,
+                    mouse_state: Default::default(),
                 }
             }
         }
@@ -857,7 +866,7 @@ impl LeftPanelView {
         });
 
         self.on_left_panel_visibility_changed(left_panel_open, ctx);
-        self.update_mana_bar_project(ctx);
+        self.update_madness_focus(ctx);
 
         ctx.notify();
     }
@@ -923,10 +932,8 @@ impl LeftPanelView {
                     view.on_left_panel_focused(ctx);
                 });
             }
-            ToolPanelView::ManaBar => {
-                self.mana_bar_view.update(ctx, |view, ctx| {
-                    view.on_left_panel_focused(ctx);
-                });
+            ToolPanelView::Madness(tab) => {
+                self.madness_views.on_left_panel_focused(tab, ctx);
             }
         }
     }
@@ -1094,7 +1101,9 @@ impl LeftPanelView {
                 LeftPanelAction::ConversationListView => {
                     self.active_view.get() == ToolPanelView::ConversationListView
                 }
-                LeftPanelAction::ManaBar => self.active_view.get() == ToolPanelView::ManaBar,
+                LeftPanelAction::Madness(tab) => {
+                    self.active_view.get() == ToolPanelView::Madness(*tab)
+                }
                 LeftPanelAction::SignIn => false,
             };
         }
@@ -1102,9 +1111,9 @@ impl LeftPanelView {
 
     fn render_button(
         button_config: &ToolbeltButtonConfig,
-        mouse_state: MouseStateHandle,
         appearance: &Appearance,
     ) -> Box<dyn Element> {
+        let mouse_state = button_config.mouse_state.clone();
         let action = button_config.action.clone();
         let ui_builder = appearance.ui_builder().clone();
         let tooltip_keybinding = button_config.tooltip_keybinding.clone();
@@ -1241,8 +1250,8 @@ impl LeftPanelView {
                     send_telemetry_from_ctx!(TelemetryEvent::ConversationListViewOpened, ctx);
                 }
             }
-            LeftPanelAction::ManaBar => {
-                active_view_state::set(self, ToolPanelView::ManaBar, ctx);
+            LeftPanelAction::Madness(tab) => {
+                active_view_state::set(self, ToolPanelView::Madness(*tab), ctx);
             }
             LeftPanelAction::SignIn => {
                 ctx.emit(LeftPanelEvent::SignInRequested);
@@ -1252,7 +1261,8 @@ impl LeftPanelView {
 
     /// Shellomancy: switches the Mana Bar to `tab`.
     pub fn select_mana_bar_tab(&mut self, tab: ManaBarTab, ctx: &mut ViewContext<Self>) {
-        self.mana_bar_view
+        self.madness_views
+            .mana_bar()
             .update(ctx, |view, ctx| view.select_tab(tab, ctx));
     }
 
@@ -1262,28 +1272,30 @@ impl LeftPanelView {
         }
 
         self.update_active_file_tree_subscription_state(ctx);
-        let mana_bar_visible = is_now_open && self.active_view.get() == ToolPanelView::ManaBar;
-        self.mana_bar_view.update(ctx, |view, ctx| {
-            view.set_visible(mana_bar_visible, ctx);
-        });
+        self.set_madness_shown(is_now_open, ctx);
     }
 
-    /// Shellomancy: the Mana Bar fetches and polls only while it's the shown tab
-    /// of an open panel.
-    fn update_mana_bar_visibility(&self, ctx: &mut ViewContext<Self>) {
+    /// Shellomancy: our tabs fetch and poll only while shown in an open panel.
+    fn update_madness_visibility(&self, ctx: &mut ViewContext<Self>) {
         let is_panel_open = self
             .active_pane_group
             .as_ref()
             .and_then(|pane_group| pane_group.upgrade(ctx))
             .is_some_and(|pane_group| pane_group.as_ref(ctx).left_panel_open);
-        let visible = is_panel_open && self.active_view.get() == ToolPanelView::ManaBar;
-        self.mana_bar_view
-            .update(ctx, |view, ctx| view.set_visible(visible, ctx));
+        self.set_madness_shown(is_panel_open, ctx);
     }
 
-    /// Shellomancy: tells the Mana Bar which project the focused terminal is
-    /// in: its repo's folder name, else its working folder's.
-    fn update_mana_bar_project(&self, ctx: &mut ViewContext<Self>) {
+    fn set_madness_shown(&self, is_panel_open: bool, ctx: &mut ViewContext<Self>) {
+        let shown = match self.active_view.get() {
+            ToolPanelView::Madness(tab) if is_panel_open => Some(tab),
+            _ => None,
+        };
+        self.madness_views.set_shown(shown, ctx);
+    }
+
+    /// Shellomancy: tells our tabs where the focused terminal is: its repo,
+    /// and its project (the repo's folder name, else its working folder's).
+    fn update_madness_focus(&self, ctx: &mut ViewContext<Self>) {
         let Some(pane_group) = self
             .active_pane_group
             .as_ref()
@@ -1297,15 +1309,14 @@ impl LeftPanelView {
             .focused_repo(pane_group.id());
         let project =
             crate::mana_bar::api::project_name(repo.as_ref().and_then(|repo| repo.file_name()));
-        // An agent tab opened from the Mana Bar starts in this repo.
-        let root = match &repo {
+        // An agent tab opened from the Mana Bar starts in this repo, and the
+        // Grimoire lists its shelf.
+        let repo_root = match &repo {
             Some(warp_util::local_or_remote_path::LocalOrRemotePath::Local(root)) => {
                 Some(root.to_path_buf())
             }
             _ => None,
         };
-        self.mana_bar_view
-            .update(ctx, |view, ctx| view.set_repo_root(root, ctx));
         // A repo with submodules (the lab root) also covers each submodule's
         // project. Only local repos have a .gitmodules we can read.
         let project = project.map(|project| {
@@ -1319,8 +1330,8 @@ impl LeftPanelView {
             };
             crate::mana_bar::api::project_scope(&project, &submodules)
         });
-        self.mana_bar_view
-            .update(ctx, |view, ctx| view.set_project(project, ctx));
+        self.madness_views
+            .set_focus(&MadnessFocus { repo_root, project }, ctx);
     }
 
     fn deactivate_file_tree_view_for_pane_group(
@@ -1417,23 +1428,13 @@ impl View for LeftPanelView {
                 }
                 ToolPanelView::WarpDrive => ctx.focus(&self.warp_drive_view),
                 ToolPanelView::ConversationListView => ctx.focus(&self.conversation_list_view),
-                ToolPanelView::ManaBar => ctx.focus(&self.mana_bar_view),
+                ToolPanelView::Madness(tab) => self.madness_views.focus(tab, ctx),
             }
         }
     }
 
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
-
-        let mouse_state_handles = vec![
-            self.mouse_state_handles.project_explorer_button.clone(),
-            self.mouse_state_handles
-                .conversation_list_view_button
-                .clone(),
-            self.mouse_state_handles.global_search_button.clone(),
-            self.mouse_state_handles.warp_drive_button.clone(),
-            self.mouse_state_handles.mana_bar_button.clone(),
-        ];
 
         // If there is only one button in the toolbelt row,
         // there is no need to show it as it's a bit redundant.
@@ -1442,11 +1443,11 @@ impl View for LeftPanelView {
                 Flex::row()
                     .with_cross_axis_alignment(CrossAxisAlignment::Center)
                     .with_spacing(4.0)
-                    .with_children(self.toolbelt_buttons.iter().zip(&mouse_state_handles).map(
-                        |(button_config, mouse_state)| {
-                            Self::render_button(button_config, mouse_state.clone(), appearance)
-                        },
-                    ))
+                    .with_children(
+                        self.toolbelt_buttons
+                            .iter()
+                            .map(|button_config| Self::render_button(button_config, appearance)),
+                    )
                     .with_main_axis_size(MainAxisSize::Min)
                     .finish(),
             )
@@ -1497,8 +1498,8 @@ impl View for LeftPanelView {
                     Shrinkable::new(1.0, ChildView::new(&self.conversation_list_view).finish())
                         .finish()
                 }
-                ToolPanelView::ManaBar => {
-                    Shrinkable::new(1.0, ChildView::new(&self.mana_bar_view).finish()).finish()
+                ToolPanelView::Madness(tab) => {
+                    Shrinkable::new(1.0, self.madness_views.child(tab)).finish()
                 }
             }
         };

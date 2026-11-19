@@ -1,15 +1,20 @@
-//! Shellomancy: the search panel's Spells and Scrolls scopes.
+//! Shellomancy: the search panel's Spells, Scrolls and Grimoire scopes.
 //!
 //! Spells searches command history: every live session's history (the shell's
 //! history file plus what ran in Shellomancy, with its folder and exit code),
 //! merged, deduplicated and newest first. A spell goes back into the focused
-//! terminal's input with a click, runs, copies, or becomes a lesson.
+//! terminal's input with a click, runs, copies, becomes a lesson, or is
+//! inscribed in the Grimoire as an incantation.
 //!
 //! Scrolls searches the signed-in account's Omnispindle lessons on
 //! madnessinteractive.cc (`GET /api/lessons?search=`); a blank query lists the
 //! newest. Nothing is fetched while signed out.
+//!
+//! Grimoire searches the text of every page on the shelves (the repo's and
+//! `~/.mad/grimoire`), with the Grimoire tab's cards; see [`crate::grimoire`].
 
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use chrono::{DateTime, Local};
@@ -28,10 +33,14 @@ use warpui::ui_components::components::{UiComponent, UiComponentStyles};
 use warpui::{AppContext, Entity, SingletonEntity, TypedActionView, View, ViewContext};
 
 use crate::appearance::Appearance;
+use crate::grimoire::{self, Page};
 use crate::madness_account::{MADNESS_API_ROOT, error_reason};
 use crate::mana_bar::api::{DASHBOARD_URL, Lesson, parse_lessons};
 use crate::terminal::history::{History, HistoryEntry};
 use crate::view_components::DismissibleToast;
+use crate::workspace::view::grimoire_view::{
+    PAGE_SLOTS, PageClick, PageLook, act_on_page, copy_text, render_page, show_write_error,
+};
 use crate::workspace::{ToastStack, WorkspaceAction};
 
 /// Spells shown at once; the rest are a narrower query away.
@@ -50,13 +59,15 @@ pub enum SearchScope {
     Files,
     Spells,
     Scrolls,
+    Grimoire,
 }
 
 impl SearchScope {
-    pub const ALL: [SearchScope; 3] = [
+    pub const ALL: [SearchScope; 4] = [
         SearchScope::Files,
         SearchScope::Spells,
         SearchScope::Scrolls,
+        SearchScope::Grimoire,
     ];
 
     pub fn voice_key(self) -> &'static str {
@@ -64,6 +75,7 @@ impl SearchScope {
             SearchScope::Files => "shellomancy.search.scopeFiles",
             SearchScope::Spells => "shellomancy.search.scopeSpells",
             SearchScope::Scrolls => "shellomancy.search.scopeScrolls",
+            SearchScope::Grimoire => "shellomancy.search.scopeGrimoire",
         }
     }
 
@@ -72,6 +84,7 @@ impl SearchScope {
             SearchScope::Files => "shellomancy.search.placeholderFiles",
             SearchScope::Spells => "shellomancy.search.placeholderSpells",
             SearchScope::Scrolls => "shellomancy.search.placeholderScrolls",
+            SearchScope::Grimoire => "shellomancy.search.placeholderGrimoire",
         }
     }
 }
@@ -209,8 +222,15 @@ pub enum MadnessSearchAction {
     },
     /// Writes the spell down as a lesson.
     Scroll(usize),
+    /// Writes the spell into the Grimoire as an incantation.
+    Inscribe(usize),
     ToggleScroll(String),
     OpenUrl(String),
+    /// A click on a Grimoire page's card.
+    Page {
+        key: String,
+        click: PageClick,
+    },
 }
 
 pub struct MadnessSearchView {
@@ -229,6 +249,15 @@ pub struct MadnessSearchView {
     copy_generation: u64,
     row_mouse: HashMap<String, MouseStateHandle>,
     scroll_state: ClippedScrollStateHandle,
+    /// The repo of the folder being searched, whose shelf the Grimoire scope
+    /// reads first.
+    repo_root: Option<PathBuf>,
+    /// Every page on the shelves, once read.
+    pages: Option<Vec<Page>>,
+    /// Indices into `pages` that match the query, best first.
+    page_hits: Vec<usize>,
+    /// Bumped per read so a slow one for an old repo is dropped.
+    page_generation: u64,
 }
 
 impl Entity for MadnessSearchView {
@@ -249,6 +278,24 @@ impl MadnessSearchView {
             copy_generation: 0,
             row_mouse: HashMap::new(),
             scroll_state: Default::default(),
+            repo_root: None,
+            pages: None,
+            page_hits: Vec::new(),
+            page_generation: 0,
+        }
+    }
+
+    /// The folder the panel searches changed; the Grimoire scope follows its
+    /// repo.
+    pub fn set_folder(&mut self, folder: Option<PathBuf>, ctx: &mut ViewContext<Self>) {
+        let repo_root = folder.as_deref().and_then(grimoire::repo_root_of);
+        if self.repo_root == repo_root {
+            return;
+        }
+        self.repo_root = repo_root;
+        self.pages = None;
+        if self.scope == SearchScope::Grimoire {
+            self.reload_pages(ctx);
         }
     }
 
@@ -266,17 +313,67 @@ impl MadnessSearchView {
                 self.rematch_spells();
             }
             SearchScope::Scrolls => self.search_scrolls(ctx),
+            // Reading the shelves is cheap: a blank query or a newly entered
+            // scope reads them again, so new and edited pages turn up.
+            SearchScope::Grimoire => {
+                if scope_changed || self.pages.is_none() || self.query.trim().is_empty() {
+                    self.reload_pages(ctx);
+                }
+                self.rematch_pages();
+            }
         }
         ctx.notify();
     }
 
-    /// Enter in the query box: the first spell goes into the input.
+    /// Enter in the query box: the first spell goes into the input; the
+    /// first page does its main thing (read, cast).
     pub fn activate_first(&mut self, ctx: &mut ViewContext<Self>) {
-        if self.scope == SearchScope::Spells
-            && let Some(spell) = self.matching.first().and_then(|i| self.spells.get(*i))
-        {
-            insert_spell(&spell.command, ctx);
+        match self.scope {
+            SearchScope::Spells => {
+                if let Some(spell) = self.matching.first().and_then(|i| self.spells.get(*i)) {
+                    insert_spell(&spell.command, ctx);
+                }
+            }
+            SearchScope::Grimoire => {
+                if let Some(page) = self.page_hits.first().and_then(|i| self.page(*i)) {
+                    act_on_page(page, &PageClick::Primary, ctx);
+                }
+            }
+            SearchScope::Files | SearchScope::Scrolls => {}
         }
+    }
+
+    fn page(&self, index: usize) -> Option<&Page> {
+        self.pages.as_ref().and_then(|pages| pages.get(index))
+    }
+
+    fn reload_pages(&mut self, ctx: &mut ViewContext<Self>) {
+        self.page_generation += 1;
+        let generation = self.page_generation;
+        let shelves = grimoire::shelves(self.repo_root.as_deref());
+        let _ = ctx.spawn(grimoire::read_shelves(shelves), move |me, pages, ctx| {
+            if me.page_generation != generation {
+                return;
+            }
+            for page in &pages {
+                for slot in PAGE_SLOTS {
+                    me.row_mouse
+                        .entry(format!("page:{}|{slot}", page.key()))
+                        .or_default();
+                }
+            }
+            me.pages = Some(pages);
+            me.rematch_pages();
+            ctx.notify();
+        });
+    }
+
+    fn rematch_pages(&mut self) {
+        self.page_hits = self
+            .pages
+            .as_deref()
+            .map(|pages| grimoire::search(pages, &self.query))
+            .unwrap_or_default();
     }
 
     fn reload_spells(&mut self, ctx: &mut ViewContext<Self>) {
@@ -293,7 +390,7 @@ impl MadnessSearchView {
     fn rematch_spells(&mut self) {
         self.matching = matching_spells(&self.spells, &self.query, MAX_SPELLS);
         for index in self.matching.clone() {
-            for slot in ["row", "run", "copy", "scroll"] {
+            for slot in ["row", "run", "copy", "scroll", "inscribe"] {
                 self.row_mouse
                     .entry(format!("spell:{index}|{slot}"))
                     .or_default();
@@ -375,6 +472,67 @@ impl MadnessSearchView {
             },
         );
     }
+
+    /// Writes the spell into the global shelf as an incantation and opens it,
+    /// so its name and `{{arguments}}` can be filled in.
+    fn inscribe(&mut self, index: usize, ctx: &mut ViewContext<Self>) {
+        let (Some(spell), Some(dir)) = (self.spells.get(index).cloned(), grimoire::global_dir())
+        else {
+            return;
+        };
+        match grimoire::inscribe(&dir, &spell.command, spell.pwd.as_deref(), Local::now()) {
+            Ok(path) => {
+                let window_id = ctx.window_id();
+                let toast = DismissibleToast::success(madness_themes::tf(
+                    "shellomancy.search.inscribed",
+                    &[("path", &grimoire::tilde(&path.to_string_lossy()))],
+                ));
+                ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
+                    toast_stack.add_ephemeral_toast(toast, window_id, ctx);
+                });
+                self.pages = None;
+                ctx.dispatch_typed_action(&WorkspaceAction::OpenGrimoirePage { path, edit: true });
+            }
+            Err(error) => show_write_error(&dir, &error, ctx),
+        }
+    }
+
+    fn page_click(&mut self, key: &str, click: &PageClick, ctx: &mut ViewContext<Self>) {
+        let Some(page) = self
+            .pages
+            .as_ref()
+            .and_then(|pages| pages.iter().find(|page| page.key() == key))
+            .cloned()
+        else {
+            return;
+        };
+        match click {
+            PageClick::Peek => {
+                let card = format!("page:{key}");
+                if !self.expanded.remove(&card) {
+                    self.expanded.insert(card);
+                }
+                ctx.notify();
+            }
+            PageClick::Copy => self.copy(format!("page:{key}|copy"), copy_text(&page), ctx),
+            click => act_on_page(&page, click, ctx),
+        }
+    }
+
+    /// Copies `text`; `button` says "copied" for a moment.
+    fn copy(&mut self, button: String, text: String, ctx: &mut ViewContext<Self>) {
+        ctx.clipboard().write(ClipboardContent::plain_text(text));
+        self.copied = Some(button);
+        self.copy_generation += 1;
+        let generation = self.copy_generation;
+        let _ = ctx.spawn(Timer::after(COPIED_FLASH), move |me, _, ctx| {
+            if me.copy_generation == generation {
+                me.copied = None;
+                ctx.notify();
+            }
+        });
+        ctx.notify();
+    }
 }
 
 fn insert_spell(command: &str, ctx: &mut ViewContext<MadnessSearchView>) {
@@ -395,20 +553,11 @@ impl TypedActionView for MadnessSearchView {
                 ctx.dispatch_typed_action(&WorkspaceAction::RunCommand(command.clone()));
             }
             MadnessSearchAction::Copy { button, text } => {
-                ctx.clipboard()
-                    .write(ClipboardContent::plain_text(text.clone()));
-                self.copied = Some(button.clone());
-                self.copy_generation += 1;
-                let generation = self.copy_generation;
-                let _ = ctx.spawn(Timer::after(COPIED_FLASH), move |me, _, ctx| {
-                    if me.copy_generation == generation {
-                        me.copied = None;
-                        ctx.notify();
-                    }
-                });
-                ctx.notify();
+                self.copy(button.clone(), text.clone(), ctx)
             }
             MadnessSearchAction::Scroll(index) => self.spell_to_scroll(*index, ctx),
+            MadnessSearchAction::Inscribe(index) => self.inscribe(*index, ctx),
+            MadnessSearchAction::Page { key, click } => self.page_click(key, click, ctx),
             MadnessSearchAction::ToggleScroll(id) => {
                 if !self.expanded.remove(id) {
                     self.expanded.insert(id.clone());
@@ -430,6 +579,7 @@ impl View for MadnessSearchView {
         let body = match self.scope {
             SearchScope::Spells => self.render_spells(appearance),
             SearchScope::Scrolls => self.render_scrolls(app, appearance),
+            SearchScope::Grimoire => self.render_pages(appearance),
             SearchScope::Files => Flex::column().finish(),
         };
         let theme = appearance.theme();
@@ -528,6 +678,12 @@ impl MadnessSearchView {
             &format!("{key}|scroll"),
             madness_themes::t("shellomancy.search.toScroll"),
             MadnessSearchAction::Scroll(index),
+            appearance,
+        ));
+        buttons.add_child(self.term_button(
+            &format!("{key}|inscribe"),
+            madness_themes::t("shellomancy.search.inscribe"),
+            MadnessSearchAction::Inscribe(index),
             appearance,
         ));
         let bottom = Flex::row()
@@ -704,6 +860,62 @@ impl MadnessSearchView {
             MadnessSearchAction::ToggleScroll(lesson.id.clone()),
             appearance,
         )
+    }
+
+    fn render_pages(&self, appearance: &Appearance) -> Box<dyn Element> {
+        let mut column = Flex::column().with_cross_axis_alignment(CrossAxisAlignment::Stretch);
+        let Some(pages) = &self.pages else {
+            column.add_child(status_line(
+                madness_themes::t("shellomancy.grimoire.loading").to_owned(),
+                appearance,
+            ));
+            return column.finish();
+        };
+        let status = if pages.is_empty() {
+            madness_themes::tf(
+                "shellomancy.search.grimoireBlank",
+                &[(
+                    "path",
+                    &grimoire::global_dir()
+                        .map(|dir| grimoire::tilde(&dir.to_string_lossy()))
+                        .unwrap_or_default(),
+                )],
+            )
+        } else if self.page_hits.is_empty() {
+            madness_themes::t("shellomancy.grimoire.noMatch").to_owned()
+        } else {
+            madness_themes::tf(
+                "shellomancy.grimoire.count",
+                &[("count", &self.page_hits.len().to_string())],
+            )
+        };
+        column.add_child(status_line(status, appearance));
+        let now = Local::now().timestamp();
+        for index in &self.page_hits {
+            let Some(page) = pages.get(*index) else {
+                continue;
+            };
+            let key = page.key();
+            let card = format!("page:{key}");
+            let mouse = |slot: &str| self.mouse(&format!("{card}|{slot}"));
+            column.add_child(render_page(
+                page,
+                PageLook {
+                    mouse: &mouse,
+                    copied: self.copied.as_deref() == Some(format!("{card}|copy").as_str()),
+                    peeked: self.expanded.contains(&card),
+                    hit: grimoire::hit_line(page, &self.query),
+                    show_folder: true,
+                    now,
+                },
+                |click| MadnessSearchAction::Page {
+                    key: key.clone(),
+                    click,
+                },
+                appearance,
+            ));
+        }
+        column.finish()
     }
 
     /// `[copy]`, or `[copied ✓]` for a moment after a click.

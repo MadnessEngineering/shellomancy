@@ -51,6 +51,7 @@ mod spell_todo;
 mod madness_account;
 mod madness_sync;
 mod mana_bar;
+mod grimoire;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod login_item;
 mod menu;

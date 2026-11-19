@@ -23,6 +23,7 @@ use crate::themes::theme::AnsiColorIdentifier;
 use crate::workspace::WorkspaceRegistry;
 use crate::workspace::tab_group::TabGroupId;
 use crate::workspace::view::left_panel::ToolPanelView;
+use crate::workspace::view::madness_tabs::MadnessTab;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AppState {
@@ -314,8 +315,11 @@ pub enum LeftPanelDisplayedTab {
     GlobalSearch,
     WarpDrive,
     ConversationListView,
-    /// Shellomancy: the Mana Bar (Omnispindle).
+    /// Shellomancy: the Mana Bar, as saved before our tabs were generalized.
+    /// Still read; [`LeftPanelDisplayedTab::Madness`] is what's written now.
     ManaBar,
+    /// Shellomancy: one of our own tabs.
+    Madness(MadnessTab),
 }
 
 impl From<ToolPanelView> for LeftPanelDisplayedTab {
@@ -325,7 +329,7 @@ impl From<ToolPanelView> for LeftPanelDisplayedTab {
             ToolPanelView::GlobalSearch { .. } => LeftPanelDisplayedTab::GlobalSearch,
             ToolPanelView::WarpDrive => LeftPanelDisplayedTab::WarpDrive,
             ToolPanelView::ConversationListView => LeftPanelDisplayedTab::ConversationListView,
-            ToolPanelView::ManaBar => LeftPanelDisplayedTab::ManaBar,
+            ToolPanelView::Madness(tab) => LeftPanelDisplayedTab::Madness(tab),
         }
     }
 }

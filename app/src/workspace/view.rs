@@ -10,8 +10,10 @@ mod crash_recovery;
 pub(crate) mod feature_intro_modal;
 pub(crate) mod free_ai_removal_modal;
 pub mod global_search;
+pub(crate) mod grimoire_view;
 pub(crate) mod launch_modal;
 pub(crate) mod left_panel;
+pub(crate) mod madness_tabs;
 pub(crate) mod mana_bar_view;
 pub(crate) mod onboarding;
 pub(crate) mod openwarp_launch_modal;
@@ -538,6 +540,7 @@ use crate::workspace::view::launch_modal::{LaunchModal, LaunchModalEvent, OzLaun
 use crate::workspace::view::left_panel::{
     LeftPanelAction, LeftPanelEvent, LeftPanelView, ToolPanelView,
 };
+use crate::workspace::view::madness_tabs::MadnessTab;
 use crate::workspace::view::openwarp_launch_modal::{
     OpenWarpLaunchModal, OpenWarpLaunchModalEvent,
 };
@@ -709,6 +712,8 @@ pub(crate) const LEFT_PANEL_AGENT_CONVERSATIONS_BINDING_NAME: &str =
     "workspace:left_panel_agent_conversations";
 /// Shellomancy: the Mana Bar tab of the tools panel.
 pub(crate) const LEFT_PANEL_MANA_BAR_BINDING_NAME: &str = "workspace:left_panel_mana_bar";
+/// Shellomancy: the Grimoire tab of the tools panel.
+pub(crate) const LEFT_PANEL_GRIMOIRE_BINDING_NAME: &str = "workspace:left_panel_grimoire";
 
 const KEYBINDINGS_TO_CACHE: [&str; 4] = [
     ASK_AI_ASSISTANT_KEYBINDING_NAME,
@@ -4397,7 +4402,8 @@ impl Workspace {
                 },
                 LeftPanelDisplayedTab::WarpDrive => ToolPanelView::WarpDrive,
                 LeftPanelDisplayedTab::ConversationListView => ToolPanelView::ConversationListView,
-                LeftPanelDisplayedTab::ManaBar => ToolPanelView::ManaBar,
+                LeftPanelDisplayedTab::ManaBar => ToolPanelView::Madness(MadnessTab::ManaBar),
+                LeftPanelDisplayedTab::Madness(tab) => ToolPanelView::Madness(tab),
             };
             let active_view = restorable_left_panel_view(active_view, &left_panel_views);
             lp.restore_active_view_from_snapshot(active_view, ctx);
@@ -20937,7 +20943,7 @@ impl Workspace {
                         ToolPanelView::GlobalSearch { .. } => "Global search",
                         ToolPanelView::WarpDrive => "Warp Drive",
                         ToolPanelView::ConversationListView => "Agent conversations",
-                        ToolPanelView::ManaBar => madness_themes::t("shellomancy.manaBar.title"),
+                        ToolPanelView::Madness(tab) => tab.title(),
                     }
                 } else {
                     "Tools panel"
@@ -20992,7 +20998,7 @@ impl Workspace {
                 ToolPanelView::GlobalSearch { .. } => "Global search",
                 ToolPanelView::WarpDrive => "Warp Drive",
                 ToolPanelView::ConversationListView => "Agent conversations",
-                ToolPanelView::ManaBar => madness_themes::t("shellomancy.manaBar.title"),
+                ToolPanelView::Madness(tab) => tab.title(),
             }
         } else {
             "Tools panel"
@@ -24253,10 +24259,10 @@ impl Workspace {
                 entry_focus: GlobalSearchEntryFocus::Results,
             });
         }
-        // Shellomancy: Drive is locked behind Warp sign-in offline; the Mana
-        // Bar (Omnispindle) takes its slot.
+        // Shellomancy: Drive is locked behind Warp sign-in offline; our own
+        // tabs (the Mana Bar, the Grimoire) take its slot.
         if ChannelState::channel() == Channel::Oss {
-            views.push(ToolPanelView::ManaBar);
+            views.extend(MadnessTab::ALL.map(ToolPanelView::Madness));
         } else if *WarpDriveSettings::as_ref(ctx).enable_warp_drive {
             views.push(ToolPanelView::WarpDrive);
         }
@@ -25456,6 +25462,25 @@ impl TypedActionView for Workspace {
             }
             OpenFilePath { path } => {
                 ctx.open_file_path(path);
+            }
+            #[cfg(not(feature = "local_fs"))]
+            OpenGrimoirePage { .. } => {}
+            #[cfg(feature = "local_fs")]
+            OpenGrimoirePage { path, edit } => {
+                let target = if *edit {
+                    FileTarget::CodeEditor(EditorLayout::SplitPane)
+                } else {
+                    FileTarget::MarkdownViewer(EditorLayout::SplitPane)
+                };
+                self.open_file_with_target(
+                    path.clone(),
+                    target,
+                    None,
+                    CodeSource::FileTree {
+                        location: LocalOrRemotePath::Local(path.clone()),
+                    },
+                    ctx,
+                );
             }
             NewTabInAgentMode {
                 entrypoint,
@@ -26688,16 +26713,17 @@ impl TypedActionView for Workspace {
                     );
                 }
             }
-            ToggleManaBar => {
-                if self.left_panel_views.contains(&ToolPanelView::ManaBar) {
-                    let is_showing =
-                        self.left_panel_view.as_ref(ctx).active_view() == ToolPanelView::ManaBar;
-                    self.toggle_left_panel_view(&LeftPanelAction::ManaBar, is_showing, ctx);
+            ToggleMadnessTab(tab) => {
+                let view = ToolPanelView::Madness(*tab);
+                if self.left_panel_views.contains(&view) {
+                    let is_showing = self.left_panel_view.as_ref(ctx).active_view() == view;
+                    self.toggle_left_panel_view(&LeftPanelAction::Madness(*tab), is_showing, ctx);
                 }
             }
             ShowManaBar(tab) => {
-                if self.left_panel_views.contains(&ToolPanelView::ManaBar) {
-                    self.open_left_panel_view(&LeftPanelAction::ManaBar, ctx);
+                let view = ToolPanelView::Madness(MadnessTab::ManaBar);
+                if self.left_panel_views.contains(&view) {
+                    self.open_left_panel_view(&LeftPanelAction::Madness(MadnessTab::ManaBar), ctx);
                     self.left_panel_view.update(ctx, |left_panel, ctx| {
                         left_panel.select_mana_bar_tab(*tab, ctx);
                     });
@@ -27037,8 +27063,12 @@ impl View for Workspace {
         if WarpDriveSettings::is_warp_drive_enabled(app) {
             context.set.insert(flags::ENABLE_WARP_DRIVE);
         }
-        if self.left_panel_views.contains(&ToolPanelView::ManaBar) {
-            context.set.insert(flags::SHOW_MANA_BAR);
+        if self
+            .left_panel_views
+            .iter()
+            .any(|view| matches!(view, ToolPanelView::Madness(_)))
+        {
+            context.set.insert(flags::SHOW_MADNESS_TABS);
         }
 
         if AISettings::as_ref(app).is_conversation_history_enabled(app) {
@@ -30227,15 +30257,13 @@ fn set_opencode_warp_plugin(new_entry: &str) -> String {
 /// no longer offered falls back: Drive's to the Mana Bar that took its slot,
 /// anything else to the first tab there is.
 fn restorable_left_panel_view(saved: ToolPanelView, offered: &[ToolPanelView]) -> ToolPanelView {
-    let is_offered = |view: ToolPanelView| {
-        offered
-            .iter()
-            .any(|offered| std::mem::discriminant(offered) == std::mem::discriminant(&view))
-    };
+    let is_offered = |view: ToolPanelView| offered.iter().any(|offered| offered.is_same_tab(view));
     if is_offered(saved) {
         saved
-    } else if saved == ToolPanelView::WarpDrive && is_offered(ToolPanelView::ManaBar) {
-        ToolPanelView::ManaBar
+    } else if saved == ToolPanelView::WarpDrive
+        && is_offered(ToolPanelView::Madness(MadnessTab::ManaBar))
+    {
+        ToolPanelView::Madness(MadnessTab::ManaBar)
     } else {
         offered.first().copied().unwrap_or(saved)
     }

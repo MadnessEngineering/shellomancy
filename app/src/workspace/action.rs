@@ -386,8 +386,8 @@ pub enum WorkspaceAction {
     ToggleWarpDrive,
     /// Unconditionally opens Warp Drive.
     OpenWarpDrive,
-    /// Shellomancy: toggles the Mana Bar tab of the tools panel.
-    ToggleManaBar,
+    /// Shellomancy: toggles one of our tabs of the tools panel.
+    ToggleMadnessTab(crate::workspace::view::madness_tabs::MadnessTab),
     /// Shellomancy: opens the Mana Bar (never closes it) on one of its tabs.
     ShowManaBar(crate::workspace::view::mana_bar_view::ManaBarTab),
     /// Shellomancy: settings sync checks madnessinteractive.cc right away.
@@ -503,6 +503,12 @@ pub enum WorkspaceAction {
     /// Open a local file with the system's default application.
     OpenFilePath {
         path: PathBuf,
+    },
+    /// Shellomancy: opens a Grimoire page in a split pane: a notebook in the
+    /// Markdown viewer, or (`edit`) any page in the code editor.
+    OpenGrimoirePage {
+        path: PathBuf,
+        edit: bool,
     },
     TerminateApp,
     CloseWindow,
@@ -1111,8 +1117,9 @@ impl WorkspaceAction {
             | ToggleLeftPanel
             | ToggleWarpDrive
             | OpenWarpDrive
-            | ToggleManaBar
+            | ToggleMadnessTab(_)
             | ShowManaBar(_)
+            | OpenGrimoirePage { .. }
             | ClosePanel
             | ToggleRightPanel
             | OpenCodeReviewPanel(..)

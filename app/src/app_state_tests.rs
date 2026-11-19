@@ -113,6 +113,8 @@ fn left_panel_tabs_round_trip_through_saved_state() {
         LeftPanelDisplayedTab::FileTree,
         LeftPanelDisplayedTab::WarpDrive,
         LeftPanelDisplayedTab::ManaBar,
+        LeftPanelDisplayedTab::Madness(MadnessTab::ManaBar),
+        LeftPanelDisplayedTab::Madness(MadnessTab::Grimoire),
     ] {
         let saved = serde_json::to_string(&tab).unwrap();
         assert_eq!(

@@ -350,7 +350,7 @@ pub struct GlobalSearchView {
     /// Shellomancy: the Spells and Scrolls results; `None` outside Shellomancy.
     madness: Option<ViewHandle<MadnessSearchView>>,
     scope: SearchScope,
-    scope_mouse: [MouseStateHandle; 3],
+    scope_mouse: [MouseStateHandle; SearchScope::ALL.len()],
 }
 
 impl Entity for GlobalSearchView {
@@ -913,7 +913,7 @@ impl GlobalSearchView {
                 self.notify_query_changed();
             }
             EditorEvent::Enter => {
-                if self.scope == SearchScope::Spells
+                if matches!(self.scope, SearchScope::Spells | SearchScope::Grimoire)
                     && let Some(madness) = self.madness.clone()
                 {
                     madness.update(ctx, |view, ctx| view.activate_first(ctx));
@@ -1078,8 +1078,16 @@ impl GlobalSearchView {
     pub fn set_root_directories(
         &mut self,
         roots: Vec<LocalOrRemotePath>,
-        _ctx: &mut ViewContext<Self>,
+        ctx: &mut ViewContext<Self>,
     ) {
+        // Shellomancy: the Grimoire scope reads the shelf of the repo the
+        // most recent folder is in.
+        if let Some(madness) = self.madness.clone() {
+            let folder = roots
+                .iter()
+                .find_map(|root| root.to_local_path().map(Path::to_path_buf));
+            madness.update(ctx, |view, ctx| view.set_folder(folder, ctx));
+        }
         // Ancestor-dedup search roots so we don't search the same file twice
         // when terminal directories are nested (e.g. `~/code` + `~/code/a`).
         // Local and remote roots share `group_roots_by_common_ancestor` with
@@ -2145,7 +2153,7 @@ impl View for GlobalSearchView {
 }
 
 impl GlobalSearchView {
-    /// Shellomancy: FILES · SPELLS · SCROLLS.
+    /// Shellomancy: FILES · SPELLS · SCROLLS · GRIMOIRE.
     fn render_scope_row(&self, app: &AppContext) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
         let theme = appearance.theme();

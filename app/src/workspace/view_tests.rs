@@ -5438,7 +5438,7 @@ fn test_tools_panel_offline_has_no_warp_drive_or_login() {
             assert!(
                 workspace
                     .left_panel_views
-                    .contains(&ToolPanelView::ManaBar),
+                    .contains(&ToolPanelView::Madness(MadnessTab::ManaBar)),
                 "the Mana Bar should take Drive's slot offline"
             );
             workspace.handle_left_panel_event(&LeftPanelEvent::SignInRequested, ctx);
@@ -5462,8 +5462,54 @@ fn test_tools_panel_mana_bar_opens_and_renders_signed_out() {
         let workspace = mock_workspace(&mut app);
         workspace.update(&mut app, |workspace, ctx| {
             workspace.left_panel_view.update(ctx, |left_panel, ctx| {
-                left_panel.handle_action_with_force_open(&LeftPanelAction::ManaBar, false, ctx);
-                assert_eq!(left_panel.active_view(), ToolPanelView::ManaBar);
+                left_panel.handle_action_with_force_open(
+                    &LeftPanelAction::Madness(MadnessTab::ManaBar),
+                    false,
+                    ctx,
+                );
+                assert_eq!(
+                    left_panel.active_view(),
+                    ToolPanelView::Madness(MadnessTab::ManaBar)
+                );
+                assert_eq!(
+                    left_panel.active_view_availability(ctx),
+                    left_panel::ToolPanelAvailability::Available
+                );
+                drop(left_panel.render(ctx));
+            });
+        });
+    });
+}
+
+/// Shellomancy: every tab in the registry is offered, in its order, each with
+/// its own toolbelt button, and the Grimoire opens and renders with no shelf.
+#[test]
+fn test_tools_panel_offers_every_madness_tab() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        let workspace = mock_workspace(&mut app);
+        workspace.update(&mut app, |workspace, ctx| {
+            let madness: Vec<ToolPanelView> = workspace
+                .left_panel_views
+                .iter()
+                .copied()
+                .filter(|view| matches!(view, ToolPanelView::Madness(_)))
+                .collect();
+            assert_eq!(
+                madness,
+                MadnessTab::ALL.map(ToolPanelView::Madness).to_vec(),
+                "every Madness tab, in registry order"
+            );
+            workspace.left_panel_view.update(ctx, |left_panel, ctx| {
+                left_panel.handle_action_with_force_open(
+                    &LeftPanelAction::Madness(MadnessTab::Grimoire),
+                    false,
+                    ctx,
+                );
+                assert_eq!(
+                    left_panel.active_view(),
+                    ToolPanelView::Madness(MadnessTab::Grimoire)
+                );
                 assert_eq!(
                     left_panel.active_view_availability(ctx),
                     left_panel::ToolPanelAvailability::Available
@@ -5476,19 +5522,27 @@ fn test_tools_panel_mana_bar_opens_and_renders_signed_out() {
 
 #[test]
 fn test_tools_panel_saved_drive_tab_restores_as_mana_bar() {
-    let offered = [ToolPanelView::ProjectExplorer, ToolPanelView::ManaBar];
+    let offered = [
+        ToolPanelView::ProjectExplorer,
+        ToolPanelView::Madness(MadnessTab::ManaBar),
+    ];
 
     assert_eq!(
         restorable_left_panel_view(ToolPanelView::WarpDrive, &offered),
-        ToolPanelView::ManaBar
+        ToolPanelView::Madness(MadnessTab::ManaBar)
     );
     assert_eq!(
         restorable_left_panel_view(ToolPanelView::ConversationListView, &offered),
         ToolPanelView::ProjectExplorer
     );
     assert_eq!(
-        restorable_left_panel_view(ToolPanelView::ManaBar, &offered),
-        ToolPanelView::ManaBar
+        restorable_left_panel_view(ToolPanelView::Madness(MadnessTab::ManaBar), &offered),
+        ToolPanelView::Madness(MadnessTab::ManaBar)
+    );
+    // A tab that's no longer offered isn't mistaken for a sibling Madness tab.
+    assert_eq!(
+        restorable_left_panel_view(ToolPanelView::Madness(MadnessTab::Grimoire), &offered),
+        ToolPanelView::ProjectExplorer
     );
 }
 
