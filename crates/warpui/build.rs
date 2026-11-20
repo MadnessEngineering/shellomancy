@@ -79,6 +79,9 @@ fn compile_metal_shaders() {
     let lib_path = out_path.join("shaders.metallib");
     let lib_path = lib_path.to_str().unwrap();
 
+    // Rebuild the library whenever this switch flips, so an empty one from a
+    // skipped build never ends up in an app bundle.
+    println!("cargo:rerun-if-env-changed=WARP_LOCAL_SKIP_METAL");
     // LOCAL VERIFICATION ONLY (never commit): this machine has no Metal
     // toolchain; an empty library satisfies `include_bytes!` for `cargo check`.
     if env::var("WARP_LOCAL_SKIP_METAL").is_ok() {
