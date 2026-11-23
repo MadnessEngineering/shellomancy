@@ -72,3 +72,7 @@ __pycache__/
 .claude/scheduled_tasks.lock
 /.specstory
 /.claude_temp
+/app/src/terminal/.claude_temp
+/crates/madness_themes/.claude_temp
+/script/shellomancy_mqtt/.claude_temp
+/script/shellomancy_client/.claude_temp
