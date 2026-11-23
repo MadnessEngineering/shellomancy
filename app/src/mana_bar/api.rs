@@ -5,12 +5,15 @@
 //! defaults) and keep only what the panel shows; lesson `embedding` arrays in
 //! particular are dropped.
 
+use std::cmp::{Ordering, Reverse};
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::Duration;
 
 use serde_json::{Value, json};
 use url::Url;
 
 use crate::madness_account::{MADNESS_API_ROOT, TODO_URL_ROOT, error_reason};
+use crate::settings::madness_sync::TodoSort;
 
 /// The site, for things that have no page of their own (quests, lessons).
 pub const DASHBOARD_URL: &str = "https://madnessinteractive.cc/dashboard";
@@ -226,16 +229,16 @@ pub fn parse_todo(todo: &Value) -> Option<Todo> {
     })
 }
 
-/// Todos in the order the panel lists them (priority, then status, then
-/// newest first), without copying them.
-pub fn sort_todos(todos: &[Todo]) -> Vec<&Todo> {
+/// Todos in `sort` order, without copying them. `seed` picks the shuffle for
+/// [`TodoSort::Madness`]; the same seed gives the same order.
+pub fn sort_todos(todos: &[Todo], sort: TodoSort, seed: u64) -> Vec<&Todo> {
     let mut sorted: Vec<&Todo> = todos.iter().collect();
-    sorted.sort_by(|a, b| {
-        a.priority
-            .cmp(&b.priority)
-            .then_with(|| status_rank(&a.status).cmp(&status_rank(&b.status)))
-            .then_with(|| b.created_at.cmp(&a.created_at))
-    });
+    match sort {
+        TodoSort::Newest => sorted.sort_by_key(|todo| Reverse(todo.created_at)),
+        TodoSort::Oldest => sorted.sort_by_key(|todo| todo.created_at),
+        TodoSort::Priority => sorted.sort_by(|a, b| priority_order(a, b)),
+        TodoSort::Madness => sorted.sort_by_cached_key(|todo| shuffle_key(seed, &todo.id)),
+    }
     sorted
 }
 
@@ -243,12 +246,7 @@ pub fn sort_todos(todos: &[Todo]) -> Vec<&Todo> {
 /// (in progress, pending, blocked, review, anything else) and then newest
 /// first. Empty groups are left out.
 pub fn group_by_priority(mut todos: Vec<Todo>) -> Vec<(Priority, Vec<Todo>)> {
-    todos.sort_by(|a, b| {
-        a.priority
-            .cmp(&b.priority)
-            .then_with(|| status_rank(&a.status).cmp(&status_rank(&b.status)))
-            .then_with(|| b.created_at.cmp(&a.created_at))
-    });
+    todos.sort_by(priority_order);
     let mut groups: Vec<(Priority, Vec<Todo>)> = Vec::new();
     for todo in todos {
         match groups.last_mut() {
@@ -257,6 +255,19 @@ pub fn group_by_priority(mut todos: Vec<Todo>) -> Vec<(Priority, Vec<Todo>)> {
         }
     }
     groups
+}
+
+fn priority_order(a: &Todo, b: &Todo) -> Ordering {
+    a.priority
+        .cmp(&b.priority)
+        .then_with(|| status_rank(&a.status).cmp(&status_rank(&b.status)))
+        .then_with(|| b.created_at.cmp(&a.created_at))
+}
+
+fn shuffle_key(seed: u64, id: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    (seed, id).hash(&mut hasher);
+    hasher.finish()
 }
 
 fn status_rank(status: &str) -> u8 {

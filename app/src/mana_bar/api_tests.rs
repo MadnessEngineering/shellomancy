@@ -397,10 +397,7 @@ fn sort_todos_matches_the_grouped_order_without_copying() {
         todo("crit-doing", Priority::Critical, "in_progress", 2),
         todo("high", Priority::High, "pending", 3),
     ];
-    let sorted: Vec<&str> = sort_todos(&todos)
-        .iter()
-        .map(|todo| todo.id.as_str())
-        .collect();
+    let sorted = sorted_ids(&todos, TodoSort::Priority, 0);
     let grouped: Vec<String> = group_by_priority(todos.clone())
         .into_iter()
         .flat_map(|(_, group)| group.into_iter().map(|todo| todo.id))
@@ -410,6 +407,64 @@ fn sort_todos_matches_the_grouped_order_without_copying() {
         sorted,
         ["crit-doing", "crit-new", "crit-old", "high", "low"]
     );
+}
+
+fn sorted_ids(todos: &[Todo], sort: TodoSort, seed: u64) -> Vec<&str> {
+    sort_todos(todos, sort, seed)
+        .iter()
+        .map(|todo| todo.id.as_str())
+        .collect()
+}
+
+fn mixed_todos() -> Vec<Todo> {
+    vec![
+        todo("crit-old", Priority::Critical, "review", 100),
+        todo("low-new", Priority::Low, "pending", 900),
+        todo("high-mid", Priority::High, "pending", 500),
+        todo("med-busy", Priority::Medium, "in_progress", 300),
+    ]
+}
+
+#[test]
+fn newest_and_oldest_ignore_priority_and_status() {
+    let todos = mixed_todos();
+    assert_eq!(
+        sorted_ids(&todos, TodoSort::Newest, 0),
+        ["low-new", "high-mid", "med-busy", "crit-old"]
+    );
+    assert_eq!(
+        sorted_ids(&todos, TodoSort::Oldest, 0),
+        ["crit-old", "med-busy", "high-mid", "low-new"]
+    );
+}
+
+#[test]
+fn madness_keeps_its_shuffle_for_a_seed_and_drops_nothing() {
+    let todos: Vec<Todo> = (0..20)
+        .map(|n| todo(&format!("t{n}"), Priority::Medium, "pending", n))
+        .collect();
+    let first = sorted_ids(&todos, TodoSort::Madness, 7);
+    assert_eq!(first, sorted_ids(&todos, TodoSort::Madness, 7));
+
+    let mut all = first.clone();
+    all.sort();
+    let mut expected: Vec<&str> = todos.iter().map(|todo| todo.id.as_str()).collect();
+    expected.sort();
+    assert_eq!(all, expected);
+
+    assert!((1..20).any(|seed| sorted_ids(&todos, TodoSort::Madness, seed) != first));
+}
+
+#[test]
+fn the_sort_button_cycles_through_every_mode_like_the_dashboard() {
+    let mut sort = TodoSort::default();
+    let mut seen = vec![sort];
+    for _ in 1..TodoSort::ALL.len() {
+        sort = sort.next();
+        seen.push(sort);
+    }
+    assert_eq!(seen, TodoSort::ALL);
+    assert_eq!(sort.next(), TodoSort::Newest);
 }
 
 #[test]

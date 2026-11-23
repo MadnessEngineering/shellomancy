@@ -27,7 +27,7 @@ use warpui::elements::{
     ScrollbarWidth, SelectableArea, SelectionHandle, Shrinkable, Wrap,
 };
 use warpui::fonts::Weight;
-use warpui::keymap::FixedBinding;
+use warpui::keymap::{BindingDescription, EditableBinding, FixedBinding};
 use warpui::platform::Cursor;
 use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
@@ -41,10 +41,10 @@ use crate::editor::{
 use crate::mana_bar::api::{self, DASHBOARD_URL};
 use crate::mana_bar::git;
 use crate::mana_bar::{Fetch, List, ManaBar, ManaBarEvent, ProjectKey};
-use crate::settings::madness_sync::{MadnessSyncSettings, TodoOpenTarget};
-use crate::settings_view::SettingsSection;
+use crate::settings::madness_sync::{MadnessSyncSettings, TodoOpenTarget, TodoSort};
+use crate::settings_view::{SettingsSection, flags};
 use crate::ui_components::buttons::icon_button;
-use crate::util::bindings::CustomAction;
+use crate::util::bindings::{BindingGroup, CustomAction};
 use crate::view_components::DismissibleToast;
 use crate::workspace::{ToastStack, WorkspaceAction};
 
@@ -156,6 +156,8 @@ pub enum ManaBarAction {
     SelectTab(ManaBarTab),
     ShowMore,
     SetLogFilter(LogFilter),
+    /// Moves the todos on to the next sort mode (and saves it).
+    CycleSort,
     Refresh,
     ToggleAllProjects,
     MarkDone(String),
@@ -187,6 +189,27 @@ pub fn init(app: &mut AppContext) {
         "Copy",
         id!(ManaBarView::ui_name()) & !id!("IMEOpen"),
     )]);
+    app.register_editable_bindings(TodoSort::ALL.map(|sort| {
+        EditableBinding::new(
+            sort_binding_name(sort),
+            BindingDescription::new(madness_themes::tf(
+                "shellomancy.manaBar.sortBinding",
+                &[("sort", madness_themes::t(sort.voice_key()))],
+            )),
+            WorkspaceAction::SetTodoSort(sort),
+        )
+        .with_group(BindingGroup::Settings.as_str())
+        .with_context_predicate(id!("Workspace") & id!(flags::SHOW_MADNESS_TABS))
+    }));
+}
+
+fn sort_binding_name(sort: TodoSort) -> &'static str {
+    match sort {
+        TodoSort::Newest => "mana_bar:sort_newest",
+        TodoSort::Oldest => "mana_bar:sort_oldest",
+        TodoSort::Priority => "mana_bar:sort_priority",
+        TodoSort::Madness => "mana_bar:sort_madness",
+    }
 }
 
 #[derive(Default)]
@@ -196,6 +219,7 @@ struct HeaderMouseStates {
     account: MouseStateHandle,
     tabs: [MouseStateHandle; 4],
     show_more: MouseStateHandle,
+    sort: MouseStateHandle,
     log_filters: [MouseStateHandle; LogFilter::ALL.len()],
 }
 
@@ -224,6 +248,10 @@ pub struct ManaBarView {
     completing: HashSet<String>,
     /// Where todos open (Settings > Account), kept in step with the setting.
     open_target: TodoOpenTarget,
+    /// The order of the todos, kept in step with the setting.
+    todo_sort: TodoSort,
+    /// Picks the [`TodoSort::Madness`] shuffle; a new one each time it's picked.
+    shuffle_seed: u64,
     /// The focused terminal's repo, where an agent tab starts.
     repo_root: Option<PathBuf>,
     /// Quest rows unrolled in place, keyed like their buttons (`qt:<q>:<t>`).
@@ -280,13 +308,17 @@ impl ManaBarView {
                 }
             });
         }
-        let (open_target, log_commits) = if ctx.has_singleton_model::<MadnessSyncSettings>() {
+        let (open_target, log_commits, todo_sort) = if ctx
+            .has_singleton_model::<MadnessSyncSettings>()
+        {
             ctx.subscribe_to_model(&MadnessSyncSettings::handle(ctx), |me, settings, _, ctx| {
                 let settings = settings.as_ref(ctx);
-                let (target, log_commits) = (
+                let (target, log_commits, sort) = (
                     *settings.todo_open_target.value(),
                     *settings.log_commits.value(),
+                    *settings.todo_sort.value(),
                 );
+                me.apply_sort(sort, ctx);
                 if me.open_target != target || me.log_commits != log_commits {
                     me.open_target = target;
                     me.log_commits = log_commits;
@@ -298,9 +330,10 @@ impl ManaBarView {
             (
                 *settings.todo_open_target.value(),
                 *settings.log_commits.value(),
+                *settings.todo_sort.value(),
             )
         } else {
-            (TodoOpenTarget::default(), true)
+            (TodoOpenTarget::default(), true, TodoSort::default())
         };
         Self {
             project: None,
@@ -320,6 +353,8 @@ impl ManaBarView {
             row_mouse: HashMap::new(),
             completing: HashSet::new(),
             open_target,
+            todo_sort,
+            shuffle_seed: rand::random(),
             repo_root: None,
             open_rows: HashSet::new(),
             todo_details: HashMap::new(),
@@ -330,6 +365,20 @@ impl ManaBarView {
             visible: false,
             poll_generation: 0,
         }
+    }
+
+    /// The todos' sort mode changed: back to the first page, and a fresh
+    /// shuffle when it's [`TodoSort::Madness`].
+    fn apply_sort(&mut self, sort: TodoSort, ctx: &mut ViewContext<Self>) {
+        if self.todo_sort == sort {
+            return;
+        }
+        self.todo_sort = sort;
+        if sort == TodoSort::Madness {
+            self.shuffle_seed = rand::random();
+        }
+        self.shown = PAGE_SIZE;
+        ctx.notify();
     }
 
     /// The project the focused terminal is in changed.
@@ -641,6 +690,17 @@ impl TypedActionView for ManaBarView {
                 self.log_filter = *filter;
                 self.shown = PAGE_SIZE;
                 ctx.notify();
+            }
+            ManaBarAction::CycleSort => {
+                let sort = self.todo_sort.next();
+                if ctx.has_singleton_model::<MadnessSyncSettings>() {
+                    MadnessSyncSettings::handle(ctx).update(ctx, |settings, ctx| {
+                        if let Err(err) = settings.todo_sort.set_value(sort, ctx) {
+                            log::warn!("Failed to save the Mana Bar's todo sort: {err:?}");
+                        }
+                    });
+                }
+                self.apply_sort(sort, ctx);
             }
             ManaBarAction::ShowMore => {
                 self.shown += PAGE_SIZE;
@@ -1279,8 +1339,26 @@ impl ManaBarView {
             _ => madness_themes::t("shellomancy.manaBar.todosHeadingAll").to_owned(),
         };
         let todos = fetch.and_then(Fetch::data);
-        let mut section =
-            Flex::column().with_child(section_heading(heading, todos.map(Vec::len), appearance));
+        // Like the dashboard's sort button, the chip names the current order
+        // and a click moves on to the next.
+        let heading_row = Flex::row()
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_child(
+                Shrinkable::new(
+                    1.,
+                    section_heading(heading, todos.map(Vec::len), appearance),
+                )
+                .finish(),
+            )
+            .with_child(toggle_chip(
+                madness_themes::t(self.todo_sort.voice_key()).to_uppercase(),
+                false,
+                self.header_mouse.sort.clone(),
+                ManaBarAction::CycleSort,
+                appearance,
+            ))
+            .finish();
+        let mut section = Flex::column().with_child(heading_row);
         if self.project.is_none() {
             section.add_child(muted(
                 madness_themes::t("shellomancy.manaBar.noProject").to_owned(),
@@ -1303,7 +1381,7 @@ impl ManaBarView {
             }
             Some(todos) => {
                 let now = chrono::Utc::now().timestamp();
-                let sorted = api::sort_todos(todos);
+                let sorted = api::sort_todos(todos, self.todo_sort, self.shuffle_seed);
                 for todo in sorted.iter().take(self.shown) {
                     section.add_child(self.render_todo(todo, now, appearance));
                 }

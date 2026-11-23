@@ -24955,6 +24955,17 @@ impl TypedActionView for Workspace {
                         .update(ctx, |sync, ctx| sync.sync_now(ctx));
                 }
             }
+            SetTodoSort(sort) => {
+                use crate::settings::madness_sync::MadnessSyncSettings;
+                if ctx.has_singleton_model::<MadnessSyncSettings>() {
+                    let sort = *sort;
+                    MadnessSyncSettings::handle(ctx).update(ctx, |settings, ctx| {
+                        if let Err(err) = settings.todo_sort.set_value(sort, ctx) {
+                            log::warn!("Failed to save the Mana Bar's todo sort: {err:?}");
+                        }
+                    });
+                }
+            }
             OpenTabWithCommand {
                 command,
                 cwd,

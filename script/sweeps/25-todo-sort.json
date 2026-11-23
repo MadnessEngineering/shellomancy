@@ -1,0 +1,9 @@
+[
+ {"key": "shellomancy.manaBar.sortNewest", "standard": "Newest first", "shellomancer": "Fresh contraptions"},
+ {"key": "shellomancy.manaBar.sortOldest", "standard": "Oldest first", "shellomancer": "Ancient artifacts"},
+ {"key": "shellomancy.manaBar.sortPriority", "standard": "Priority order", "shellomancer": "Urgency order"},
+ {"key": "shellomancy.manaBar.sortMadness", "standard": "Random order", "shellomancer": "Chaos mode"},
+ {"key": "shellomancy.manaBar.sortBinding", "standard": "Mana Bar todos: {{sort}}", "shellomancer": "Mana Bar owed: {{sort}}"},
+ {"key": "shellomancy.settings.manaBar.sort", "standard": "Todo order in the Mana Bar", "shellomancer": "Order of the owed in the Mana Bar"},
+ {"key": "shellomancy.settings.manaBar.sortNote", "standard": "The order of the Todos tab; the chip beside its heading cycles through the same four, like the dashboard's sort button. Priority order puts Critical first, work in progress first within each priority, then newest. Random order shuffles once each time you pick it.", "shellomancer": "The order of the Owed tab; the chip beside its heading cycles through the same four, like the dashboard's sort button. Urgency order puts Critical first, work in progress first within each urgency, then the freshest. Chaos mode shuffles once each time you summon it."}
+]

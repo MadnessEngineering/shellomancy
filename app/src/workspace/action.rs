@@ -411,6 +411,8 @@ pub enum WorkspaceAction {
     ShowManaBar(crate::workspace::view::mana_bar_view::ManaBarTab),
     /// Shellomancy: settings sync checks madnessinteractive.cc right away.
     MadnessSyncNow,
+    /// Shellomancy: sets the order of the Mana Bar's todos.
+    SetTodoSort(crate::settings::madness_sync::TodoSort),
     /// Shellomancy: a new, focused terminal tab that runs `command` once its
     /// shell starts (the Mana Bar hands a todo to an agent this way).
     OpenTabWithCommand {
@@ -1296,6 +1298,7 @@ impl WorkspaceAction {
             #[cfg(not(target_family = "wasm"))]
             ViewLogs => false,
             MadnessSyncNow => false,
+            SetTodoSort(_) => false,
             OpenTabWithCommand { .. } => true,
             #[cfg(target_os = "macos")]
             SampleProcess => false,

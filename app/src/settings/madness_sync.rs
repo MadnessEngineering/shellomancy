@@ -52,6 +52,63 @@ impl TodoOpenTarget {
     }
 }
 
+/// The order of the Mana Bar's todos: the dashboard's sort modes, in the
+/// order its sort button cycles through them.
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    Default,
+    JsonSchema,
+    settings_value::SettingsValue,
+)]
+#[schemars(
+    description = "The order of the Mana Bar's todos.",
+    rename_all = "snake_case"
+)]
+pub enum TodoSort {
+    #[default]
+    Newest,
+    Oldest,
+    /// Critical first; within a priority, in progress before pending,
+    /// blocked and review; then newest first.
+    Priority,
+    /// Shuffled, once each time it's picked.
+    Madness,
+}
+
+impl TodoSort {
+    pub const ALL: [TodoSort; 4] = [
+        TodoSort::Newest,
+        TodoSort::Oldest,
+        TodoSort::Priority,
+        TodoSort::Madness,
+    ];
+
+    /// The mode the sort button moves on to.
+    pub fn next(self) -> Self {
+        match self {
+            TodoSort::Newest => TodoSort::Oldest,
+            TodoSort::Oldest => TodoSort::Priority,
+            TodoSort::Priority => TodoSort::Madness,
+            TodoSort::Madness => TodoSort::Newest,
+        }
+    }
+
+    pub fn voice_key(self) -> &'static str {
+        match self {
+            TodoSort::Newest => "shellomancy.manaBar.sortNewest",
+            TodoSort::Oldest => "shellomancy.manaBar.sortOldest",
+            TodoSort::Priority => "shellomancy.manaBar.sortPriority",
+            TodoSort::Madness => "shellomancy.manaBar.sortMadness",
+        }
+    }
+}
+
 define_settings_group!(MadnessSyncSettings, settings: [
     enabled: MadnessSettingsSyncEnabled {
         type: bool,
@@ -107,6 +164,17 @@ define_settings_group!(MadnessSyncSettings, settings: [
         storage_key: "MadnessTodoOpenTarget",
         toml_path: "madness.todo_open_target",
         description: "Where a todo opens from the Mana Bar: in_place, browser or agent_tab.",
+    },
+    todo_sort: MadnessTodoSort {
+        type: TodoSort,
+        default: TodoSort::Newest,
+        supported_platforms: SupportedPlatforms::DESKTOP,
+        sync_to_cloud: SyncToCloud::Never,
+        surface: settings::SettingSurfaces::GUI,
+        private: false,
+        storage_key: "MadnessTodoSort",
+        toml_path: "madness.todo_sort",
+        description: "The order of the Mana Bar's todos: newest, oldest, priority or madness (shuffled).",
     },
     log_commits: MadnessLogCommits {
         type: bool,

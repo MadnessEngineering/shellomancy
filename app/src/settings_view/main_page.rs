@@ -47,7 +47,7 @@ use crate::madness_account::{MADNESS_KEYS_URL, MadnessAccount, MadnessAccountSta
 use crate::madness_sync::{SettingsSync, SyncStatus};
 use crate::server::ids::ServerId;
 use crate::settings::cloud_preferences::CloudPreferencesSettings;
-use crate::settings::madness_sync::{MadnessSyncSettings, TodoOpenTarget};
+use crate::settings::madness_sync::{MadnessSyncSettings, TodoOpenTarget, TodoSort};
 use crate::workspace::WorkspaceAction;
 use crate::workspaces::update_manager::TeamUpdateManager;
 use crate::workspaces::user_workspaces::UserWorkspaces;
@@ -142,6 +142,8 @@ pub enum MainPageAction {
     SetMadnessSyncInterval(u32),
     /// Shellomancy: where a todo opens from the Mana Bar.
     SetTodoOpenTarget(TodoOpenTarget),
+    /// Shellomancy: the order of the Mana Bar's todos.
+    SetTodoSort(TodoSort),
     /// Shellomancy: whether the Mana Bar's Log mixes in git commits.
     ToggleLogCommits,
     /// Shellomancy: whether it checks GitHub for releases on its own.
@@ -296,6 +298,15 @@ impl TypedActionView for MainSettingsPageView {
                 MadnessSyncSettings::handle(ctx).update(ctx, |settings, ctx| {
                     if let Err(err) = settings.todo_open_target.set_value(target, ctx) {
                         log::warn!("Failed to set where todos open: {err:?}");
+                    }
+                });
+                ctx.notify();
+            }
+            MainPageAction::SetTodoSort(sort) => {
+                let sort = *sort;
+                MadnessSyncSettings::handle(ctx).update(ctx, |settings, ctx| {
+                    if let Err(err) = settings.todo_sort.set_value(sort, ctx) {
+                        log::warn!("Failed to set the Mana Bar's todo sort: {err:?}");
                     }
                 });
                 ctx.notify();
@@ -1109,6 +1120,7 @@ impl SettingsWidget for MadnessSettingsSyncWidget {
 #[derive(Default)]
 struct TodoOpenTargetWidget {
     buttons: [MouseStateHandle; TodoOpenTarget::ALL.len()],
+    sort_buttons: [MouseStateHandle; TodoSort::ALL.len()],
     log_commits_switch: SwitchStateHandle,
 }
 
@@ -1116,7 +1128,7 @@ impl SettingsWidget for TodoOpenTargetWidget {
     type View = MainSettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "mana bar todo open browser in place agent tab claude edit dashboard log git commits"
+        "mana bar todo open browser in place agent tab claude edit dashboard log git commits sort order newest oldest priority random madness"
     }
 
     fn render(
@@ -1165,6 +1177,44 @@ impl SettingsWidget for TodoOpenTargetWidget {
             })
             .build()
             .finish();
+        let current_sort = *MadnessSyncSettings::as_ref(app).todo_sort.value();
+        let mut sorts = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
+        for (sort, mouse) in TodoSort::ALL.iter().zip(&self.sort_buttons) {
+            let sort = *sort;
+            let variant = if sort == current_sort {
+                ButtonVariant::Accent
+            } else {
+                ButtonVariant::Secondary
+            };
+            sorts.add_child(
+                Container::new(
+                    ui.button(variant, mouse.clone())
+                        .with_text_label(madness_themes::t(sort.voice_key()).to_owned())
+                        .build()
+                        .on_click(move |ctx, _, _| {
+                            ctx.dispatch_typed_action(MainPageAction::SetTodoSort(sort));
+                        })
+                        .finish(),
+                )
+                .with_margin_right(6.)
+                .finish(),
+            );
+        }
+        let sort_label = ui
+            .span(madness_themes::t("shellomancy.settings.manaBar.sort").to_owned())
+            .build()
+            .finish();
+        let sort_note = ui
+            .wrappable_text(
+                madness_themes::t("shellomancy.settings.manaBar.sortNote").to_owned(),
+                true,
+            )
+            .with_style(UiComponentStyles {
+                font_color: Some(theme.sub_text_color(theme.background()).into_solid()),
+                ..Default::default()
+            })
+            .build()
+            .finish();
         let log_commits = *MadnessSyncSettings::as_ref(app).log_commits.value();
         let switch = ui
             .switch(self.log_commits_switch.clone())
@@ -1190,6 +1240,9 @@ impl SettingsWidget for TodoOpenTargetWidget {
                         .with_margin_top(8.)
                         .finish(),
                 )
+                .with_child(Container::new(sort_label).with_margin_top(16.).finish())
+                .with_child(Container::new(sort_note).with_margin_top(4.).finish())
+                .with_child(Container::new(sorts.finish()).with_margin_top(8.).finish())
                 .with_child(
                     Container::new(log_commits_row)
                         .with_margin_top(12.)
