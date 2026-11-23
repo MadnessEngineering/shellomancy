@@ -14,7 +14,7 @@ T ?=
 # Arguments for `make dev-client`.
 ARGS ?=
 
-DEV_APP := target/debug/bundle/osx/Shellomancy.app
+DEV_BUNDLE_DIR := target/debug/bundle
 INSTALLED_APP := /Applications/Shellomancy.app
 DEV_DISCOVERY_DIR := $(HOME)/.mad/local-control-$(PROFILE)
 LSREGISTER := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
@@ -29,12 +29,15 @@ help: ## List these targets
 # WARP_DATA_PROFILE (honored by debug builds only) gives the copy its own settings dir, session
 # database, UserDefaults and Keychain items. Without it the copy would restore your windows and
 # its saves would overwrite the live app's session. Its own local-control discovery dir keeps
-# hooks, which pick the newest instance, talking to the live app. The copy shares the installed
-# app's bundle id, so on exit its bundle is unregistered and removed and the installed app
-# re-registered; otherwise Launch Services may open the target/ copy later.
+# hooks, which pick the newest instance, talking to the live app. The build leaves app bundles
+# (osx/, and dmg/ beside a ~150 MB Shellomancy.dmg) with the installed app's bundle id, so on
+# exit they're unregistered and removed and the installed app re-registered; otherwise Launch
+# Services may open a target/ copy later.
 dev: ## Build and run an isolated copy beside the installed app (PROFILE=dev)
 	@[ -n "$(PROFILE)" ] || { echo "make dev: PROFILE must not be empty" >&2; exit 2; }
-	@bash -c 'forget() { "$(LSREGISTER)" -u "$(DEV_APP)" 2>/dev/null; rm -rf "$(DEV_APP)"; \
+	@bash -c 'forget() { for app in $(DEV_BUNDLE_DIR)/*/Shellomancy.app; do \
+		[ -d "$$app" ] || continue; "$(LSREGISTER)" -u "$$app" 2>/dev/null; rm -rf "$$app"; done; \
+		rm -f $(DEV_BUNDLE_DIR)/dmg/Shellomancy.dmg; \
 		if [ -d "$(INSTALLED_APP)" ]; then "$(LSREGISTER)" -f "$(INSTALLED_APP)"; fi; }; \
 		trap forget EXIT; \
 		WARP_DATA_PROFILE="$(PROFILE)" WARP_LOCAL_CONTROL_DISCOVERY_DIR="$(DEV_DISCOVERY_DIR)" \
