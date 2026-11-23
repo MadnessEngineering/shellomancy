@@ -5,6 +5,7 @@ This file provides guidance when working with code in this repository.
 ## Development Commands
 
 ### Build and Run
+- `make` - Shellomancy's dev loop. `make dev` runs an isolated copy beside the installed app (own data, so the live app and its tabs keep running); `make install` replaces `/Applications/Shellomancy.app` and needs the app quit first
 - `cargo run` / `./script/run` - Build and run the GUI desktop app locally
 - `./script/run-tui` - Build and run the headless TUI front-end (`crates/warp_tui`)
 - `cargo bundle --bin warp` - Bundle the main (GUI) app
