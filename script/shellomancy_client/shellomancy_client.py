@@ -19,12 +19,20 @@ Protocol (crates/local_control; see specs/warp-control-cli/TECH.md):
 Tokens stay in memory; never log or print them.
 
 Example:
-    from shellomancy_client import open_tab
+    from shellomancy_client import QUAKE, move_tab_to_window, open_tab
     open_tab(command="claude attach abc123", title="agent", color="cyan")
+    move_tab_to_window(QUAKE)
 
 CLI:
     shellomancy_client.py tab-create --command "claude attach abc123" --title agent
+    shellomancy_client.py tab-create --window-index 1 --command "claude --resume <id>"
+    shellomancy_client.py tab-move-to-window --quake
+    shellomancy_client.py tab-move-to-window --window-index 0 --tab-index 2 --to-window-index 1
     shellomancy_client.py instances
+
+Window and tab selectors default to the active window and its active tab. When
+no Shellomancy window is active (the app is in the background), name the
+window with `--window-index` (`window.list` order) or `--window` (its id).
 """
 
 import argparse
@@ -218,12 +226,58 @@ def send(
     raise AssertionError("unreachable")
 
 
+QUAKE = {"type": "quake"}
+"""`move_tab_to_window` destination: the quake window, opened around the tab when it isn't open."""
+
+NEW_WINDOW = {"type": "new_window"}
+"""`move_tab_to_window` destination: a new window holding just the tab."""
+
+
+def window_selector(
+    window_id: Optional[str] = None, window_index: Optional[int] = None
+) -> Optional[Dict[str, Any]]:
+    """A window selector by opaque id or by `window.list` index; None for the active window."""
+    if window_id is not None and window_index is not None:
+        raise ValueError("pass window_id or window_index, not both")
+    if window_id is not None:
+        return {"type": "id", "id": window_id}
+    if window_index is not None:
+        return {"type": "index", "index": window_index}
+    return None
+
+
+def window_destination(
+    window_id: Optional[str] = None, window_index: Optional[int] = None
+) -> Dict[str, Any]:
+    """`move_tab_to_window` destination: an open window, by opaque id or `window.list` index."""
+    selector = window_selector(window_id, window_index)
+    if selector is None:
+        raise ValueError("a window destination needs window_id or window_index")
+    return {"type": "window", "window": selector}
+
+
+def _target(
+    window_id: Optional[str] = None,
+    window_index: Optional[int] = None,
+    tab_index: Optional[int] = None,
+) -> Dict[str, Any]:
+    target: Dict[str, Any] = {}
+    window = window_selector(window_id, window_index)
+    if window is not None:
+        target["window"] = window
+    if tab_index is not None:
+        target["tab"] = {"type": "index", "index": tab_index}
+    return target
+
+
 def open_tab(
     command: Optional[str] = None,
     cwd: Optional[str] = None,
     title: Optional[str] = None,
     color: Optional[str] = None,
     focus: bool = True,
+    window_id: Optional[str] = None,
+    window_index: Optional[int] = None,
     instance: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Open a terminal tab that runs `command` once its shell is ready.
@@ -244,7 +298,40 @@ def open_tab(
         params["color"] = color
     if not focus:
         params["focus"] = False
-    return send("tab.create", params, instance=instance)
+    return send(
+        "tab.create",
+        params,
+        target=_target(window_id, window_index),
+        instance=instance,
+    )
+
+
+def move_tab_to_window(
+    destination: Dict[str, Any],
+    tab_index: Optional[int] = None,
+    window_id: Optional[str] = None,
+    window_index: Optional[int] = None,
+    instance: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Move a tab into another window; whatever runs in it keeps running.
+
+    `destination` is QUAKE, NEW_WINDOW, or `window_destination(...)`. The tab is
+    the active tab of the active window unless `tab_index` and a window are
+    given. Returns the acknowledgement, whose `window_id` is where it landed.
+    """
+    return send(
+        "tab.move_to_window",
+        {"destination": destination},
+        target=_target(window_id, window_index, tab_index),
+        instance=instance,
+    )
+
+
+def _add_window_arguments(parser: argparse.ArgumentParser) -> None:
+    window = parser.add_mutually_exclusive_group()
+    window.add_argument("--window", help="window id from window.list (default: the active window)")
+    window.add_argument("--window-index", type=int, help="window index from window.list")
+    parser.add_argument("--instance")
 
 
 def _main(argv: Optional[List[str]] = None) -> int:
@@ -257,7 +344,17 @@ def _main(argv: Optional[List[str]] = None) -> int:
     tab.add_argument("--title")
     tab.add_argument("--color")
     tab.add_argument("--no-focus", action="store_true")
-    tab.add_argument("--instance")
+    _add_window_arguments(tab)
+    move = sub.add_parser(
+        "tab-move-to-window", help="move a tab into another window; it keeps running"
+    )
+    move.add_argument("--tab-index", type=int, help="tab index in its window (default: active tab)")
+    _add_window_arguments(move)
+    destination = move.add_mutually_exclusive_group(required=True)
+    destination.add_argument("--quake", action="store_true", help="the quake window")
+    destination.add_argument("--new-window", action="store_true", help="a new window of its own")
+    destination.add_argument("--to-window", help="the window with this id")
+    destination.add_argument("--to-window-index", type=int, help="the window at this index")
     args = parser.parse_args(argv)
     try:
         if args.cmd == "instances":
@@ -265,14 +362,31 @@ def _main(argv: Optional[List[str]] = None) -> int:
                 print(f"{record['instance_id']}\tpid {record['pid']}\t{record.get('started_at', '')}")
             return 0
         instance = select_instance(args.instance)
-        data = open_tab(
-            command=args.command,
-            cwd=args.cwd,
-            title=args.title,
-            color=args.color,
-            focus=not args.no_focus,
-            instance=instance,
-        )
+        if args.cmd == "tab-move-to-window":
+            if args.quake:
+                to = QUAKE
+            elif args.new_window:
+                to = NEW_WINDOW
+            else:
+                to = window_destination(args.to_window, args.to_window_index)
+            data = move_tab_to_window(
+                to,
+                tab_index=args.tab_index,
+                window_id=args.window,
+                window_index=args.window_index,
+                instance=instance,
+            )
+        else:
+            data = open_tab(
+                command=args.command,
+                cwd=args.cwd,
+                title=args.title,
+                color=args.color,
+                focus=not args.no_focus,
+                window_id=args.window,
+                window_index=args.window_index,
+                instance=instance,
+            )
         print(json.dumps(data))
         return 0
     except ShellomancyError as err:

@@ -153,8 +153,8 @@ fn surface_list_rejects_target_selectors() {
 
 #[test]
 fn capabilities_advertises_the_complete_catalog() {
-    // Warp's 84 plus Shellomancy's theme.window.set and theme.window.clear.
-    assert_eq!(capabilities().len(), 86);
+    // Warp's 84 plus Shellomancy's theme.window.set, theme.window.clear and tab.move_to_window.
+    assert_eq!(capabilities().len(), 87);
 }
 
 #[test]
@@ -284,6 +284,35 @@ fn tab_create_rejects_malformed_params() {
         params: serde_json::json!({}),
     })
     .expect("empty tab.create params are accepted");
+}
+
+#[test]
+fn tab_move_to_window_requires_a_destination() {
+    for destination in [
+        serde_json::json!({ "type": "quake" }),
+        serde_json::json!({ "type": "new_window" }),
+        serde_json::json!({ "type": "window", "window": { "type": "index", "index": 1 } }),
+        serde_json::json!({ "type": "window", "window": { "type": "id", "id": "3" } }),
+    ] {
+        validate_action_params(&Action {
+            kind: ActionKind::TabMoveToWindow,
+            params: serde_json::json!({ "destination": destination }),
+        })
+        .expect("a known destination is accepted");
+    }
+
+    for params in [
+        serde_json::json!({}),
+        serde_json::json!({ "destination": { "type": "elsewhere" } }),
+        serde_json::json!({ "destination": { "type": "window" } }),
+    ] {
+        let err = validate_action_params(&Action {
+            kind: ActionKind::TabMoveToWindow,
+            params,
+        })
+        .expect_err("a missing or unknown destination is refused");
+        assert_eq!(err.code, ErrorCode::InvalidParams);
+    }
 }
 
 #[test]

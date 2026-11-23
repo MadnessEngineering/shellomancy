@@ -694,6 +694,8 @@ pub fn create_transferred_window(
         WindowStyle::Normal
     };
 
+    let workspace_source =
+        transferred_tab_workspace_source(&transferred_tab, source_window_id, is_tab_drag_preview);
     let (new_window_id, _) = ctx.add_window(
         AddWindowOptions {
             window_style,
@@ -705,20 +707,7 @@ pub fn create_transferred_window(
             ..Default::default()
         },
         |ctx| {
-            let mut view = RootView::new(
-                global_resource_handles.clone(),
-                NewWorkspaceSource::TransferredTab {
-                    source_window_id,
-                    tab_color: transferred_tab.color,
-                    custom_title: transferred_tab.custom_title.clone(),
-                    left_panel_open: transferred_tab.left_panel_open,
-                    vertical_tabs_panel_open: transferred_tab.vertical_tabs_panel_open,
-                    right_panel_open: transferred_tab.right_panel_open,
-                    is_right_panel_maximized: transferred_tab.is_right_panel_maximized,
-                    is_tab_drag_preview,
-                },
-                ctx,
-            );
+            let mut view = RootView::new(global_resource_handles.clone(), workspace_source, ctx);
             if !is_tab_drag_preview {
                 view.focus(ctx);
             }
@@ -726,6 +715,37 @@ pub fn create_transferred_window(
         },
     );
 
+    adopt_transferred_tab(&transferred_tab, source_window_id, new_window_id, ctx);
+    new_window_id
+}
+
+/// The workspace a window made for a transferred tab starts from: a placeholder tab that
+/// [`adopt_transferred_tab`] swaps for the real pane group.
+fn transferred_tab_workspace_source(
+    transferred_tab: &crate::workspace::view::TransferredTab,
+    source_window_id: WindowId,
+    is_tab_drag_preview: bool,
+) -> NewWorkspaceSource {
+    NewWorkspaceSource::TransferredTab {
+        source_window_id,
+        tab_color: transferred_tab.color,
+        custom_title: transferred_tab.custom_title.clone(),
+        left_panel_open: transferred_tab.left_panel_open,
+        vertical_tabs_panel_open: transferred_tab.vertical_tabs_panel_open,
+        right_panel_open: transferred_tab.right_panel_open,
+        is_right_panel_maximized: transferred_tab.is_right_panel_maximized,
+        is_tab_drag_preview,
+    }
+}
+
+/// Moves the transferred pane group's views into `new_window_id` and hands the group to that
+/// window's workspace in place of its placeholder tab.
+fn adopt_transferred_tab(
+    transferred_tab: &crate::workspace::view::TransferredTab,
+    source_window_id: WindowId,
+    new_window_id: WindowId,
+    ctx: &mut AppContext,
+) {
     let pane_group_id = transferred_tab.pane_group.id();
     ctx.transfer_view_tree_to_window(pane_group_id, source_window_id, new_window_id);
 
@@ -739,7 +759,6 @@ pub fn create_transferred_window(
             log::warn!("Failed to find workspace in newly created window {new_window_id:?}");
         }
     }
-    new_window_id
 }
 
 #[cfg(feature = "crash_reporting")]
@@ -1457,6 +1476,107 @@ fn get_quake_mode_state(ctx: &mut AppContext) -> Option<QuakeModeState> {
     }
 }
 
+fn add_quake_mode_window(
+    global_resource_handles: &GlobalResourceHandles,
+    workspace_source: NewWorkspaceSource,
+    ctx: &mut AppContext,
+) -> WindowId {
+    let config = quake_mode_config(
+        &KeysSettings::as_ref(ctx)
+            .quake_mode_settings
+            .value()
+            .clone(),
+        ctx,
+    );
+
+    let window_settings = WindowSettings::as_ref(ctx);
+
+    let (id, _) = ctx.add_window(
+        AddWindowOptions {
+            window_style: WindowStyle::Pin,
+            window_bounds: WindowBounds::ExactPosition(config.window_bounds),
+            title: Some(madness_themes::t("shellomancy.app.name").to_owned()),
+            background_blur_radius_pixels: Some(*window_settings.background_blur_radius),
+            background_backdrop: *window_settings.background_backdrop,
+            // Ignore the quake window for positioning the next window
+            anchor_new_windows_from_closed_position:
+                warpui::NextNewWindowsHasThisWindowsBoundsUponClose::No,
+            on_gpu_driver_selected: on_gpu_driver_selected_callback(),
+            window_instance: Some(ChannelState::app_id().to_string() + "-hotkey"),
+            ..Default::default()
+        },
+        |ctx| {
+            let mut view = RootView::new(global_resource_handles.clone(), workspace_source, ctx);
+            view.focus(ctx);
+            view
+        },
+    );
+
+    // Update quake mode state after the call to prevent deadlocking.
+    let mut quake_mode_state = QUAKE_STATE.lock();
+    *quake_mode_state = Some(QuakeModeState {
+        window_state: WindowState::PendingOpen,
+        window_id: id,
+        active_display_id: config.display_id,
+    });
+    id
+}
+
+fn reveal_quake_mode_window(window_id: WindowId, ctx: &mut AppContext) {
+    // If quake mode does not have a set pin screen -- move it to the current active screen.
+    if KeysSettings::as_ref(ctx)
+        .quake_mode_settings
+        .pin_screen
+        .is_none()
+    {
+        fit_quake_mode_window_within_active_screen(
+            &KeysSettings::as_ref(ctx)
+                .quake_mode_settings
+                .value()
+                .clone(),
+            QuakeModeMoveTrigger::ActiveScreenSetting,
+            ctx,
+        );
+    }
+    ctx.windows().show_window_and_focus_app(window_id);
+
+    // Update quake mode state after the call to prevent deadlocking.
+    let mut quake_mode_state = QUAKE_STATE.lock();
+
+    if let Some(state) = quake_mode_state.as_mut() {
+        state.window_state = WindowState::PendingOpen;
+    }
+}
+
+/// Shellomancy: brings the quake window forward, keeping quake state in step so the hotkey's
+/// next press hides it rather than showing it again.
+pub fn show_quake_mode_window(ctx: &mut AppContext) {
+    let Some(state) = get_quake_mode_state(ctx) else {
+        return;
+    };
+    match state.window_state {
+        WindowState::Hidden => reveal_quake_mode_window(state.window_id, ctx),
+        WindowState::Open | WindowState::PendingOpen => {
+            ctx.windows().show_window_and_focus_app(state.window_id)
+        }
+    }
+}
+
+/// Shellomancy: opens the quake window around a tab moved out of `source_window_id`, so its only
+/// tab is that one rather than a fresh session.
+pub fn open_quake_mode_window_with_transferred_tab(
+    transferred_tab: crate::workspace::view::TransferredTab,
+    source_window_id: WindowId,
+    ctx: &mut AppContext,
+) -> WindowId {
+    let global_resource_handles = GlobalResourceHandlesProvider::as_ref(ctx).get().clone();
+    let workspace_source =
+        transferred_tab_workspace_source(&transferred_tab, source_window_id, false);
+    let window_id = add_quake_mode_window(&global_resource_handles, workspace_source, ctx);
+    adopt_transferred_tab(&transferred_tab, source_window_id, window_id, ctx);
+    window_id
+}
+
 fn toggle_quake_mode_window(global_resource_handles: &GlobalResourceHandles, ctx: &mut AppContext) {
     // Get the current state of quake mode.
     let state = get_quake_mode_state(ctx);
@@ -1464,79 +1584,19 @@ fn toggle_quake_mode_window(global_resource_handles: &GlobalResourceHandles, ctx
         None => {
             send_telemetry_from_app_ctx!(TelemetryEvent::OpenQuakeModeWindow, ctx);
 
-            let config = quake_mode_config(
-                &KeysSettings::as_ref(ctx)
-                    .quake_mode_settings
-                    .value()
-                    .clone(),
+            let active_window_id = ctx.windows().active_window();
+            add_quake_mode_window(
+                global_resource_handles,
+                NewWorkspaceSource::Empty {
+                    previous_active_window: active_window_id,
+                    shell: None,
+                },
                 ctx,
             );
-
-            let window_settings = WindowSettings::as_ref(ctx);
-
-            let active_window_id = ctx.windows().active_window();
-            let (id, _) = ctx.add_window(
-                AddWindowOptions {
-                    window_style: WindowStyle::Pin,
-                    window_bounds: WindowBounds::ExactPosition(config.window_bounds),
-                    title: Some(madness_themes::t("shellomancy.app.name").to_owned()),
-                    background_blur_radius_pixels: Some(*window_settings.background_blur_radius),
-                    background_backdrop: *window_settings.background_backdrop,
-                    // Ignore the quake window for positioning the next window
-                    anchor_new_windows_from_closed_position:
-                        warpui::NextNewWindowsHasThisWindowsBoundsUponClose::No,
-                    on_gpu_driver_selected: on_gpu_driver_selected_callback(),
-                    window_instance: Some(ChannelState::app_id().to_string() + "-hotkey"),
-                    ..Default::default()
-                },
-                |ctx| {
-                    let mut view = RootView::new(
-                        global_resource_handles.clone(),
-                        NewWorkspaceSource::Empty {
-                            previous_active_window: active_window_id,
-                            shell: None,
-                        },
-                        ctx,
-                    );
-                    view.focus(ctx);
-                    view
-                },
-            );
-
-            // Update quake mode state after the call to prevent deadlocking.
-            let mut quake_mode_state = QUAKE_STATE.lock();
-            *quake_mode_state = Some(QuakeModeState {
-                window_state: WindowState::PendingOpen,
-                window_id: id,
-                active_display_id: config.display_id,
-            });
         }
         Some(state) if matches!(state.window_state, WindowState::Hidden) => {
             send_telemetry_from_app_ctx!(TelemetryEvent::OpenQuakeModeWindow, ctx);
-
-            // If quake mode does not have a set pin screen -- move it to the current active screen.
-            if KeysSettings::as_ref(ctx)
-                .quake_mode_settings
-                .pin_screen
-                .is_none()
-            {
-                fit_quake_mode_window_within_active_screen(
-                    &KeysSettings::as_ref(ctx)
-                        .quake_mode_settings
-                        .value()
-                        .clone(),
-                    QuakeModeMoveTrigger::ActiveScreenSetting,
-                    ctx,
-                );
-            }
-            ctx.windows().show_window_and_focus_app(state.window_id);
-
-            // Update quake mode state after the call to prevent deadlocking.
-            let mut quake_mode_state = QUAKE_STATE.lock();
-
-            if let Some(state) = quake_mode_state.as_mut() {
-                state.window_state = WindowState::PendingOpen;
-            }
+            reveal_quake_mode_window(state.window_id, ctx);
         }
         Some(state) => {
             ctx.windows().hide_window(state.window_id);

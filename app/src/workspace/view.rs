@@ -15,6 +15,7 @@ pub(crate) mod launch_modal;
 pub(crate) mod left_panel;
 pub(crate) mod madness_tabs;
 pub(crate) mod mana_bar_view;
+mod move_to_window;
 pub(crate) mod onboarding;
 pub(crate) mod openwarp_launch_modal;
 pub(crate) mod orchestration_launch_modal;
@@ -372,8 +373,8 @@ use crate::tab::{
     COMPACT_TAB_WIDTH_THRESHOLD, ColorPickerTarget, MOVE_TO_GROUP_LABEL, NewSessionMenuItem,
     PaneNameMenuTarget, SelectedTabColor, TAB_BAR_BORDER_HEIGHT, TAB_INDICATOR_HEIGHT,
     TAB_PIN_INDICATOR_ICON_SIZE, TAB_PIN_VANISH_THRESHOLD, TabBarState, TabComponent, TabData,
-    TabShortcutModifierState, TabTelemetryAction, color_picker_menu_items, next_tab_color,
-    tab_position_id, uses_vertical_tabs,
+    TabMoves, TabShortcutModifierState, TabTelemetryAction, color_picker_menu_items,
+    move_to_window_label, next_tab_color, tab_position_id, uses_vertical_tabs,
 };
 use crate::tab_configs::action_sidecar::SidecarItemKind;
 use crate::tab_configs::remove_confirmation_dialog::{
@@ -1244,8 +1245,12 @@ pub struct Workspace {
     /// Sidecar menu rendered next to the tab more options menu when the user
     /// hovers "Move to group". Populated with one item per other available
     /// tab group; each selection dispatches `WorkspaceAction::MoveTabToGroup`.
+    /// Shellomancy: "Move to window" fills the same sidecar with windows.
     move_to_group_sidecar_menu: ViewHandle<Menu<WorkspaceAction>>,
     show_move_to_group_sidecar: bool,
+    /// Shellomancy: label of the submenu parent the sidecar is showing for; its saved position
+    /// anchors the sidecar.
+    move_to_group_sidecar_anchor: &'static str,
     tab_config_action_sidecar_item: Option<SidecarItemKind>,
     tab_config_action_sidecar_mouse_states: crate::tab_configs::action_sidecar::SidecarMouseStates,
     remove_tab_config_confirmation_dialog: ViewHandle<RemoveTabConfigConfirmationDialog>,
@@ -3605,6 +3610,7 @@ impl Workspace {
             new_session_sidecar_add_repo_mouse_state: Default::default(),
             move_to_group_sidecar_menu,
             show_move_to_group_sidecar: false,
+            move_to_group_sidecar_anchor: MOVE_TO_GROUP_LABEL,
             tab_config_action_sidecar_item: None,
             tab_config_action_sidecar_mouse_states: Default::default(),
             remove_tab_config_confirmation_dialog:
@@ -8128,8 +8134,11 @@ impl Workspace {
             return;
         }
 
-        let can_move_left = self.can_move_tab(tab_index, TabMovement::Left);
-        let can_move_right = self.can_move_tab(tab_index, TabMovement::Right);
+        let moves = TabMoves {
+            left: self.can_move_tab(tab_index, TabMovement::Left),
+            right: self.can_move_tab(tab_index, TabMovement::Right),
+            to_window: !self.move_to_window_destinations(tab_index, ctx).is_empty(),
+        };
         let is_only_member_of_group = self.tab_is_only_member_of_its_group(tab_index);
         let menu_items = {
             let tab = &self.tabs[tab_index];
@@ -8138,8 +8147,7 @@ impl Workspace {
                 self.tabs.len(),
                 &self.tab_groups,
                 is_only_member_of_group,
-                can_move_left,
-                can_move_right,
+                moves,
                 ctx,
             )
         };
@@ -8215,8 +8223,11 @@ impl Workspace {
                 reset_label: "Reset active pane name",
             },
         };
-        let can_move_left = self.can_move_tab(tab_index, TabMovement::Left);
-        let can_move_right = self.can_move_tab(tab_index, TabMovement::Right);
+        let moves = TabMoves {
+            left: self.can_move_tab(tab_index, TabMovement::Left),
+            right: self.can_move_tab(tab_index, TabMovement::Right),
+            to_window: !self.move_to_window_destinations(tab_index, ctx).is_empty(),
+        };
         let is_only_member_of_group = self.tab_is_only_member_of_its_group(tab_index);
         let tab = &self.tabs[tab_index];
         let menu_items = tab.menu_items_with_pane_name_target(
@@ -8224,8 +8235,7 @@ impl Workspace {
             self.tabs.len(),
             &self.tab_groups,
             is_only_member_of_group,
-            can_move_left,
-            can_move_right,
+            moves,
             Some(pane_name_target),
             ctx,
         );
@@ -10452,14 +10462,30 @@ impl Workspace {
             return;
         };
 
-        if label == MOVE_TO_GROUP_LABEL {
+        let sidecar = if label == MOVE_TO_GROUP_LABEL {
             // Single-tab pane menu carries a `tab_index`; the multi-tab
             // selection menu has no single source tab so we pass `None` and
             // the sidecar builder infers the multi-tab selection.
             let source_tab_index = self
                 .show_tab_right_click_menu
                 .map(|(tab_index, _)| tab_index);
-            let items = self.build_move_to_group_sidecar_items(source_tab_index);
+            Some((
+                MOVE_TO_GROUP_LABEL,
+                self.build_move_to_group_sidecar_items(source_tab_index),
+            ))
+        } else if label == move_to_window_label() {
+            // Only the single-tab menu offers "Move to window".
+            self.show_tab_right_click_menu.map(|(tab_index, _)| {
+                (
+                    move_to_window_label(),
+                    self.build_move_to_window_sidecar_items(tab_index, ctx),
+                )
+            })
+        } else {
+            None
+        };
+
+        if let Some((anchor_label, items)) = sidecar {
             if items.is_empty() {
                 self.hide_move_to_group_sidecar(ctx);
                 return;
@@ -10469,6 +10495,7 @@ impl Workspace {
                     menu.set_items(items, view_ctx);
                 });
             self.show_move_to_group_sidecar = true;
+            self.move_to_group_sidecar_anchor = anchor_label;
 
             let sidecar_rect = ctx.element_position_by_id_at_last_frame(
                 self.window_id,
@@ -10510,8 +10537,11 @@ impl Workspace {
         .finish();
 
         // Flip the anchor side when the sidecar would overflow the window.
-        let render_left =
-            self.should_render_sidecar_left(MOVE_TO_GROUP_LABEL, MOVE_TO_GROUP_SIDECAR_WIDTH, app);
+        let render_left = self.should_render_sidecar_left(
+            self.move_to_group_sidecar_anchor,
+            MOVE_TO_GROUP_SIDECAR_WIDTH,
+            app,
+        );
         let (offset, parent_anchor, child_anchor) = if render_left {
             (
                 vec2f(-4., 0.),
@@ -10529,7 +10559,7 @@ impl Workspace {
         stack.add_positioned_overlay_child(
             sidecar_element,
             OffsetPositioning::offset_from_save_position_element(
-                MOVE_TO_GROUP_LABEL,
+                self.move_to_group_sidecar_anchor,
                 offset,
                 PositionedElementOffsetBounds::WindowByPosition,
                 parent_anchor,
@@ -24473,6 +24503,13 @@ impl TypedActionView for Workspace {
                 group_id,
             } => self.move_tab_to_group(*tab_index, *group_id, ctx),
             RemoveTabFromGroup(tab_index) => self.remove_tab_from_group(*tab_index, ctx),
+            MoveTabToWindow {
+                tab_index,
+                destination,
+            } => {
+                self.move_tab_to_window(*tab_index, *destination, ctx);
+            }
+            MoveActiveTabToOrFromQuakeWindow => self.move_active_tab_to_or_from_quake_window(ctx),
             ShiftSelectTabRange { locator } => self.shift_select_tab_range(*locator, ctx),
             ToggleTabMultiSelection { locator } => self.toggle_tab_multi_selection(*locator, ctx),
             ClearTabMultiSelection => self.clear_tab_multi_selection(ctx),

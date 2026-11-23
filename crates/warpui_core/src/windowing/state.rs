@@ -303,6 +303,11 @@ impl WindowManager {
         self.state.active_window_stack.back().cloned()
     }
 
+    /// Shellomancy: windows that have been active, most recently active first.
+    pub fn recently_active_window_ids(&self) -> impl Iterator<Item = WindowId> + '_ {
+        self.state.active_window_stack.iter().rev().copied()
+    }
+
     /// Returns boolean representing whether the active window is fullscreen. Returns `false` if
     /// no window is currently active.
     pub fn is_active_window_fullscreen(&self) -> bool {

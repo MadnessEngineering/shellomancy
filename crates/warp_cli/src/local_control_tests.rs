@@ -397,6 +397,10 @@ fn retained_action_examples() -> Vec<(ActionKind, Vec<&'static str>)> {
             ActionKind::TabMove,
             vec!["warpctrl", "tab", "move", "--direction", "next"],
         ),
+        (
+            ActionKind::TabMoveToWindow,
+            vec!["warpctrl", "tab", "move-to-window", "--quake"],
+        ),
         (ActionKind::TabClose, vec!["warpctrl", "tab", "close"]),
         (
             ActionKind::TabRename,
@@ -677,6 +681,7 @@ fn parsed_action_kind(command: &ControlCommand) -> Option<ActionKind> {
             TabCommand::Create(_) => Some(ActionKind::TabCreate),
             TabCommand::Activate(_) => Some(ActionKind::TabActivate),
             TabCommand::Move(_) => Some(ActionKind::TabMove),
+            TabCommand::MoveToWindow(_) => Some(ActionKind::TabMoveToWindow),
             TabCommand::Close(_) => Some(ActionKind::TabClose),
             TabCommand::Rename(_) => Some(ActionKind::TabRename),
             TabCommand::ResetName(_) => Some(ActionKind::TabResetName),

@@ -227,6 +227,22 @@ pub(crate) fn reveals_tab_shortcut_hints(ctx: &AppContext) -> bool {
 /// Label for the tab right-click menu's "Move to group" submenu parent.
 pub const MOVE_TO_GROUP_LABEL: &str = "Move to group";
 
+/// Shellomancy: label for the tab right-click menu's "Move to window" submenu parent.
+pub fn move_to_window_label() -> &'static str {
+    madness_themes::t("shellomancy.tab.moveToWindow")
+}
+
+/// Which "Move" entries a tab's right-click menu offers.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TabMoves {
+    /// One place toward the start of the tab list (left, or up in vertical tabs).
+    pub left: bool,
+    /// One place toward the end of the tab list (right, or down in vertical tabs).
+    pub right: bool,
+    /// Shellomancy: into another window, through the "Move to window" submenu.
+    pub to_window: bool,
+}
+
 /// Decides which tab-group context-menu entries apply to a tab, based on its
 /// group membership, whether it is the sole member of that group, and whether
 /// any *other* groups exist.
@@ -414,15 +430,13 @@ impl TabData {
     }
 
     /// Returns the menu items for the context menu on right mouse click.
-    #[allow(clippy::too_many_arguments)]
     pub fn menu_items(
         &self,
         index: usize,
         tabs_len: usize,
         tab_groups: &HashMap<TabGroupId, TabGroup>,
         is_only_member_of_group: bool,
-        can_move_left: bool,
-        can_move_right: bool,
+        moves: TabMoves,
         ctx: &AppContext,
     ) -> Vec<MenuItem<WorkspaceAction>> {
         self.menu_items_with_pane_name_target(
@@ -430,8 +444,7 @@ impl TabData {
             tabs_len,
             tab_groups,
             is_only_member_of_group,
-            can_move_left,
-            can_move_right,
+            moves,
             None,
             ctx,
         )
@@ -444,8 +457,7 @@ impl TabData {
         tabs_len: usize,
         tab_groups: &HashMap<TabGroupId, TabGroup>,
         is_only_member_of_group: bool,
-        can_move_left: bool,
-        can_move_right: bool,
+        moves: TabMoves,
         pane_name_target: Option<PaneNameMenuTarget>,
         ctx: &AppContext,
     ) -> Vec<MenuItem<WorkspaceAction>> {
@@ -458,7 +470,7 @@ impl TabData {
             self.tab_group_menu_items(index, tab_groups, is_only_member_of_group),
             self.session_sharing_menu_items(index, ctx),
             self.copy_metadata_menu_items(pane_name_target, ctx),
-            self.modify_tab_menu_items(index, can_move_left, can_move_right, pane_name_target, ctx),
+            self.modify_tab_menu_items(index, moves, pane_name_target, ctx),
             self.close_tab_menu_items(index, tabs_len, ctx),
             Self::save_config_menu_items(index),
             self.color_option_menu_items(index, terminal_colors),
@@ -673,8 +685,7 @@ impl TabData {
     fn modify_tab_menu_items(
         &self,
         index: usize,
-        can_move_left: bool,
-        can_move_right: bool,
+        moves: TabMoves,
         pane_name_target: Option<PaneNameMenuTarget>,
         ctx: &AppContext,
     ) -> Vec<MenuItem<WorkspaceAction>> {
@@ -706,10 +717,10 @@ impl TabData {
         if let Some(pane_name_target) = pane_name_target {
             menu_items.extend(self.pane_name_menu_items(pane_name_target, ctx));
         }
-        // `can_move_left` / `can_move_right` come from `Workspace::can_move_tab`
+        // `moves.left` / `moves.right` come from `Workspace::can_move_tab`
         // and gate the "Move Tab Up/Down" entries so they disappear when the
         // move would cross the pinned/unpinned boundary, group boundary or tab list bounds.
-        if can_move_right {
+        if moves.right {
             menu_items.push(
                 MenuItemFields::new(if uses_vertical_tabs {
                     "Move Tab Down"
@@ -720,7 +731,7 @@ impl TabData {
                 .into_item(),
             );
         }
-        if can_move_left {
+        if moves.left {
             menu_items.push(
                 MenuItemFields::new(if uses_vertical_tabs {
                     "Move Tab Up"
@@ -730,6 +741,10 @@ impl TabData {
                 .with_on_select_action(WorkspaceAction::MoveTabLeft(index))
                 .into_item(),
             );
+        }
+        // A submenu parent: hovering it opens the workspace's sidecar of windows.
+        if moves.to_window {
+            menu_items.push(MenuItemFields::new_submenu(move_to_window_label()).into_item());
         }
         menu_items
     }

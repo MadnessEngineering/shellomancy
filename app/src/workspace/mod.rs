@@ -26,7 +26,7 @@ pub mod view;
 
 pub use action::{
     AutoCloudHandoffTrigger, CommandSearchOptions, InitContent, RestoreConversationLayout,
-    TabContextMenuAnchor, VerticalTabsPaneContextMenuTarget, WorkspaceAction,
+    TabContextMenuAnchor, TabWindowDestination, VerticalTabsPaneContextMenuTarget, WorkspaceAction,
 };
 pub use active_session::ActiveSession;
 pub use global_actions::{
@@ -947,6 +947,15 @@ pub fn init(app: &mut AppContext) {
                 & !id!("Workspace_PaneDragging"),
         )
         .with_custom_action(CustomAction::MoveTabRight),
+        // Shellomancy: send the active tab to the quake window and back.
+        EditableBinding::new(
+            "workspace:move_active_tab_to_or_from_quake_window",
+            madness_themes::t("shellomancy.tab.quakeBinding"),
+            WorkspaceAction::MoveActiveTabToOrFromQuakeWindow,
+        )
+        .with_group(bindings::BindingGroup::Navigation.as_str())
+        .with_context_predicate(id!("Workspace") & !id!("Workspace_PaneDragging"))
+        .with_mac_key_binding("alt-f3"),
         EditableBinding::new(
             "workspace:toggle_keybindings_page",
             "Toggle keyboard shortcuts",

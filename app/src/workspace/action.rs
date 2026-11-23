@@ -84,6 +84,17 @@ pub enum TabContextMenuAnchor {
     VerticalTabsKebab,
 }
 
+/// Shellomancy: where a tab moved out of its window lands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TabWindowDestination {
+    /// An open window, which may be the quake window.
+    Window(WindowId),
+    /// The quake window, opened around the tab when it isn't open yet.
+    QuakeWindow,
+    /// A new normal window holding just the tab.
+    NewWindow,
+}
+
 /// Describes how the new-session dropdown menu was opened so the renderer
 /// can pick the right anchor strategy.
 #[derive(Debug, Clone, Copy)]
@@ -188,6 +199,14 @@ pub enum WorkspaceAction {
     },
     /// Removes the tab at the given index from its current group.
     RemoveTabFromGroup(usize),
+    /// Shellomancy: moves the tab at `tab_index` into another window; its sessions keep running.
+    MoveTabToWindow {
+        tab_index: usize,
+        destination: TabWindowDestination,
+    },
+    /// Shellomancy: sends the active tab to the quake window, or from the quake window back to
+    /// the most recently active other window.
+    MoveActiveTabToOrFromQuakeWindow,
     /// Selects every tab between the active tab and the shift-clicked row (inclusive).
     ShiftSelectTabRange {
         locator: PaneViewLocator,
@@ -989,6 +1008,8 @@ impl WorkspaceAction {
             | NewTabGroupFromTab(_)
             | MoveTabToGroup { .. }
             | RemoveTabFromGroup(_)
+            | MoveTabToWindow { .. }
+            | MoveActiveTabToOrFromQuakeWindow
             | NewTabGroupFromSelectedTabs
             | NewTabGroupFromActiveOrSelectedTabs
             | MoveSelectedTabsToGroup { .. }

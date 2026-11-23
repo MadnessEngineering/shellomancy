@@ -58,6 +58,12 @@ Details: [privacy-and-offline.md](privacy-and-offline.md).
 | The input box's AI toggle (the `A` side of `>_ A`) and Warp's "agent mode" action open Claude Code in a pane to the right, in the current session's directory, instead of switching the input to Warp's agent. The input bar hides the `@` context, file attachment, voice and model-picker buttons, which only fed Warp's agent | `app/src/terminal/input.rs`, `app/src/terminal/view.rs`, `app/src/terminal/universal_developer_input.rs`, `app/src/workspace/view.rs` | unit test (input stays in shell mode); compiled into the running app |
 | The agent-panel toggle (tab-bar button, `ctrl-space`, `surface.ai_assistant.toggle`) opens [MadQTT](https://github.com/MadnessEngineering/MadQTT), the live Claude Code session dashboard, in a pane on the right. Toggling again focuses it, or closes it (for good, so MadQTT exits) when it already has focus. Runs the `madqtt` command (a shell alias or `PATH` entry) | `app/src/pane_group/mod.rs`, `app/src/workspace/view.rs` | unit test; verified live (pane opens, MadQTT runs and connects, closing ends it) |
 
+## Tabs and windows
+
+| Difference | Commit | Checked by |
+|---|---|---|
+| A tab's right-click menu has **Move to window →**: the quake window (opened around the tab when it isn't open), the other windows, or a new window. **⌥F3** sends the active tab to the quake window, and from there back to the window used last. The tab's view tree moves whole, the way a tab drag does, so its processes keep running | `app/src/workspace/view/move_to_window.rs` | unit tests; not yet run in the app |
+
 ## Scripting (local control)
 
 | Difference | Commit | Checked by |
@@ -65,7 +71,8 @@ Details: [privacy-and-offline.md](privacy-and-offline.md).
 | The control CLI is named `shellomancy` (Warp: `warpctrl`); help shows the name you invoked, so aliases work | `ce9f2a54` | `warp_cli` tests |
 | Local control is on by default, including a new mode that allows running commands; Settings → Scripting can lower it | `8127378c` | settings tests |
 | `tab create` takes `--command`, `--cwd`, `--title`, `--color`, `--no-focus`; the command runs once the tab's shell is ready, through the same path tab configs use | `8127378c` | handler tests |
-| A stdlib Python client for hooks | `7d73c120` | tests against a fake app |
+| `tab.move_to_window` (CLI `tab move-to-window`, Python `move_tab_to_window`) moves a tab into the quake window, another window, or a new one | `app/src/local_control/handlers/app_state.rs` | parameter and CLI tests |
+| A stdlib Python client for hooks; `--window` / `--window-index` name a window when the app is in the background | `7d73c120` | tests against a fake app |
 | An MQTT bridge: state and tab events out, `attach` / `focus` commands in ([mqtt-bridge.md](mqtt-bridge.md)) | `script/shellomancy_mqtt` | unit tests + end-to-end test with a real mosquitto broker and a fake app |
 | Release bundle script keeps your `--features` and ships the `shellomancy` wrapper | `152d83a9`, `ce9f2a54` | `bash -n` only |
 

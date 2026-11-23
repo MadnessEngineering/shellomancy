@@ -32,6 +32,20 @@ The app rejects the request, without creating a tab, if the command is empty, lo
 
 `shellomancy window create` does not accept these flags.
 
+## Moving a tab to another window
+
+```sh
+shellomancy tab move-to-window --quake                         # the active tab, into the quake window
+shellomancy tab move-to-window --window-index 0 --tab-index 2 --to-window-index 1
+shellomancy tab move-to-window --new-window
+```
+
+Exactly one destination: `--quake` (opens the quake window around the tab when it isn't open), `--new-window`, `--to-window ID`, or `--to-window-index N` (`window list` order). The usual `--window…` / `--tab…` selectors pick the tab; by default it's the active tab of the active window. The tab moves whole, so whatever runs in its panes keeps running; moving a window's last tab closes that window. The response's `window_id` is where the tab landed. The app refuses (`invalid_params`) a move into the tab's own window, a new window for a window's only tab, and any move while a tab is being dragged.
+
+This is `tab.move_to_window`, Shellomancy's addition to the catalog; the app's tab right-click menu (**Move to window**) and **⌥F3** (active tab to the quake window and back) do the same thing.
+
+> Not yet run against a live app: covered by unit tests (the workspace move, parameter validation, the CLI's argument mapping).
+
 ## Scripting modes
 
 **Settings → Scripting → warpctrl CLI** has three modes. The value lives in the macOS Keychain, not in `settings.toml`, and only the app's Settings UI can change it.
@@ -46,7 +60,7 @@ Warp ships local control disabled. Shellomancy turns it on with commands so hook
 
 ## Other actions
 
-The catalog is Warp's 84 actions, unchanged apart from `tab.create`'s new parameters. Groups: `instance`, `app`, `capability`, `window`, `tab`, `pane`, `session`, `input`, `theme`, `appearance`, `setting`, `keybinding`, `action`, `surface`, `file`. `shellomancy action list` prints them from the running app. Some surfaces open Warp features that are off or hidden in Shellomancy (Warp Drive, agent management); expect those to do nothing useful.
+The catalog is Warp's 84 actions plus Shellomancy's `theme.window.set`, `theme.window.clear` and `tab.move_to_window`; of Warp's, only `tab.create` changed (its new parameters). Groups: `instance`, `app`, `capability`, `window`, `tab`, `pane`, `session`, `input`, `theme`, `appearance`, `setting`, `keybinding`, `action`, `surface`, `file`. `shellomancy action list` prints them from the running app. Some surfaces open Warp features that are off or hidden in Shellomancy (Warp Drive, agent management); expect those to do nothing useful.
 
 `input insert` and `input replace` only stage text in the input line; they never press Enter.
 
@@ -57,13 +71,17 @@ Each CLI call starts the whole app binary in control mode. Hooks should use the 
 ```python
 import sys
 sys.path.insert(0, "/path/to/shellomancy/script/shellomancy_client")
-from shellomancy_client import open_tab, send, list_instances, ShellomancyError
+from shellomancy_client import QUAKE, move_tab_to_window, open_tab, send, ShellomancyError
 
 open_tab(command="claude attach 1f8b2155", title="agent", color="cyan", focus=False)
+open_tab(command="claude --resume 1f8b2155", window_index=1)   # into a named window
+move_tab_to_window(QUAKE)                                       # the active tab, into quake
 send("theme.set", {"theme_name": "Dracula"})    # any catalog action
 ```
 
-Or from a shell: `python3 script/shellomancy_client/shellomancy_client.py tab-create --command "…" --title agent`.
+Or from a shell: `python3 script/shellomancy_client/shellomancy_client.py tab-create --command "…" --title agent`, or `… tab-move-to-window --quake`.
+
+Without a window selector, actions use the active window. When Shellomancy is in the background no window is active and `tab-create` fails with `ambiguous_target`; pass `--window-index N` (or `window_index=N`) from `window.list`.
 
 Errors raise `ShellomancyError` with the protocol's error code (`no_instance`, `insufficient_permissions`, `invalid_params`, …). With more than one running instance, the client uses the most recently started one unless you pass an `instance`.
 
@@ -75,6 +93,6 @@ The workshop's Claude Code fork hook uses this client to open background forks a
 2. **Credential.** The client connects to `<instance_id>.broker.sock` in the same directory and asks for a token for one action. The app checks the caller's user id and returns a bearer token valid for five minutes, for that action only.
 3. **Request.** `POST http://127.0.0.1:<port>/v1/control` with `Authorization: Bearer <token>`, no `Origin` header, and a JSON envelope `{protocol_version, request_id, target, action: {kind, params}}`. The response is `{response: {status: "ok", data}}` or `{status: "error", error: {code, message}}`.
 
-The wire details are in `specs/warp-control-cli/TECH.md`; [`shellomancy_client.py`](../script/shellomancy_client/shellomancy_client.py) is a short (under 300 lines) reference implementation.
+The wire details are in `specs/warp-control-cli/TECH.md`; [`shellomancy_client.py`](../script/shellomancy_client/shellomancy_client.py) is a short (about 400 lines) reference implementation.
 
 A Finder-launched app doesn't inherit your shell's environment variables, so a discovery-directory override set in your shell won't reach it.

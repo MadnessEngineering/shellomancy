@@ -51,6 +51,7 @@ pub enum ActionParameterSpec {
     TabActivate,
     TabClose,
     TabCreate,
+    TabMoveToWindow,
     Text,
     ThemeName,
 }
@@ -196,6 +197,8 @@ define_action_catalog! {
         TabCreate => { name: "tab.create", status: Implemented, target: Tab, params: TabCreate, result: Acknowledgement },
         TabActivate => { name: "tab.activate", status: Implemented, target: Tab, params: TabActivate, result: Acknowledgement },
         TabMove => { name: "tab.move", status: Implemented, target: Tab, params: Direction, result: Acknowledgement },
+        // Shellomancy: move a tab between windows.
+        TabMoveToWindow => { name: "tab.move_to_window", status: Implemented, target: Tab, params: TabMoveToWindow, result: Acknowledgement },
         TabClose => { name: "tab.close", status: Implemented, target: Tab, params: TabClose, result: Acknowledgement },
         TabRename => { name: "tab.rename", status: Implemented, target: Tab, params: Rename, result: Acknowledgement },
         TabResetName => { name: "tab.reset_name", status: Implemented, target: Tab, params: None, result: Acknowledgement },

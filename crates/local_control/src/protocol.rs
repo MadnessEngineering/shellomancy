@@ -164,6 +164,25 @@ pub struct TabCloseParams {
     pub mode: TabCloseMode,
 }
 
+/// Shellomancy: parameters for `tab.move_to_window`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TabMoveToWindowParams {
+    pub destination: TabMoveDestination,
+}
+
+/// Shellomancy: where `tab.move_to_window` sends the targeted tab. The tab's panes keep running.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum TabMoveDestination {
+    /// An open window, chosen the way a `window` target selector chooses one.
+    Window { window: WindowTarget },
+    /// The quake window, opened around the tab when it isn't open.
+    Quake,
+    /// A new window holding just the tab.
+    NewWindow,
+}
+
 /// Parameters for `tab.create` and `window.create`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

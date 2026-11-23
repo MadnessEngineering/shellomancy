@@ -5,7 +5,8 @@ use local_control::protocol::{
     ControlError, DirectionParams, EmptyParams, ErrorCode, FileOpenParams, KeyParams,
     KeyValueParams, PageQueryParams, QueryParams, RenameParams, RequestEnvelope, ResizeParams,
     SettingListParams, TabActivateParams, TabActivationMode, TabCloseMode, TabCloseParams,
-    TabCreateParams, TextParams, ThemeNameParams,
+    TabCreateParams, TabMoveDestination, TabMoveToWindowParams, TextParams, ThemeNameParams,
+    WindowSelector, WindowTarget,
 };
 use local_control::selection::select_instance;
 use serde::Serialize;
@@ -19,7 +20,7 @@ use crate::local_control::{
     InputCommand, InstanceCommand, KeybindingCommand, PaneCommand, SessionCommand, SettingCommand,
     SurfaceCommand, SurfaceOpenCommand, SurfaceOpenToggleCommand, SurfaceQueryCommand,
     SurfaceSettingsCommand, SurfaceToggleCommand, TabActivateArgs, TabCloseArgs, TabColorCommand,
-    TabCommand, TargetArgs, ThemeCommand, WindowCommand,
+    TabCommand, TabDestinationArgs, TargetArgs, ThemeCommand, WindowCommand,
 };
 
 pub(super) fn run_surface_command(
@@ -156,6 +157,10 @@ fn render_human_readable(action: ActionKind, data: &serde_json::Value) -> String
         ActionKind::PaneSplit => format!(
             "Split created pane {}",
             nested_value_or_unknown(data, &["pane", "id"])
+        ),
+        ActionKind::TabMoveToWindow => format!(
+            "Moved tab to window {}",
+            value_or_unknown(data, "window_id")
         ),
         ActionKind::WindowList => render_window_list(data),
         _ => serde_json::to_string_pretty(data).unwrap_or_else(|_| data.to_string()),
@@ -450,6 +455,14 @@ pub(super) fn run_tab_command(
             ActionKind::TabMove,
             DirectionParams {
                 direction: args.direction.into(),
+            },
+            output_format,
+        ),
+        TabCommand::MoveToWindow(args) => run_action_with_params(
+            args.target,
+            ActionKind::TabMoveToWindow,
+            TabMoveToWindowParams {
+                destination: tab_move_destination(args.destination),
             },
             output_format,
         ),
@@ -796,6 +809,25 @@ fn tab_close_mode(args: &TabCloseArgs) -> TabCloseMode {
         TabCloseMode::Active
     } else {
         TabCloseMode::Target
+    }
+}
+
+/// Clap requires exactly one destination flag, so the last arm is `--new-window`.
+fn tab_move_destination(args: TabDestinationArgs) -> TabMoveDestination {
+    if let Some(id) = args.to_window {
+        TabMoveDestination::Window {
+            window: WindowTarget::Id {
+                id: WindowSelector(id),
+            },
+        }
+    } else if let Some(index) = args.to_window_index {
+        TabMoveDestination::Window {
+            window: WindowTarget::Index { index },
+        }
+    } else if args.quake {
+        TabMoveDestination::Quake
+    } else {
+        TabMoveDestination::NewWindow
     }
 }
 

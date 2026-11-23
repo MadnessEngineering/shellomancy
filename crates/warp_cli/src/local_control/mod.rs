@@ -297,6 +297,10 @@ pub enum TabCommand {
     /// Move the active tab.
     Move(TabMoveArgs),
 
+    // Shellomancy: `tab.move_to_window`.
+    /// Move a tab into another window; whatever runs in it keeps running.
+    MoveToWindow(TabMoveToWindowArgs),
+
     /// Close tabs.
     Close(TabCloseArgs),
 
@@ -681,6 +685,36 @@ pub struct TabMoveArgs {
 
     #[arg(long = "direction", value_enum)]
     pub direction: CliTabMoveDirection,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct TabMoveToWindowArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    #[command(flatten)]
+    pub destination: TabDestinationArgs,
+}
+
+/// Where `tab move-to-window` sends the tab; exactly one is required.
+#[derive(Debug, Clone, Args)]
+#[group(required = true, multiple = false)]
+pub struct TabDestinationArgs {
+    /// The quake window, opened around the tab when it isn't open.
+    #[arg(long = "quake")]
+    pub quake: bool,
+
+    /// A new window holding just the tab.
+    #[arg(long = "new-window")]
+    pub new_window: bool,
+
+    /// The window with this opaque id.
+    #[arg(long = "to-window")]
+    pub to_window: Option<String>,
+
+    /// The window at this scoped index.
+    #[arg(long = "to-window-index")]
+    pub to_window_index: Option<u32>,
 }
 
 #[derive(Debug, Clone, Args)]

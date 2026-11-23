@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 use ::local_control::protocol::{
     Direction as ControlDirection, DirectionParams, FileOpenParams, PageQueryParams, QueryParams,
-    ResizeParams, TabActivateParams, TabActivationMode, TabCreateParams, TabTarget, TabType,
-    TargetSelector, TextParams,
+    ResizeParams, TabActivateParams, TabActivationMode, TabCreateParams, TabMoveDestination,
+    TabMoveToWindowParams, TabTarget, TabType, TargetSelector, TextParams,
 };
 use ::local_control::{ActionKind, ControlError, ErrorCode, InstanceId};
 use serde_json::json;
@@ -41,7 +41,7 @@ use crate::util::file::external_editor::EditorSettings;
 use crate::util::openable_file_type::{EditorLayout, resolve_file_target_to_open_in_warp};
 #[cfg(feature = "local_fs")]
 use crate::workspace::PaneViewLocator;
-use crate::workspace::{CommandSearchOptions, InitContent, WorkspaceAction};
+use crate::workspace::{CommandSearchOptions, InitContent, TabWindowDestination, WorkspaceAction};
 
 const MAX_PANE_RESIZE_STEPS: u32 = 1_000;
 
@@ -60,6 +60,7 @@ pub(crate) fn handle(
         ActionKind::TabCreate => create_tab(instance_id, params, target, ctx),
         ActionKind::TabActivate => tab_activate(instance_id, params, target, ctx),
         ActionKind::TabMove => tab_move(instance_id, params, target, ctx),
+        ActionKind::TabMoveToWindow => tab_move_to_window(instance_id, params, target, ctx),
         ActionKind::PaneSplit => pane_split(instance_id, params, target, ctx),
         ActionKind::PaneFocus | ActionKind::SessionActivate => {
             pane_focus(instance_id, action, target, ctx)
@@ -447,6 +448,51 @@ fn tab_move(
         Ok::<_, ControlError>(())
     })?;
     Ok(ack(instance_id, ActionKind::TabMove))
+}
+
+/// Shellomancy: moves the targeted tab into another window, its panes still running. The
+/// acknowledgement carries the id of the window the tab landed in.
+fn tab_move_to_window(
+    instance_id: &Option<InstanceId>,
+    params: &serde_json::Value,
+    target: &TargetSelector,
+    ctx: &mut ModelContext<LocalControlBridge>,
+) -> Result<serde_json::Value, ControlError> {
+    let action = ActionKind::TabMoveToWindow;
+    reject_target_families(
+        action,
+        target.pane.is_some() || target.session.is_some(),
+        "pane or session selectors",
+    )?;
+    let params = decode_params::<TabMoveToWindowParams>(params)?;
+    let destination = match params.destination {
+        TabMoveDestination::Window { window } => {
+            let selector = TargetSelector {
+                window: Some(window),
+                ..Default::default()
+            };
+            TabWindowDestination::Window(target_window_id_for_target(ctx, &selector, action)?)
+        }
+        TabMoveDestination::Quake => TabWindowDestination::QuakeWindow,
+        TabMoveDestination::NewWindow => TabWindowDestination::NewWindow,
+    };
+    let workspace = target_workspace(action, target, ctx)?;
+    let landed = workspace.update(ctx, |workspace, ctx| {
+        let index = tab_index_from_target(target, workspace, ctx)?;
+        workspace
+            .move_tab_to_window(index, destination, ctx)
+            .ok_or_else(|| {
+                ControlError::new(
+                    ErrorCode::InvalidParams,
+                    "tab.move_to_window cannot move the tab there: it is already in that window, \
+                     it is its window's only tab and a new window was asked for, or a tab drag \
+                     is in progress",
+                )
+            })
+    })?;
+    let mut response = ack(instance_id, action);
+    response["window_id"] = json!(landed.to_string());
+    Ok(response)
 }
 
 fn pane_direction_action(

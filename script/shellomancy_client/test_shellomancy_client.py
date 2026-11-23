@@ -199,6 +199,48 @@ class ClientTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": "/run/u"}, clear=True):
             self.assertEqual(client.discovery_dir(), Path("/run/u/mad/local-control"))
 
+    def test_open_tab_can_name_its_window(self):
+        # With the app in the background no window is active, so scripts name one.
+        self.app.write_record()
+        client.open_tab(command="true", window_index=1)
+        self.assertEqual(
+            self.app.http_requests[0][2]["target"], {"window": {"type": "index", "index": 1}}
+        )
+
+    def test_move_tab_to_window_sends_destination_and_tab(self):
+        self.app.write_record()
+        client.move_tab_to_window(
+            client.window_destination(window_id="3"), tab_index=2, window_index=0
+        )
+
+        self.assertEqual(self.app.broker_requests[0]["action"], "tab.move_to_window")
+        envelope = self.app.http_requests[0][2]
+        self.assertEqual(
+            envelope["action"],
+            {
+                "kind": "tab.move_to_window",
+                "params": {"destination": {"type": "window", "window": {"type": "id", "id": "3"}}},
+            },
+        )
+        self.assertEqual(
+            envelope["target"],
+            {"window": {"type": "index", "index": 0}, "tab": {"type": "index", "index": 2}},
+        )
+
+    def test_cli_sends_the_active_tab_to_quake(self):
+        self.app.write_record()
+        with mock.patch("sys.stdout"):
+            self.assertEqual(client._main(["tab-move-to-window", "--quake"]), 0)
+        envelope = self.app.http_requests[0][2]
+        self.assertEqual(envelope["action"]["params"], {"destination": {"type": "quake"}})
+        self.assertEqual(envelope["target"], {})
+
+    def test_a_window_is_named_one_way(self):
+        with self.assertRaises(ValueError):
+            client.window_selector(window_id="3", window_index=0)
+        with self.assertRaises(ValueError):
+            client.window_destination()
+
 
 if __name__ == "__main__":
     unittest.main()
