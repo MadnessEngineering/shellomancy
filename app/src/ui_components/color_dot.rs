@@ -4,7 +4,7 @@ use ui_components::tooltip::{Params as TooltipParams, Tooltip as TooltipComponen
 use ui_components::{Component as _, Options as ComponentOptions};
 use warp_core::ui::theme::{AnsiColorIdentifier, Fill as ThemeFill};
 use warpui::elements::{
-    Border, ChildAnchor, ConstrainedBox, Container, CornerRadius, Element, Hoverable,
+    Border, ChildAnchor, ConstrainedBox, Container, CornerRadius, Element, Empty, Hoverable,
     MouseStateHandle, OffsetPositioning, ParentAnchor, ParentElement, ParentOffsetBounds, Radius,
     Stack,
 };
@@ -14,6 +14,7 @@ use crate::appearance::Appearance;
 use crate::ui_components::icons::Icon;
 
 const COLOR_DOT_SIZE: f32 = 16.;
+const COLOR_DOT_RING_WIDTH: f32 = 2.;
 
 pub(crate) const TAB_COLOR_OPTIONS: [AnsiColorIdentifier; 6] = [
     AnsiColorIdentifier::Red,
@@ -74,6 +75,15 @@ pub(crate) fn render_color_dot(
     .with_cursor(Cursor::PointingHand)
 }
 
+/// Shellomancy: empty space the size of a dot and its selection ring, for lining up rows.
+pub(crate) fn color_dot_gap() -> Box<dyn Element> {
+    let footprint = COLOR_DOT_SIZE + 2. * COLOR_DOT_RING_WIDTH;
+    ConstrainedBox::new(Empty::new().finish())
+        .with_width(footprint)
+        .with_height(footprint)
+        .finish()
+}
+
 /// Pure visual element: circular dot with optional overlay and selection ring.
 fn render_dot_element(
     dot_color: ColorU,
@@ -106,7 +116,7 @@ fn render_dot_element(
     };
 
     Container::new(inner)
-        .with_border(Border::all(2.).with_border_color(border_color))
+        .with_border(Border::all(COLOR_DOT_RING_WIDTH).with_border_color(border_color))
         .with_corner_radius(CornerRadius::with_all(Radius::Percentage(50.)))
         .finish()
 }

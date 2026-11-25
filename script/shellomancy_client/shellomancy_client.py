@@ -283,9 +283,10 @@ def open_tab(
     """Open a terminal tab that runs `command` once its shell is ready.
 
     The app validates everything (no newlines/control characters in the
-    command, `cwd` must be an existing absolute directory, `color` an ANSI color
-    name) and requires the "Enabled, including running commands" Scripting mode
-    for `command`.
+    command, `cwd` must be an existing absolute directory, `color` a tab color:
+    an ANSI name, bright_<name>, a fixed hue such as "ember", or "#rrggbb") and
+    requires the "Enabled, including running commands" Scripting mode for
+    `command`.
     """
     params: Dict[str, Any] = {}
     if command is not None:

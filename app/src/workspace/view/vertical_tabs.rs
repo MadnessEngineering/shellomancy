@@ -60,6 +60,7 @@ use crate::tab::{
     SelectedTabColor, TAB_INDICATOR_SYNCED_COLOR, TabData, reveals_tab_shortcut_hints,
     tab_activate_binding_name, tab_position_id,
 };
+use crate::tab_color::TabColor;
 use crate::terminal::cli_agent_sessions::{CLIAgentSessionsModel, tab_text};
 use crate::terminal::session_settings::SessionSettings;
 use crate::terminal::view::TerminalViewState;
@@ -2918,7 +2919,7 @@ fn render_grouped_tabs_header(
     let group_color_fill: Option<ThemeFill> = group
         .color
         .resolve(None)
-        .map(|c| c.to_ansi_color(&theme.terminal_colors().normal).into());
+        .map(|c| c.to_color(theme.terminal_colors()).into());
 
     let mut hoverable = Hoverable::new(mouse_states.header.clone(), move |state| {
         let border_fill = if is_header_selected {
@@ -3144,7 +3145,7 @@ fn render_grouped_tab_container(
         let group_color_fill: Option<ThemeFill> = group
             .color
             .resolve(None)
-            .map(|c| c.to_ansi_color(&theme.terminal_colors().normal).into());
+            .map(|c| c.to_color(theme.terminal_colors()).into());
         let is_highlighted = hover_state.is_hovered() || any_member_active;
         let background = if let Some(color) = group_color_fill {
             // Highlight a colored tab group when it is hovered or active,
@@ -5873,10 +5874,13 @@ fn compute_tab_group_color_mode(
 ) -> TabGroupColorMode {
     // A manual color override applies to the whole tab.
     if !matches!(tab.selected_color, SelectedTabColor::Unset) {
-        return match tab.selected_color.resolve(tab.default_directory_color) {
-            Some(color) => TabGroupColorMode::Uniform(
-                color.to_ansi_color(&theme.terminal_colors().normal).into(),
-            ),
+        return match tab
+            .selected_color
+            .resolve(tab.default_directory_color.map(TabColor::Ansi))
+        {
+            Some(color) => {
+                TabGroupColorMode::Uniform(color.to_color(theme.terminal_colors()).into())
+            }
             None => TabGroupColorMode::None,
         };
     }

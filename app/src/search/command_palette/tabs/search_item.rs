@@ -38,7 +38,7 @@ impl SearchItemTrait for SearchItem {
     ) -> Box<dyn Element> {
         let color = if let Some(tab_color) = self.tab.color {
             tab_color
-                .to_ansi_color(&appearance.theme().terminal_colors().normal)
+                .to_color(appearance.theme().terminal_colors())
                 .into()
         } else {
             highlight_state.icon_fill(appearance).into_solid()

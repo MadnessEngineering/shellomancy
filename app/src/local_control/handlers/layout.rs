@@ -8,16 +8,16 @@ use std::str::FromStr as _;
 use ::local_control::protocol::{TabCreateParams, TabType, TargetSelector};
 use ::local_control::{ActionKind, ControlError, ErrorCode, InstanceId};
 use serde::Serialize;
-use warp_core::ui::theme::AnsiColorIdentifier;
 use warpui::{ModelContext, SingletonEntity as _, TypedActionView};
 
 use super::app_state::validate_staged_input_text;
 use crate::local_control::LocalControlBridge;
 use crate::local_control::permissions::ensure_settings_allow_command_execution;
-use crate::settings::LocalControlSettings;
 use crate::local_control::resolver::{
     decode_params, target_window_id_for_target, validate_tab_create_target, workspace_for_window,
 };
+use crate::settings::LocalControlSettings;
+use crate::tab_color::TabColor;
 use crate::workspace::WorkspaceAction;
 #[derive(Serialize)]
 struct TabCreateResponse<'a> {
@@ -39,7 +39,7 @@ struct TabLaunch {
     command: Option<String>,
     cwd: Option<PathBuf>,
     title: Option<String>,
-    color: Option<AnsiColorIdentifier>,
+    color: Option<TabColor>,
     focus: bool,
 }
 
@@ -175,7 +175,9 @@ fn tab_launch(
         Some(cwd) => {
             let path = PathBuf::from(cwd);
             if !path.is_absolute() || !path.is_dir() {
-                return Err(invalid(format!("cwd {cwd} is not an existing absolute directory")));
+                return Err(invalid(format!(
+                    "cwd {cwd} is not an existing absolute directory"
+                )));
             }
             Some(path)
         }
@@ -187,10 +189,7 @@ fn tab_launch(
     };
     let color = match params.color.as_deref() {
         None => None,
-        Some(color) => Some(
-            AnsiColorIdentifier::from_str(color)
-                .map_err(|_| invalid(format!("{color} is not a supported tab color")))?,
-        ),
+        Some(color) => Some(TabColor::from_str(color).map_err(|err| invalid(err.to_string()))?),
     };
     Ok(TabLaunch {
         command,

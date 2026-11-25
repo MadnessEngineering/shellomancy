@@ -1697,7 +1697,7 @@ pub enum NewWorkspaceSource {
     TransferredTab {
         source_window_id: WindowId,
         /// Tab color from the source tab
-        tab_color: Option<AnsiColorIdentifier>,
+        tab_color: Option<crate::tab_color::TabColor>,
         /// Custom title from the source tab
         custom_title: Option<String>,
         /// Whether the left panel was open in the source tab

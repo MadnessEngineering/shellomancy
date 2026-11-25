@@ -164,25 +164,28 @@ fn move_to_group_only_shown_when_other_groups_exist() {
 fn next_tab_color_follows_the_canonical_palette_and_clears_after_the_last_color() {
     assert_eq!(
         next_tab_color(None),
-        SelectedTabColor::Color(TAB_COLOR_OPTIONS[0])
+        SelectedTabColor::Color(TAB_COLOR_OPTIONS[0].into())
     );
     for adjacent_colors in TAB_COLOR_OPTIONS.windows(2) {
         assert_eq!(
-            next_tab_color(Some(adjacent_colors[0])),
-            SelectedTabColor::Color(adjacent_colors[1])
+            next_tab_color(Some(adjacent_colors[0].into())),
+            SelectedTabColor::Color(adjacent_colors[1].into())
         );
     }
     let last_color = TAB_COLOR_OPTIONS
         .last()
         .copied()
         .expect("the canonical tab color palette should not be empty");
-    assert_eq!(next_tab_color(Some(last_color)), SelectedTabColor::Cleared);
     assert_eq!(
-        next_tab_color(SelectedTabColor::Cleared.resolve(None)),
-        SelectedTabColor::Color(TAB_COLOR_OPTIONS[0])
+        next_tab_color(Some(last_color.into())),
+        SelectedTabColor::Cleared
     );
     assert_eq!(
-        next_tab_color(Some(AnsiColorIdentifier::White)),
-        SelectedTabColor::Color(TAB_COLOR_OPTIONS[0])
+        next_tab_color(SelectedTabColor::Cleared.resolve(None)),
+        SelectedTabColor::Color(TAB_COLOR_OPTIONS[0].into())
+    );
+    assert_eq!(
+        next_tab_color(Some(AnsiColorIdentifier::White.into())),
+        SelectedTabColor::Color(TAB_COLOR_OPTIONS[0].into())
     );
 }

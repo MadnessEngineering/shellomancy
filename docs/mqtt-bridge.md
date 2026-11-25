@@ -41,7 +41,7 @@ mosquitto_sub -t status/macbook/shellomancy/reply -C 1
 
 ## Commands
 
-- **attach** opens a tab running `claude attach <first 8 characters of session_id>`. The bridge builds that command itself. `session_id` must be lowercase hex (a Claude session id or its 8-character prefix). Any other field naming a command is ignored. `title` defaults to `⑂ <id8>`. `color` is an ANSI color name. `cwd` must be absolute. `focus` defaults to true.
+- **attach** opens a tab running `claude attach <first 8 characters of session_id>`. The bridge builds that command itself. `session_id` must be lowercase hex (a Claude session id or its 8-character prefix). Any other field naming a command is ignored. `title` defaults to `⑂ <id8>`. `color` is a tab color name (an ANSI name such as `cyan`, `bright_cyan`, a fixed hue such as `ember`) or `#rrggbb`. `cwd` must be absolute. `focus` defaults to true.
 - **focus** activates a tab by id (from the state topic) and brings the app to the front.
 
 Anything else gets an `unsupported_action` reply.

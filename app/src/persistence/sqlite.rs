@@ -2601,7 +2601,7 @@ fn read_sqlite_data(
                                                 // Fall back to the old format which stored a bare AnsiColorIdentifier
                                                 serde_yaml::from_str::<AnsiColorIdentifier>(s)
                                                     .ok()
-                                                    .map(SelectedTabColor::Color)
+                                                    .map(|c| SelectedTabColor::Color(c.into()))
                                             },
                                         )
                                     })

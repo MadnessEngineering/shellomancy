@@ -83,6 +83,7 @@ mod shell_indicator;
 mod suggestions;
 mod system;
 mod tab;
+mod tab_color;
 #[cfg(test)]
 mod test_util;
 mod throttle;

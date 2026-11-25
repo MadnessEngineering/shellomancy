@@ -84,7 +84,7 @@ use warp_core::ui::Icon;
 use warp_core::ui::color::coloru_with_opacity;
 use warp_core::ui::theme::color::internal_colors;
 use warp_core::ui::theme::phenomenon::PhenomenonStyle;
-use warp_core::ui::theme::{AnsiColors, Fill};
+use warp_core::ui::theme::{Fill, TerminalColors};
 use warp_core::user_preferences::GetUserPreferences as _;
 use warp_editor::editor::NavigationKey;
 use warp_errors::{report_error, report_if_error};
@@ -376,6 +376,7 @@ use crate::tab::{
     TabMoves, TabShortcutModifierState, TabTelemetryAction, color_picker_menu_items,
     move_to_window_label, next_tab_color, tab_position_id, uses_vertical_tabs,
 };
+use crate::tab_color::TabColor;
 use crate::tab_configs::action_sidecar::SidecarItemKind;
 use crate::tab_configs::remove_confirmation_dialog::{
     RemoveTabConfigConfirmationDialog, RemoveTabConfigConfirmationEvent,
@@ -1021,7 +1022,7 @@ fn query_for_rewind_prefill(inputs: &[AIAgentInput]) -> Option<String> {
 /// animation continues seamlessly after a handoff.
 pub struct TransferredTab {
     pub pane_group: ViewHandle<PaneGroup>,
-    pub color: Option<AnsiColorIdentifier>,
+    pub color: Option<TabColor>,
     pub custom_title: Option<String>,
     pub left_panel_open: bool,
     pub vertical_tabs_panel_open: bool,
@@ -5438,7 +5439,7 @@ impl Workspace {
     }
 
     /// Get the tab color for a given tab index.
-    pub fn get_tab_color(&self, index: usize) -> Option<AnsiColorIdentifier> {
+    pub fn get_tab_color(&self, index: usize) -> Option<TabColor> {
         self.tabs.get(index).and_then(|tab| tab.color())
     }
 
@@ -5801,12 +5802,7 @@ impl Workspace {
         ctx.notify();
     }
 
-    pub fn toggle_tab_color(
-        &mut self,
-        index: usize,
-        color: AnsiColorIdentifier,
-        ctx: &mut ViewContext<Self>,
-    ) {
+    pub fn toggle_tab_color(&mut self, index: usize, color: TabColor, ctx: &mut ViewContext<Self>) {
         if self.tabs.get(index).is_none() {
             log::warn!(
                 "Not toggling tab color: index was {index} but len is {}",
@@ -5852,7 +5848,7 @@ impl Workspace {
     fn toggle_tab_group_color(
         &mut self,
         group_id: TabGroupId,
-        color: AnsiColorIdentifier,
+        color: TabColor,
         ctx: &mut ViewContext<Self>,
     ) {
         let current = self
@@ -8175,7 +8171,7 @@ impl Workspace {
             return;
         }
 
-        let terminal_colors = Appearance::as_ref(ctx).theme().terminal_colors().normal;
+        let terminal_colors = Appearance::as_ref(ctx).theme().terminal_colors().clone();
         let menu_items =
             self.tab_group_menu_items(group_id, uses_vertical_tabs(ctx), terminal_colors);
         ctx.update_view(&self.tab_right_click_menu, |context_menu, view_ctx| {
@@ -10288,7 +10284,7 @@ impl Workspace {
         &self,
         group_id: TabGroupId,
         is_vertical: bool,
-        terminal_colors: AnsiColors,
+        terminal_colors: TerminalColors,
     ) -> Vec<MenuItem<WorkspaceAction>> {
         let Some((first, last)) = group_member_index_range(&self.tabs, group_id) else {
             return vec![];
@@ -12856,7 +12852,7 @@ impl Workspace {
         command: Option<String>,
         cwd: Option<PathBuf>,
         title: Option<String>,
-        color: Option<AnsiColorIdentifier>,
+        color: Option<TabColor>,
         focus: bool,
         ctx: &mut ViewContext<Self>,
     ) -> EntityId {
@@ -20397,7 +20393,7 @@ impl Workspace {
         let group_color: Option<ColorU> = group
             .color
             .resolve(None)
-            .map(|c| c.to_ansi_color(&theme.terminal_colors().normal).into());
+            .map(|c| c.to_color(theme.terminal_colors()).into());
 
         let mouse_states = self
             .horizontal_tab_group_mouse_states

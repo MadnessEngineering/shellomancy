@@ -63,6 +63,7 @@ Details: [privacy-and-offline.md](privacy-and-offline.md).
 | Difference | Commit | Checked by |
 |---|---|---|
 | A tab's right-click menu has **Move to window →**: the quake window (opened around the tab when it isn't open), the other windows, or a new window. **⌥F3** sends the active tab to the quake window, and from there back to the window used last. The tab's view tree moves whole, the way a tab drag does, so its processes keep running | `app/src/workspace/view/move_to_window.rs` | unit tests; not yet run in the app |
+| The tab and tab-group color picker has 26 colors, not Warp's 6: the theme's six, their bright variants, and 14 fixed hues the theme doesn't change. `/set-tab-color`, `shellomancy tab color set`, `tab create --color`, and tab and launch configs also take any `#rrggbb`. Colors saved by older builds still load | `app/src/tab_color.rs` | unit tests (incl. loading old saved colors) |
 
 ## Scripting (local control)
 

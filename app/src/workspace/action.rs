@@ -39,10 +39,10 @@ use crate::server::telemetry::{
 };
 use crate::settings_view::{SettingsAction as SettingsTabAction, SettingsSection};
 use crate::tab::{NewSessionMenuItem, SelectedTabColor};
+use crate::tab_color::TabColor;
 use crate::tab_configs::TabConfig;
 use crate::terminal::available_shells::AvailableShell;
 use crate::terminal::view::inline_banner::ZeroStatePromptSuggestionType;
-use crate::themes::theme::AnsiColorIdentifier;
 use crate::themes::theme_chooser::ThemeChooserMode;
 use crate::workflows::{WorkflowSelectionSource, WorkflowSource, WorkflowType};
 use crate::workspace::PaneViewLocator;
@@ -343,11 +343,11 @@ pub enum WorkspaceAction {
     SetA11yVerbosityLevel(AccessibilityVerbosity),
     ToggleNotifications,
     ToggleTabColor {
-        color: AnsiColorIdentifier,
+        color: TabColor,
         tab_index: usize,
     },
     ToggleTabGroupColor {
-        color: AnsiColorIdentifier,
+        color: TabColor,
         group_id: TabGroupId,
     },
     OpenLaunchConfigSaveModal,

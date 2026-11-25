@@ -18,6 +18,7 @@ use crate::server::ids::{ServerId, SyncId};
 use crate::settings_view::SettingsSection;
 use crate::settings_view::environments_page::EnvironmentsPage;
 use crate::tab::SelectedTabColor;
+use crate::tab_color::TabColor;
 use crate::terminal::ShellLaunchData;
 use crate::themes::theme::AnsiColorIdentifier;
 use crate::workspace::WorkspaceRegistry;
@@ -88,8 +89,9 @@ pub struct TabSnapshot {
 }
 
 impl TabSnapshot {
-    pub(crate) fn color(&self) -> Option<AnsiColorIdentifier> {
-        self.selected_color.resolve(self.default_directory_color)
+    pub(crate) fn color(&self) -> Option<TabColor> {
+        self.selected_color
+            .resolve(self.default_directory_color.map(TabColor::Ansi))
     }
 }
 

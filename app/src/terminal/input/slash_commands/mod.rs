@@ -18,7 +18,6 @@ use warp_cli::agent::Harness;
 use warp_core::features::FeatureFlag;
 use warp_core::send_telemetry_from_ctx;
 use warp_core::ui::appearance::Appearance;
-use warp_core::ui::theme::AnsiColorIdentifier;
 use warp_errors::report_error;
 #[cfg(feature = "local_fs")]
 use warp_util::path::{CleanPathResult, LineAndColumnArg, expand_session_home};
@@ -54,6 +53,7 @@ use crate::server::ids::SyncId;
 use crate::server::telemetry::{AgentModeAutoDetectionSettingOrigin, SlashCommandAcceptedDetails};
 use crate::settings::AISettings;
 use crate::tab::SelectedTabColor;
+use crate::tab_color::TabColor;
 use crate::terminal::input::decorations::InputBackgroundJobOptions;
 use crate::terminal::input::inline_menu::{InlineMenuAction, InlineMenuType};
 use crate::terminal::input::message_bar::Message;
@@ -67,7 +67,6 @@ use crate::terminal::input::{
 #[cfg(feature = "local_fs")]
 use crate::terminal::model::session::Session;
 use crate::terminal::view::{AIQueryRouting, TerminalAction, resolve_ai_query_routing};
-use crate::ui_components::color_dot;
 use crate::view_components::DismissibleToast;
 use crate::workflows::command_parser::compute_workflow_display_data;
 use crate::workflows::{WorkflowSelectionSource, WorkflowSource, WorkflowType};
@@ -661,14 +660,9 @@ impl Input {
                 rename_conversation(conversation_id, argument.cloned().unwrap_or_default(), ctx);
             }
             SlashCommandKind::SetTabColor => {
-                let supported_options = || {
-                    color_dot::TAB_COLOR_OPTIONS
-                        .iter()
-                        .map(|c| c.to_string().to_ascii_lowercase())
-                        .chain(std::iter::once("none".to_owned()))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                };
+                // Shellomancy: any tab color, not just the picker's first row.
+                let supported_options =
+                    || "a color name (red, bright_red, ember), #rrggbb, or none".to_owned();
 
                 let Some(arg) = argument
                     .map(|name| name.trim())
@@ -687,20 +681,10 @@ impl Input {
                 let color = if arg.eq_ignore_ascii_case("none") {
                     SelectedTabColor::Cleared
                 } else {
-                    let parsed = arg
-                        .parse::<AnsiColorIdentifier>()
-                        .ok()
-                        .filter(|c| color_dot::TAB_COLOR_OPTIONS.contains(c));
-                    match parsed {
-                        Some(c) => SelectedTabColor::Color(c),
-                        None => {
-                            show_error_toast(
-                                format!(
-                                    "Unknown tab color '{arg}'. Use one of: {}.",
-                                    supported_options()
-                                ),
-                                ctx,
-                            );
+                    match arg.parse::<TabColor>() {
+                        Ok(c) => SelectedTabColor::Color(c),
+                        Err(err) => {
+                            show_error_toast(format!("{err}, or none."), ctx);
                             return true;
                         }
                     }

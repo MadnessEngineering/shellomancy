@@ -8,7 +8,6 @@ use ::local_control::protocol::{
 use ::local_control::{ActionKind, ControlError, ErrorCode, InstanceId};
 use serde_json::json;
 use settings::Setting as _;
-use warp_core::ui::theme::AnsiColorIdentifier;
 use warpui::{ModelContext, SingletonEntity as _, WindowId};
 
 use super::metadata::{
@@ -25,6 +24,7 @@ use crate::local_control::resolver::{require_active_window_id_for_action, worksp
 use crate::pane_group::PaneId;
 use crate::settings::{AccessibilitySettings, FontSettings, InputSettings, ThemeSettings};
 use crate::tab::SelectedTabColor;
+use crate::tab_color::TabColor;
 use crate::themes::theme::{SelectedSystemThemes, ThemeKind};
 use crate::user_config::WarpConfig;
 use crate::window_settings::ZoomLevel;
@@ -286,14 +286,11 @@ fn rename_title(action: &::local_control::Action) -> Result<String, ControlError
     }
 }
 
-fn color_value(action: &::local_control::Action) -> Result<AnsiColorIdentifier, ControlError> {
+/// Shellomancy: any [`TabColor`]: an ANSI name, `bright_<name>`, a fixed hue or `#rrggbb`.
+fn color_value(action: &::local_control::Action) -> Result<TabColor, ControlError> {
     let ColorValueParams { color } = action.params_as()?;
-    AnsiColorIdentifier::from_str(&color).map_err(|_| {
-        ControlError::new(
-            ErrorCode::InvalidParams,
-            format!("{color} is not a supported tab color"),
-        )
-    })
+    TabColor::from_str(&color)
+        .map_err(|err| ControlError::new(ErrorCode::InvalidParams, err.to_string()))
 }
 
 fn theme_name(action: &::local_control::Action) -> Result<String, ControlError> {

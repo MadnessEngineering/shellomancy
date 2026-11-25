@@ -24,7 +24,7 @@ shellomancy tab create --command "claude attach 1f8b2155" \
 | `--command CMD` | Run `CMD` once the new tab's shell has started. It goes through the same pending-command path as tab configs and launch configs; nothing is typed into the terminal. |
 | `--cwd DIR` | Start in `DIR`; relative paths resolve against your current directory. Without it, the tab starts where a normal new tab would. |
 | `--title TEXT` | Tab title |
-| `--color NAME` | Tab color: an ANSI color name (`red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, …) |
+| `--color NAME` | Tab color: an ANSI name (`red`, `cyan`, …), its bright variant (`bright_red`), a fixed hue (`ember`, `gold`, `lime`, `mint`, `teal`, `sky`, `indigo`, `violet`, `orchid`, `rose`, `crimson`, `copper`, `moss`, `slate`) or `#rrggbb`. `tab color set` takes the same names |
 | `--no-focus` | Open the tab in the background. By default the app comes to the front and the new tab is active. |
 | `--type terminal` | The only tab type these flags accept |
 

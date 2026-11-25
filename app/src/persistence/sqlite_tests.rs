@@ -733,7 +733,7 @@ fn test_sqlite_round_trips_tab_groups() {
             tab_groups: vec![TabGroupSnapshot {
                 id: group_id,
                 name: Some("Backend".to_string()),
-                color: SelectedTabColor::Color(AnsiColorIdentifier::Blue),
+                color: SelectedTabColor::Color(AnsiColorIdentifier::Blue.into()),
                 collapsed: true,
                 pinned: false,
             }],
@@ -757,7 +757,7 @@ fn test_sqlite_round_trips_tab_groups() {
     assert_eq!(restored_group.name.as_deref(), Some("Backend"));
     assert_eq!(
         restored_group.color,
-        SelectedTabColor::Color(AnsiColorIdentifier::Blue)
+        SelectedTabColor::Color(AnsiColorIdentifier::Blue.into())
     );
     assert!(restored_group.collapsed);
 
