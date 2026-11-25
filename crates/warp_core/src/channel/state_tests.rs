@@ -1,4 +1,4 @@
-use super::{derive_http_origin_from_ws_url, plist_warp_version};
+use super::{derive_http_origin_from_ws_url, logfile_name_for_profile, plist_warp_version};
 
 #[test]
 fn wss_becomes_https_and_strips_path() {
@@ -34,5 +34,21 @@ fn the_bundle_version_is_read_from_an_xml_plist() {
     assert_eq!(
         plist_warp_version("<key>WarpVersion</key><integer>3</integer>"),
         None
+    );
+}
+
+#[test]
+fn a_data_profile_gets_its_own_log_file() {
+    assert_eq!(
+        logfile_name_for_profile("shellomancy.log", "dev"),
+        "shellomancy-dev.log"
+    );
+    assert_eq!(
+        logfile_name_for_profile("warp_local.log", "x"),
+        "warp_local-x.log"
+    );
+    assert_eq!(
+        logfile_name_for_profile("shellomancy", "dev"),
+        "shellomancy-dev"
     );
 }

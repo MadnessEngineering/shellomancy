@@ -207,7 +207,13 @@ impl ChannelState {
     }
 
     pub fn logfile_name() -> Cow<'static, str> {
-        CHANNEL_STATE.lock().config.logfile_name.clone()
+        let logfile_name = CHANNEL_STATE.lock().config.logfile_name.clone();
+        // Shellomancy: a data profile logs to its own file, so a dev copy running beside the
+        // installed app doesn't rotate the installed app's log out from under it.
+        match Self::data_profile() {
+            Some(profile) => Cow::Owned(logfile_name_for_profile(&logfile_name, &profile)),
+            None => logfile_name,
+        }
     }
 
     pub fn telemetry_file_name() -> Cow<'static, str> {
@@ -509,6 +515,14 @@ fn plist_warp_version(plist: &str) -> Option<String> {
     let value = after_key.trim_start().strip_prefix("<string>")?;
     let version = value[..value.find("</string>")?].trim();
     (version.starts_with('v') && !version.contains('<')).then(|| version.to_owned())
+}
+
+/// Shellomancy: `shellomancy.log` becomes `shellomancy-dev.log` for the `dev` data profile.
+fn logfile_name_for_profile(logfile_name: &str, profile: &str) -> String {
+    match logfile_name.strip_suffix(".log") {
+        Some(stem) => format!("{stem}-{profile}.log"),
+        None => format!("{logfile_name}-{profile}"),
+    }
 }
 
 #[cfg(all(test, not(feature = "test-util")))]

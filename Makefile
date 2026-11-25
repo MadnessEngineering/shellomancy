@@ -29,10 +29,11 @@ help: ## List these targets
 # WARP_DATA_PROFILE (honored by debug builds only) gives the copy its own settings dir, session
 # database, UserDefaults and Keychain items. Without it the copy would restore your windows and
 # its saves would overwrite the live app's session. Its own local-control discovery dir keeps
-# hooks, which pick the newest instance, talking to the live app. The build leaves app bundles
-# (osx/, and dmg/ beside a ~150 MB Shellomancy.dmg) with the installed app's bundle id, so on
-# exit they're unregistered and removed and the installed app re-registered; otherwise Launch
-# Services may open a target/ copy later.
+# hooks, which pick the newest instance, talking to the live app; the profile also gets its own
+# log (~/Library/Logs/shellomancy-$(PROFILE).log when stdout isn't a terminal). `--format osx`
+# skips cargo bundle's default ~150 MB dmg. The bundle in target/ has the installed app's
+# bundle id, so on exit it's unregistered and removed (with any dmg left by older runs) and
+# the installed app re-registered; otherwise Launch Services may open the target/ copy later.
 dev: ## Build and run an isolated copy beside the installed app (PROFILE=dev)
 	@[ -n "$(PROFILE)" ] || { echo "make dev: PROFILE must not be empty" >&2; exit 2; }
 	@bash -c 'forget() { for app in $(DEV_BUNDLE_DIR)/*/Shellomancy.app; do \
@@ -41,7 +42,7 @@ dev: ## Build and run an isolated copy beside the installed app (PROFILE=dev)
 		if [ -d "$(INSTALLED_APP)" ]; then "$(LSREGISTER)" -f "$(INSTALLED_APP)"; fi; }; \
 		trap forget EXIT; \
 		WARP_DATA_PROFILE="$(PROFILE)" WARP_LOCAL_CONTROL_DISCOVERY_DIR="$(DEV_DISCOVERY_DIR)" \
-		./script/run'
+		./script/run --format osx'
 
 dev-client: ## Control client against the dev copy: make dev-client ARGS="tab-move-to-window --quake"
 	@WARP_LOCAL_CONTROL_DISCOVERY_DIR="$(DEV_DISCOVERY_DIR)" $(CLIENT) $(ARGS)
