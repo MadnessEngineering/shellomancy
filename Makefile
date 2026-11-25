@@ -15,16 +15,33 @@ T ?=
 ARGS ?=
 
 DEV_BUNDLE_DIR := target/debug/bundle
+DEV_BINARY := bundle/osx/Shellomancy.app/Contents/MacOS/warp-oss
 INSTALLED_APP := /Applications/Shellomancy.app
 DEV_DISCOVERY_DIR := $(HOME)/.mad/local-control-$(PROFILE)
+DEV_SETTINGS_DIR := $(HOME)/.mad/shellomancy-$(PROFILE)
+DEV_DOMAIN := cc.madnessinteractive.shellomancy-$(PROFILE)
+DEV_STATE_DIR := $(HOME)/Library/Application Support/$(DEV_DOMAIN)
+DEV_APP_LOG := $(HOME)/Library/Logs/shellomancy-$(PROFILE).log
+DEV_RUN_LOG := target/make-dev-$(PROFILE).log
 LSREGISTER := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 CLIENT := python3 script/shellomancy_client/shellomancy_client.py
 
-.PHONY: help dev dev-client install install-open check test test-client fmt
+# PIDs of this profile's running dev copies: live discovery records whose process is still the
+# dev binary (records outlive a killed app, and PIDs get reused).
+DEV_PIDS = $$(for pid in $$(grep -ho '"pid": *[0-9]*' "$(DEV_DISCOVERY_DIR)"/*.json 2>/dev/null \
+	| grep -o '[0-9]*$$'); do ps -o command= -p $$pid 2>/dev/null | grep -q '$(DEV_BINARY)' \
+	&& echo $$pid; done)
+
+.PHONY: help profile-check dev dev-bg dev-stop dev-log dev-reset dev-client instances install \
+	install-open check test test-client fmt
 
 help: ## List these targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*## "} {printf "  make %-13s %s\n", $$1, $$2}'
+
+profile-check:
+	@case "$(PROFILE)" in ""|*/*|*" "*) echo "PROFILE must be a plain name (got '$(PROFILE)')" >&2; \
+		exit 2;; esac
 
 # WARP_DATA_PROFILE (honored by debug builds only) gives the copy its own settings dir, session
 # database, UserDefaults and Keychain items. Without it the copy would restore your windows and
@@ -34,8 +51,7 @@ help: ## List these targets
 # skips cargo bundle's default ~150 MB dmg. The bundle in target/ has the installed app's
 # bundle id, so on exit it's unregistered and removed (with any dmg left by older runs) and
 # the installed app re-registered; otherwise Launch Services may open the target/ copy later.
-dev: ## Build and run an isolated copy beside the installed app (PROFILE=dev)
-	@[ -n "$(PROFILE)" ] || { echo "make dev: PROFILE must not be empty" >&2; exit 2; }
+dev: profile-check ## Build and run an isolated copy beside the installed app; returns when it quits
 	@bash -c 'forget() { for app in $(DEV_BUNDLE_DIR)/*/Shellomancy.app; do \
 		[ -d "$$app" ] || continue; "$(LSREGISTER)" -u "$$app" 2>/dev/null; rm -rf "$$app"; done; \
 		rm -f $(DEV_BUNDLE_DIR)/dmg/Shellomancy.dmg; \
@@ -44,8 +60,34 @@ dev: ## Build and run an isolated copy beside the installed app (PROFILE=dev)
 		WARP_DATA_PROFILE="$(PROFILE)" WARP_LOCAL_CONTROL_DISCOVERY_DIR="$(DEV_DISCOVERY_DIR)" \
 		./script/run --format osx'
 
+dev-bg: profile-check ## make dev in the background, so the prompt comes back; make dev-stop ends it
+	@if [ -n "$(DEV_PIDS)" ]; then echo "A dev copy is already running (make dev-stop)." >&2; \
+		exit 1; fi
+	@nohup $(MAKE) --no-print-directory dev PROFILE=$(PROFILE) > "$(DEV_RUN_LOG)" 2>&1 &
+	@echo "Building and starting the dev copy in the background."
+	@echo "  build output: $(DEV_RUN_LOG)"
+	@echo "  app log:      $(DEV_APP_LOG)  (make dev-log)"
+
+dev-stop: profile-check ## Quit the dev copy; make dev's cleanup then runs
+	@pids="$(DEV_PIDS)"; if [ -z "$$pids" ]; then echo "No dev copy running (PROFILE=$(PROFILE))."; \
+		else kill -TERM $$pids && echo "Stopped the dev copy (pid $$pids)."; fi
+
+dev-log: profile-check ## Follow the dev copy's app log
+	tail -F "$(DEV_APP_LOG)"
+
+dev-reset: profile-check ## Wipe the dev copy's settings, session and windows for a fresh start
+	@if [ -n "$(DEV_PIDS)" ]; then echo "Quit the dev copy first (make dev-stop)." >&2; exit 1; fi
+	rm -rf "$(DEV_SETTINGS_DIR)" "$(DEV_STATE_DIR)" "$(DEV_DISCOVERY_DIR)"
+	-@defaults delete "$(DEV_DOMAIN)" 2>/dev/null
+	@echo "Reset PROFILE=$(PROFILE); the next make dev starts fresh."
+
 dev-client: ## Control client against the dev copy: make dev-client ARGS="tab-move-to-window --quake"
 	@WARP_LOCAL_CONTROL_DISCOVERY_DIR="$(DEV_DISCOVERY_DIR)" $(CLIENT) $(ARGS)
+
+instances: ## Running Shellomancy copies: the installed app's and this profile's dev copy
+	@echo "installed app:"; $(CLIENT) instances
+	@echo "dev copy (PROFILE=$(PROFILE)):"; WARP_LOCAL_CONTROL_DISCOVERY_DIR="$(DEV_DISCOVERY_DIR)" \
+		$(CLIENT) instances
 
 install: ## Build and install /Applications/Shellomancy.app (quit Shellomancy first)
 	./script/install_local
