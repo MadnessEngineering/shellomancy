@@ -25,7 +25,7 @@ If the broker is down, the bridge keeps retrying. If Shellomancy isn't running, 
 
 | Topic | Direction | Payload |
 |---|---|---|
-| `status/<device>/shellomancy/state` | out, retained | `{device, updated_at, instances: [{instance_id, pid, app_version, started_at, tabs: [{tab_id, window_id, window_index, index, is_active}]}]}`. Published only when something changed. Set to `{"bridge": "offline"}` if the bridge drops off the broker. |
+| `status/<device>/shellomancy/state` | out, retained | `{device, updated_at, instances: [{instance_id, pid, app_version, started_at, tabs: [{tab_id, window_id, window_index, index, is_active, color, glow}]}]}` (`glow`: `working`, `needs_you`, `done`, `failed` or null, from the tab's Claude session). Published only when something changed. Set to `{"bridge": "offline"}` if the bridge drops off the broker. |
 | `status/<device>/shellomancy/event` | out | `{event, instance_id, tab or tab_id, at}` where `event` is `tab_opened`, `tab_closed`, `instance_started` or `instance_stopped` |
 | `command/<device>/shellomancy/attach` | in | `{session_id, title?, cwd?, color?, focus?, request_id?}` |
 | `command/<device>/shellomancy/focus` | in | `{tab_id, instance_id?, request_id?}` |

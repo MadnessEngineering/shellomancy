@@ -501,6 +501,9 @@ fn set_tab_color(
     let workspace = workspace_for_window(entry.window_id, ActionKind::TabColorSet, ctx)?;
     workspace.update(ctx, |workspace, ctx| {
         workspace.set_tab_color(entry.index, color, ctx);
+        // Shellomancy: the picker's color actions save the session as they go; a scripted color
+        // has to ask, or it's lost if the app quits before something else saves.
+        ctx.dispatch_global_action("workspace:save_app", ());
     });
     Ok(())
 }

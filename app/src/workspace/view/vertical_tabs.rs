@@ -73,6 +73,7 @@ use crate::ui_components::icons::Icon as UiIcon;
 use crate::util::bindings::keybinding_name_to_display_string;
 use crate::util::color::Opacity;
 use crate::workspace::action::{NewSessionMenuAnchor, WorkspaceAction};
+use crate::workspace::agent_glow::{AgentGlowModel, GlowPaint, TabGlow};
 use crate::workspace::cross_window_tab_drag::CrossWindowTabDrag;
 use crate::workspace::hoa_onboarding::HoaOnboardingStep;
 use crate::workspace::sync_inputs::SyncedInputState;
@@ -414,6 +415,7 @@ fn render_pane_row_element(
         is_pinned,
         container_is_hovered,
         shortcut_hint_binding_name: _,
+        glow,
     } = props;
     let is_selected = is_active_tab && is_focused;
     let show_pin = FeatureFlag::PinnedTabs.is_enabled() && is_pinned && !container_is_hovered;
@@ -429,24 +431,32 @@ fn render_pane_row_element(
             .with_padding(padding)
             .with_corner_radius(corner_radius);
 
-        if let Some(background) = pane_row_background(
+        let background = pane_row_background(
             pane_color,
             is_selected,
             is_in_multi_selection,
             state.is_hovered(),
             is_being_dragged,
             theme,
-        ) {
-            container = container.with_background(background);
+        );
+        // Shellomancy: a glow tints a row nothing else is tinting, and takes over its border.
+        match (background, glow.and_then(|glow| glow.background)) {
+            (Some(background), _) => container = container.with_background(background),
+            (None, Some(glow_background)) => {
+                container = container.with_background(ThemeFill::Solid(glow_background))
+            }
+            (None, None) => {}
         }
-
-        let pane: Box<dyn Element> = container
-            .with_border(Border::all(1.).with_border_fill(if is_selected {
+        let border = match glow {
+            Some(glow) => Border::all(glow.border_width)
+                .with_border_fill(ElementFill::from(ThemeFill::Solid(glow.border))),
+            None => Border::all(1.).with_border_fill(if is_selected {
                 internal_colors::fg_overlay_3(theme).into()
             } else {
                 ElementFill::None
-            }))
-            .finish();
+            }),
+        };
+        let pane: Box<dyn Element> = container.with_border(border).finish();
 
         // Pin indicator anchored at the visible pane's top-right corner. Pin
         // is visible when the container is not hovered.
@@ -860,6 +870,8 @@ struct PaneProps<'a> {
     /// The pin icon is hidden when a tab is hovered.
     container_is_hovered: bool,
     shortcut_hint_binding_name: Option<&'static str>,
+    /// Shellomancy: how this row glows with its Claude session's status, if it does.
+    glow: Option<GlowPaint>,
 }
 
 struct PaneRowState {
@@ -2789,6 +2801,7 @@ fn render_grouped_tabs_header(
     is_being_renamed: bool,
     rename_editor: Option<&ViewHandle<EditorView>>,
     collapsed_member_kinds: Option<&[SummaryPaneKind]>,
+    glow: Option<GlowPaint>,
     ctx: &AppContext,
 ) -> Box<dyn Element> {
     let appearance = Appearance::as_ref(ctx);
@@ -2927,10 +2940,20 @@ fn render_grouped_tabs_header(
         } else {
             WarpThemeFill::Solid(ColorU::transparent_black())
         };
+        // Shellomancy: a member's glow takes over the header's border.
+        let border = match glow {
+            Some(glow) => {
+                Border::all(glow.border_width).with_border_fill(WarpThemeFill::Solid(glow.border))
+            }
+            None => Border::all(1.).with_border_fill(border_fill),
+        };
         let mut container = Container::new(row)
             .with_padding(Padding::uniform(GROUP_HORIZONTAL_PADDING))
             .with_corner_radius(CornerRadius::with_all(Radius::Pixels(ROW_CORNER_RADIUS)))
-            .with_border(Border::all(1.).with_border_fill(border_fill));
+            .with_border(border);
+        if let Some(glow_background) = glow.and_then(|glow| glow.background) {
+            container = container.with_background(WarpThemeFill::Solid(glow_background));
+        }
         if let Some(color) = group_color_fill {
             // Colored group: the group container paints the idle color behind the
             // header, so only tint on hover/selected. Painting the idle color
@@ -3056,6 +3079,8 @@ fn render_grouped_tab_container(
         // rendered then, so this skips the per-tab pane walk when expanded.
         let collapsed_member_kinds =
             is_collapsed.then(|| workspace.compute_group_member_kinds(group.id, app));
+        let member_tab_indices: Vec<usize> =
+            members.iter().map(|(tab_index, _)| *tab_index).collect();
         let header = render_grouped_tabs_header(
             &group,
             &state.search_query,
@@ -3067,6 +3092,7 @@ fn render_grouped_tab_container(
             is_being_renamed,
             rename_editor.as_ref(),
             collapsed_member_kinds.as_deref(),
+            group_glow(workspace, &member_tab_indices, app),
             app,
         );
         // While a pane is being dragged, the group header is a drop zone for the
@@ -4005,6 +4031,7 @@ impl<'a> PaneProps<'a> {
             is_pinned,
             container_is_hovered,
             shortcut_hint_binding_name,
+            glow: row_glow(pane_group, pane_id, display_granularity, app),
         })
     }
 
@@ -5858,6 +5885,40 @@ fn render_pull_request_badge_content(label: &str, appearance: &Appearance) -> Bo
                 .finish(),
         )
         .finish()
+}
+
+/// Shellomancy: a pane row in Panes mode glows with its own terminal's Claude session; a tab row
+/// in the other modes with the most urgent of its tab's terminals.
+fn row_glow(
+    pane_group: &PaneGroup,
+    pane_id: PaneId,
+    display_granularity: VerticalTabsDisplayGranularity,
+    app: &AppContext,
+) -> Option<GlowPaint> {
+    let glows = AgentGlowModel::as_ref(app);
+    let glow = match display_granularity {
+        VerticalTabsDisplayGranularity::Panes => pane_group
+            .terminal_view_from_pane_id(pane_id, app)
+            .and_then(|terminal_view| glows.glow(terminal_view.id())),
+        VerticalTabsDisplayGranularity::Tabs => glows.glow_for_pane_group(pane_group, app),
+    }?;
+    glows.paint(glow, app)
+}
+
+/// Shellomancy: the most urgent glow among a tab group's member tabs, so a collapsed group still
+/// says when one of its sessions needs you.
+fn group_glow(
+    workspace: &Workspace,
+    member_tab_indices: &[usize],
+    app: &AppContext,
+) -> Option<GlowPaint> {
+    let glows = AgentGlowModel::as_ref(app);
+    let glow: TabGlow = member_tab_indices
+        .iter()
+        .filter_map(|&tab_index| workspace.tabs.get(tab_index))
+        .filter_map(|tab| glows.glow_for_pane_group(tab.pane_group.as_ref(app), app))
+        .max()?;
+    glows.paint(glow, app)
 }
 
 /// Resolves the rendered color mode for a tab's panes from the tab's own color,

@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Shellomancy's tab-glow demo: stands in for Claude Code in a tab. It runs the bundled Claude
+# plugin's own hook scripts with made-up hook input, so the app sees one session reach a state,
+# then waits so the tab keeps it until you close it or press Ctrl-C. The app recognizes Claude
+# by the command name, which is why this is called `claude`; `make dev-glow-demo` puts it first
+# on PATH for one tab per state in the dev copy.
+#
+#   claude working | needs-you | done | failed
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+plugin="$here/../../resources/bundled/claude-plugin/plugins/shellomancy/scripts"
+state="${1:-needs-you}"
+session_id="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+
+# hook SCRIPT EVENT [EXTRA_JSON_FIELDS]: runs a plugin hook as Claude Code would, including
+# writing out a terminalSequence the hook hands back (newer Claude Code relays those itself).
+hook() {
+  local output sequence
+  output=$(printf '{"session_id":"%s","cwd":"%s","hook_event_name":"%s"%s}' \
+    "$session_id" "$PWD" "$2" "${3:-}" | "$plugin/$1")
+  sequence=$(printf '%s' "$output" | jq -r '.terminalSequence // empty' 2>/dev/null)
+  if [ -n "$sequence" ]; then
+    printf '%s' "$sequence" > /dev/tty
+  fi
+}
+
+hook on-session-start.sh SessionStart
+hook on-prompt-submit.sh UserPromptSubmit ',"prompt":"Glow demo"'
+case "$state" in
+  working) ;;
+  needs-you)
+    hook on-permission-request.sh PermissionRequest \
+      ',"tool_name":"Bash","tool_input":{"command":"echo the glow demo wants a yes"}'
+    ;;
+  done) hook on-stop.sh Stop ;;
+  failed) hook on-stop-failure.sh StopFailure ',"error":"glow_demo","last_assistant_message":"Pretend failure"' ;;
+  *)
+    echo "usage: claude working|needs-you|done|failed" >&2
+    exit 2
+    ;;
+esac
+
+echo "Glow demo: this tab's pretend Claude session is '$state'. Ctrl-C ends it."
+# Wait without leaving a child behind: whoever stops this (Ctrl-C, or make dev-glow-demo
+# replacing its tabs) also ends the sleep, so the tab has nothing running and closes quietly.
+sleeper=""
+trap 'if [ -n "$sleeper" ]; then kill "$sleeper" 2>/dev/null; fi; exit 0' INT TERM HUP
+while :; do
+  sleep 3600 &
+  sleeper=$!
+  wait "$sleeper"
+done

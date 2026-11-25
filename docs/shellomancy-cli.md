@@ -60,7 +60,7 @@ Warp ships local control disabled. Shellomancy turns it on with commands so hook
 
 ## Other actions
 
-The catalog is Warp's 84 actions plus Shellomancy's `theme.window.set`, `theme.window.clear` and `tab.move_to_window`; of Warp's, only `tab.create` changed (its new parameters). Groups: `instance`, `app`, `capability`, `window`, `tab`, `pane`, `session`, `input`, `theme`, `appearance`, `setting`, `keybinding`, `action`, `surface`, `file`. `shellomancy action list` prints them from the running app. Some surfaces open Warp features that are off or hidden in Shellomancy (Warp Drive, agent management); expect those to do nothing useful.
+The catalog is Warp's 84 actions plus Shellomancy's `theme.window.set`, `theme.window.clear` and `tab.move_to_window`; of Warp's, only `tab.create` changed (its new parameters). `tab.list` also reports each tab's `color` (`red`, `bright_red`, `#f97316`, or null) and `glow`, its Claude session's status glow (`working`, `needs_you`, `done`, `failed`, or null). Groups: `instance`, `app`, `capability`, `window`, `tab`, `pane`, `session`, `input`, `theme`, `appearance`, `setting`, `keybinding`, `action`, `surface`, `file`. `shellomancy action list` prints them from the running app. Some surfaces open Warp features that are off or hidden in Shellomancy (Warp Drive, agent management); expect those to do nothing useful.
 
 `input insert` and `input replace` only stage text in the input line; they never press Enter.
 

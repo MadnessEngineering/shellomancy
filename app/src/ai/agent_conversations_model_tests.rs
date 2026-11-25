@@ -986,6 +986,7 @@ fn add_entry_projection_test_models(app: &mut App) {
     app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], vec![], &[]));
     app.add_singleton_model(|_| ActiveAgentViewsModel::new());
     app.add_singleton_model(|_| WorkspaceRegistry::new());
+    app.add_singleton_model(|_| crate::workspace::agent_glow::AgentGlowModel::default());
 }
 
 fn mock_server_metadata() -> ServerMetadata {

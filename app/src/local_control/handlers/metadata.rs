@@ -22,7 +22,9 @@ use crate::local_control::LocalControlBridge;
 use crate::local_control::resolver::{reject_target_families, require_active_window_id_for_action};
 use crate::pane_group::{PaneGroup, PaneId};
 use crate::settings::{AISettings, CodeSettings};
+use crate::tab_color::TabColor;
 use crate::workspace::Workspace;
+use crate::workspace::agent_glow::{AgentGlowModel, TabGlow};
 use crate::workspace::tab_settings::TabSettings;
 
 #[derive(Serialize)]
@@ -106,6 +108,8 @@ pub(super) struct TabEntry {
     pub(super) index: usize,
     pub(super) workspace_active_tab_index: usize,
     pub(super) pane_group: ViewHandle<PaneGroup>,
+    /// Shellomancy: the tab's resolved color.
+    pub(super) color: Option<TabColor>,
 }
 
 #[derive(Clone)]
@@ -458,12 +462,19 @@ pub(crate) fn tab_list(
     let tabs = entries
         .into_iter()
         .map(|entry| {
+            // Shellomancy: the tab's color and Claude-status glow, for scripts and the MQTT
+            // bridge's state.
+            let glow = AgentGlowModel::as_ref(ctx)
+                .glow_for_pane_group(entry.pane_group.as_ref(ctx), ctx)
+                .map(TabGlow::name);
             json!({
                 "tab_id": entry.pane_group.id().to_string(),
                 "window_id": entry.window_id.to_string(),
                 "window_index": entry.window_index as u32,
                 "index": entry.index as u32,
                 "is_active": entry.index == entry.workspace_active_tab_index,
+                "color": entry.color.map(|color| color.to_string()),
+                "glow": glow,
             })
         })
         .collect::<Vec<_>>();
@@ -864,6 +875,7 @@ pub(super) fn tab_entries_for_windows(
                     index,
                     workspace_active_tab_index: workspace.active_tab_index(),
                     pane_group: pane_group.clone(),
+                    color: workspace.get_tab_color(index),
                 })
                 .collect::<Vec<_>>()
         }));

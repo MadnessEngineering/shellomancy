@@ -500,6 +500,7 @@ use crate::workflows::{
     WorkflowViewMode,
 };
 use crate::workspace::action::CommandSearchOptions;
+use crate::workspace::agent_glow::AgentGlowModel;
 use crate::workspace::bonus_grant_notification_model::BonusGrantNotificationEvent;
 #[cfg(target_os = "macos")]
 use crate::workspace::cli_install;
@@ -3233,6 +3234,8 @@ impl Workspace {
         ctx.subscribe_to_model(&CLIAgentSessionsModel::handle(ctx), |me, _, event, ctx| {
             me.handle_cli_agent_sessions_event(event, ctx);
         });
+        // Shellomancy: repaint tab glows and their needs-you blink.
+        ctx.subscribe_to_model(&AgentGlowModel::handle(ctx), |_, _, _, ctx| ctx.notify());
 
         ctx.subscribe_to_model(
             &AgentNotificationsModel::handle(ctx),
@@ -3817,7 +3820,42 @@ impl Workspace {
                 | CLIAgentSessionsModelEvent::SessionUpdated { .. }
         ) && self.workspace_contains_terminal_view(event.terminal_view_id(), ctx)
         {
+            self.update_agent_glow(event, ctx);
             ctx.notify();
+        }
+    }
+
+    /// Shellomancy: tells the tab glows about a session in this window. Only the window holding
+    /// the terminal knows whether its tab is in view.
+    fn update_agent_glow(&self, event: &CLIAgentSessionsModelEvent, ctx: &mut ViewContext<Self>) {
+        match event {
+            CLIAgentSessionsModelEvent::StatusChanged {
+                terminal_view_id,
+                status,
+                ..
+            } => {
+                let terminal_view_id = *terminal_view_id;
+                let in_view = self
+                    .active_tab_pane_group()
+                    .as_ref(ctx)
+                    .terminal_views(ctx)
+                    .iter()
+                    .any(|terminal_view| terminal_view.id() == terminal_view_id);
+                AgentGlowModel::handle(ctx).update(ctx, |glow, ctx| {
+                    glow.note_status(terminal_view_id, status, in_view, ctx);
+                });
+            }
+            CLIAgentSessionsModelEvent::Ended {
+                terminal_view_id, ..
+            } => {
+                let terminal_view_id = *terminal_view_id;
+                AgentGlowModel::handle(ctx).update(ctx, |glow, ctx| {
+                    glow.forget(terminal_view_id, ctx);
+                });
+            }
+            CLIAgentSessionsModelEvent::Started { .. }
+            | CLIAgentSessionsModelEvent::InputSessionChanged { .. }
+            | CLIAgentSessionsModelEvent::SessionUpdated { .. } => {}
         }
     }
 
@@ -3858,7 +3896,8 @@ impl Workspace {
             TabSettingsChangedEvent::ShowIndicatorsButton { .. }
             | TabSettingsChangedEvent::NewTabPlacement { .. }
             | TabSettingsChangedEvent::TabCloseButtonPosition { .. }
-            | TabSettingsChangedEvent::PreserveActiveTabColor { .. } => {
+            | TabSettingsChangedEvent::PreserveActiveTabColor { .. }
+            | TabSettingsChangedEvent::AgentStatusGlow { .. } => {
                 self.sync_window_button_visibility(ctx);
                 ctx.notify();
             }
@@ -5631,6 +5670,17 @@ impl Workspace {
             let pane_group_id = tab.pane_group.id();
             self.tab_mru_order.retain(|id| *id != pane_group_id);
             self.tab_mru_order.insert(0, pane_group_id);
+            // Shellomancy: a finished Claude turn stops glowing once its tab is looked at.
+            let terminal_view_ids = tab
+                .pane_group
+                .as_ref(ctx)
+                .terminal_views(ctx)
+                .iter()
+                .map(|terminal_view| terminal_view.id())
+                .collect::<Vec<_>>();
+            AgentGlowModel::handle(ctx).update(ctx, |glow, ctx| {
+                glow.mark_seen(terminal_view_ids, ctx);
+            });
         }
         if self.vertical_tabs_panel_open
             && FeatureFlag::VerticalTabs.is_enabled()
@@ -23707,6 +23757,9 @@ impl Workspace {
         }
         if *tab_settings.preserve_active_tab_color.value() {
             context.set.insert(flags::PRESERVE_ACTIVE_TAB_COLOR_FLAG);
+        }
+        if *tab_settings.agent_status_glow.value() {
+            context.set.insert(flags::AGENT_STATUS_GLOW_FLAG);
         }
         if *tab_settings
             .show_vertical_tab_panel_in_restored_windows

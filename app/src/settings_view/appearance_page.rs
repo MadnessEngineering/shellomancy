@@ -418,6 +418,16 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
         ));
     }
 
+    // Shellomancy: the command palette's enable/disable entries for tab glows.
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "Claude status glow on tabs",
+        builder(SettingsAction::AppearancePageToggle(
+            AppearancePageAction::ToggleAgentStatusGlow,
+        )),
+        context,
+        flags::AGENT_STATUS_GLOW_FLAG,
+    ));
+
     toggle_binding_pairs.push(ToggleSettingActionPair::new(
         "preserve active tab color for new tabs",
         builder(SettingsAction::AppearancePageToggle(
@@ -499,6 +509,8 @@ pub enum AppearancePageAction {
     ToggleTabIndicators,
     ToggleShowCodeReviewButton,
     TogglePreserveActiveTabColor,
+    /// Shellomancy: tab glows for Claude session status.
+    ToggleAgentStatusGlow,
     ToggleVerticalTabs,
     ToggleShowVerticalTabPanelInRestoredWindows,
     ToggleHideTitleBarSearchBarInVerticalTabs,
@@ -696,6 +708,7 @@ impl TypedActionView for AppearanceSettingsPageView {
             ToggleTabIndicators => self.toggle_tab_indicators(ctx),
             ToggleShowCodeReviewButton => self.toggle_show_code_review_button(ctx),
             TogglePreserveActiveTabColor => self.toggle_preserve_active_tab_color(ctx),
+            ToggleAgentStatusGlow => self.toggle_agent_status_glow(ctx),
             ToggleVerticalTabs => self.toggle_vertical_tabs(ctx),
             ToggleShowVerticalTabPanelInRestoredWindows => {
                 self.toggle_show_vertical_tab_panel_in_restored_windows(ctx)
@@ -2564,6 +2577,14 @@ impl AppearanceSettingsPageView {
                     .show_code_review_button
                     .set_value(new_value, ctx)
             );
+        });
+    }
+
+    fn toggle_agent_status_glow(&mut self, ctx: &mut ViewContext<Self>) {
+        let tab_settings = TabSettings::handle(ctx);
+        let new_value = !*tab_settings.as_ref(ctx).agent_status_glow.value();
+        ctx.update_model(&tab_settings, move |tab_settings, ctx| {
+            report_if_error!(tab_settings.agent_status_glow.set_value(new_value, ctx));
         });
     }
 

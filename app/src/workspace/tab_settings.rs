@@ -487,6 +487,17 @@ define_settings_group!(TabSettings, settings: [
         toml_path: "code.editor.show_code_review_diff_stats",
         description: "Whether to show lines added/removed counts on the code review button.",
     },
+    // Shellomancy: tabs glow with their Claude session's status (see workspace::agent_glow).
+    agent_status_glow: AgentStatusGlow {
+        type: bool,
+        default: true,
+        supported_platforms: SupportedPlatforms::ALL,
+        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
+        surface: settings::SettingSurfaces::GUI,
+        private: false,
+        toml_path: "appearance.tabs.agent_status_glow",
+        description: "Whether tabs glow with their Claude session's status: amber while one waits on you, green or red when a turn you haven't looked at ends.",
+    },
     preserve_active_tab_color: PreserveActiveTabColor {
         type: bool,
         default: false,
