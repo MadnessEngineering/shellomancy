@@ -76,3 +76,4 @@ __pycache__/
 /crates/madness_themes/.claude_temp
 /script/shellomancy_mqtt/.claude_temp
 /script/shellomancy_client/.claude_temp
+.claude_temp/
